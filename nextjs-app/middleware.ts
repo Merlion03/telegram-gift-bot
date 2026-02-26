@@ -81,6 +81,66 @@ function buildCSPHeader(): string {
 }
 
 /**
+ * Формирует CSP заголовок для Telegram WebApp роута
+ * 
+ * Отличия от стандартной CSP:
+ * - 'unsafe-inline' в script-src: необходим для Next.js hydration скриптов
+ * - https://telegram.org и https://t.me: разрешает загрузку Telegram WebApp SDK
+ * - frame-ancestors: разрешает встраивание страницы в Telegram iframe
+ * 
+ * Эта более мягкая политика применяется только к роуту /webapp,
+ * все остальные роуты используют строгую CSP для защиты от XSS
+ */
+function buildWebAppCSPHeader(): string {
+  const WEBAPP_CSP_DIRECTIVES = {
+    // Скрипты: разрешаем inline для Next.js и домены Telegram для SDK
+    'script-src': ["'self'", "'unsafe-inline'", 'https://telegram.org', 'https://t.me'],
+    
+    // Стили с того же origin и inline (для Tailwind CSS)
+    'style-src': ["'self'", "'unsafe-inline'"],
+    
+    // Изображения с любых источников (для Telegram аватаров)
+    'img-src': ["'self'", 'data:', 'https:', 'http:'],
+    
+    // Шрифты только с того же origin
+    'font-src': ["'self'"],
+    
+    // Подключения только к тому же origin
+    'connect-src': ["'self'"],
+    
+    // Фреймы запрещены
+    'frame-src': ["'none'"],
+    
+    // Объекты запрещены
+    'object-src': ["'none'"],
+    
+    // Базовый URI ограничен тем же origin
+    'base-uri': ["'self'"],
+    
+    // Формы только на тот же origin
+    'form-action': ["'self'"],
+    
+    // Разрешаем встраивание в Telegram iframe
+    'frame-ancestors': ['https://web.telegram.org', 'https://telegram.org'],
+    
+    // Обновление небезопасных запросов до HTTPS
+    'upgrade-insecure-requests': [],
+    
+    // Блокировка смешанного контента
+    'block-all-mixed-content': [],
+  };
+  
+  return Object.entries(WEBAPP_CSP_DIRECTIVES)
+    .map(([directive, sources]) => {
+      if (sources.length === 0) {
+        return directive;
+      }
+      return `${directive} ${sources.join(' ')}`;
+    })
+    .join('; ');
+}
+
+/**
  * Middleware функция
  * 
  * Выполняет:
@@ -112,14 +172,22 @@ export async function middleware(request: NextRequest) {
   // Создаём response
   const response = NextResponse.next();
   
-  // Добавляем CSP заголовок (Requirement 12.4)
-  const cspHeader = buildCSPHeader();
+  // Применяем роут-специфичную CSP политику (Requirement 12.4)
+  // Для /webapp используем более мягкую политику, разрешающую Telegram WebApp SDK
+  // Для всех остальных роутов используем строгую CSP для защиты от XSS
+  const cspHeader = pathname === '/webapp' 
+    ? buildWebAppCSPHeader()  // Мягкая CSP для Telegram WebApp
+    : buildCSPHeader();        // Строгая CSP для остальных роутов
   response.headers.set('Content-Security-Policy', cspHeader);
   
   // Дополнительные заголовки безопасности
   
   // X-Frame-Options: защита от clickjacking
-  response.headers.set('X-Frame-Options', 'DENY');
+  // Для /webapp не устанавливаем этот заголовок, чтобы разрешить встраивание в Telegram iframe
+  // Для всех остальных роутов применяем DENY для защиты от clickjacking атак
+  if (pathname !== '/webapp') {
+    response.headers.set('X-Frame-Options', 'DENY');
+  }
   
   // X-Content-Type-Options: предотвращает MIME-sniffing
   response.headers.set('X-Content-Type-Options', 'nosniff');

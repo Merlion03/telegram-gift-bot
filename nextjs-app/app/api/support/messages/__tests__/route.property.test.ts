@@ -80,6 +80,9 @@ describe('Property 20: Полный цикл отправки сообщения
           message_text: fc.string({ minLength: 2, maxLength: 500 }).filter(s => s.trim().length >= 2).map(s => s.trim()),
         }),
         async (data) => {
+          // Очищаем моки перед каждой итерацией property-based теста
+          vi.clearAllMocks();
+          
           // Arrange: настраиваем моки
           const mockSession: SupportSession = {
             id: data.session_id,
@@ -145,6 +148,9 @@ describe('Property 20: Полный цикл отправки сообщения
           message_text: fc.string({ minLength: 2, maxLength: 500 }).filter(s => s.trim().length >= 2).map(s => s.trim()),
         }),
         async (data) => {
+          // Очищаем моки перед каждой итерацией property-based теста
+          vi.clearAllMocks();
+          
           // Arrange
           const mockSession: SupportSession = {
             id: data.session_id,
@@ -208,6 +214,9 @@ describe('Property 20: Полный цикл отправки сообщения
           message_text: fc.string({ minLength: 2, maxLength: 500 }).filter(s => s.trim().length >= 2).map(s => s.trim()),
         }),
         async (data) => {
+          // Очищаем моки перед каждой итерацией property-based теста
+          vi.clearAllMocks();
+          
           // Arrange
           const mockSession: SupportSession = {
             id: data.session_id,
@@ -272,6 +281,9 @@ describe('Property 20: Полный цикл отправки сообщения
           message_text: fc.string({ minLength: 2, maxLength: 500 }).filter(s => s.trim().length >= 2).map(s => s.trim()),
         }),
         async (data) => {
+          // Очищаем моки перед каждой итерацией property-based теста
+          vi.clearAllMocks();
+          
           // Arrange
           const mockSession: SupportSession = {
             id: data.session_id,
@@ -365,6 +377,9 @@ describe('Property 20: Полный цикл отправки сообщения
           message_text: fc.string({ minLength: 2, maxLength: 500 }).filter(s => s.trim().length >= 2).map(s => s.trim()),
         }),
         async (data) => {
+          // Очищаем моки перед каждой итерацией property-based теста
+          vi.clearAllMocks();
+          
           // Arrange: настраиваем мок для ошибки Telegram API
           const mockSession: SupportSession = {
             id: data.session_id,
@@ -436,6 +451,9 @@ describe('Property 20: Полный цикл отправки сообщения
           message_text: fc.string({ minLength: 2, maxLength: 500 }).filter(s => s.trim().length >= 2).map(s => s.trim()),
         }),
         async (data) => {
+          // Очищаем моки перед каждой итерацией property-based теста
+          vi.clearAllMocks();
+          
           // Arrange: убираем аутентификацию
           vi.mocked(getServerSession).mockResolvedValue(null);
 

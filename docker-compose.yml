@@ -1,5 +1,3 @@
-version: '3.8'
-
 # Полная конфигурация для всей системы: Bot + WebApp + Database
 services:
   # PostgreSQL база данных для поддержки
