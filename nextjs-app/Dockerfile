@@ -30,7 +30,8 @@ COPY . .
 # Переменные окружения для сборки
 # Next.js собирает статические страницы на этапе build
 ENV NEXT_TELEMETRY_DISABLED=1 \
-    NODE_ENV=production
+    NODE_ENV=production \
+    NODE_OPTIONS="--max-old-space-size=2048"
 
 # Сборка приложения
 RUN npm run build
