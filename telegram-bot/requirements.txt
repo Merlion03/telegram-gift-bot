@@ -1,0 +1,26 @@
+# Telegram Bot Framework
+aiogram>=3.4.1
+
+# Database
+sqlalchemy>=2.0.25
+asyncpg>=0.29.0
+alembic>=1.13.1
+
+# Google Sheets Integration
+gspread>=6.0.0
+google-auth>=2.27.0
+
+# FSM Storage
+redis>=5.0.1
+
+# Logging
+structlog>=24.1.0
+
+# Environment Variables
+python-dotenv>=1.0.1
+
+# Testing
+pytest>=8.0.0
+pytest-asyncio>=0.23.4
+hypothesis>=6.98.3
+
