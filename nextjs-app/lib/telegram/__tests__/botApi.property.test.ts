@@ -189,7 +189,7 @@ describe('TelegramBotApi - Property-Based Tests', () => {
           fc.integer({ min: 1, max: 999999999 }),
           fc.string({ minLength: 1, maxLength: 100 }),
           fc.integer({ min: 400, max: 500 }), // error_code
-          fc.string({ minLength: 10, maxLength: 100 }), // описание ошибки
+          fc.string({ minLength: 10, maxLength: 100 }).filter(s => s.trim().length > 0), // описание ошибки (не только пробелы)
           async (chatId, text, errorCode, errorDescription) => {
             // Мокирование ошибки от Telegram API
             const mockFetch = vi.fn().mockResolvedValue({

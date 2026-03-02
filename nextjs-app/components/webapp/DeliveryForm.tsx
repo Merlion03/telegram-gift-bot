@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -20,9 +20,62 @@ interface DeliveryFormProps {
   prizeId: number;
 }
 
+// Утилита для определения яркости цвета
+function getLuminance(color: string): number {
+  // Парсим RGB значения из строки
+  let rgb: number[] | null = null;
+  
+  // Проверяем формат rgb() или rgba()
+  const rgbMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if (rgbMatch) {
+    rgb = [parseInt(rgbMatch[1]), parseInt(rgbMatch[2]), parseInt(rgbMatch[3])];
+  } else {
+    // Проверяем hex формат
+    const hexMatch = color.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+    if (hexMatch) {
+      let hex = hexMatch[1];
+      if (hex.length === 3) {
+        hex = hex.split('').map(c => c + c).join('');
+      }
+      rgb = [
+        parseInt(hex.substring(0, 2), 16),
+        parseInt(hex.substring(2, 4), 16),
+        parseInt(hex.substring(4, 6), 16)
+      ];
+    }
+  }
+  
+  if (!rgb) return 0.5; // Средняя яркость по умолчанию
+  
+  const [r, g, b] = rgb.map(val => {
+    const normalized = val / 255;
+    return normalized <= 0.03928
+      ? normalized / 12.92
+      : Math.pow((normalized + 0.055) / 1.055, 2.4);
+  });
+  
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
 export function DeliveryForm({ prizeId }: DeliveryFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Определяем тему синхронно на основе яркости фона
+  // useMemo без зависимостей будет вычислять значение при каждом рендере
+  const isDarkTheme = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    
+    const bgColor = getComputedStyle(document.documentElement)
+      .getPropertyValue('--tg-theme-bg-color')
+      .trim();
+    
+    if (!bgColor) return false; // Если переменная не установлена, используем светлую тему
+    
+    const luminance = getLuminance(bgColor);
+    // Если яркость меньше 0.5, считаем тему тёмной
+    return luminance < 0.5;
+  }, []); // Пустой массив зависимостей - вычисляется только один раз
   
   const {
     register,
@@ -81,8 +134,19 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
   
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 p-4 max-w-md mx-auto">
+      <style jsx>{`
+        input::placeholder,
+        textarea::placeholder {
+          color: var(--tg-theme-hint-color, #8e8e93);
+        }
+      `}</style>
+      
       <div>
-        <label htmlFor="full_name" className="block text-sm font-medium text-gray-700 mb-1">
+        <label 
+          htmlFor="full_name" 
+          className="block text-sm font-medium mb-1"
+          style={{ color: isDarkTheme ? '#ffffff' : '#000000' }}
+        >
           ФИО <span className="text-red-500">*</span>
         </label>
         <input
@@ -90,7 +154,12 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
           type="text"
           id="full_name"
           placeholder="Иванов Иван Иванович"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          className="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          style={{ 
+            backgroundColor: 'var(--tg-theme-bg-color, #ffffff)',
+            color: 'var(--tg-theme-text-color, #000000)',
+            borderColor: 'var(--tg-theme-hint-color, #999999)'
+          }}
           disabled={isSubmitting}
         />
         {errors.full_name && (
@@ -99,7 +168,11 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
       </div>
       
       <div>
-        <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-1">
+        <label 
+          htmlFor="address" 
+          className="block text-sm font-medium mb-1"
+          style={{ color: isDarkTheme ? '#ffffff' : '#000000' }}
+        >
           Адрес доставки <span className="text-red-500">*</span>
         </label>
         <textarea
@@ -107,7 +180,12 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
           id="address"
           rows={3}
           placeholder="Город, улица, дом, квартира"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          className="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          style={{ 
+            backgroundColor: 'var(--tg-theme-bg-color, #ffffff)',
+            color: 'var(--tg-theme-text-color, #000000)',
+            borderColor: 'var(--tg-theme-hint-color, #999999)'
+          }}
           disabled={isSubmitting}
         />
         {errors.address && (
@@ -116,7 +194,11 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
       </div>
       
       <div>
-        <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
+        <label 
+          htmlFor="phone" 
+          className="block text-sm font-medium mb-1"
+          style={{ color: isDarkTheme ? '#ffffff' : '#000000' }}
+        >
           Номер телефона <span className="text-red-500">*</span>
         </label>
         <input
@@ -124,7 +206,12 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
           type="tel"
           id="phone"
           placeholder="+79991234567"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          className="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          style={{ 
+            backgroundColor: 'var(--tg-theme-bg-color, #ffffff)',
+            color: 'var(--tg-theme-text-color, #000000)',
+            borderColor: 'var(--tg-theme-hint-color, #999999)'
+          }}
           disabled={isSubmitting}
         />
         {errors.phone && (
@@ -133,7 +220,11 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
       </div>
       
       <div>
-        <label htmlFor="comment" className="block text-sm font-medium text-gray-700 mb-1">
+        <label 
+          htmlFor="comment" 
+          className="block text-sm font-medium mb-1"
+          style={{ color: isDarkTheme ? '#ffffff' : '#000000' }}
+        >
           Комментарий (опционально)
         </label>
         <textarea
@@ -141,7 +232,12 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
           id="comment"
           rows={2}
           placeholder="Дополнительная информация для доставки"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          className="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          style={{ 
+            backgroundColor: 'var(--tg-theme-bg-color, #ffffff)',
+            color: 'var(--tg-theme-text-color, #000000)',
+            borderColor: 'var(--tg-theme-hint-color, #999999)'
+          }}
           disabled={isSubmitting}
         />
         {errors.comment && (

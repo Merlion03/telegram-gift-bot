@@ -19,6 +19,15 @@ vi.mock('@telegram-apps/sdk-react', () => ({
   useWebApp: vi.fn(),
 }));
 
+// Мок для @twa-dev/sdk
+vi.mock('@twa-dev/sdk', () => ({
+  default: {
+    initData: 'auth_date=1234567890&user=%7B%22id%22%3A12345%7D&hash=test_hash',
+    close: vi.fn(),
+    showAlert: vi.fn(),
+  },
+}));
+
 import { useInitData, useWebApp } from '@telegram-apps/sdk-react';
 
 describe('DeliveryForm - Unit Tests', () => {

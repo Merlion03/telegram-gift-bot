@@ -17,6 +17,19 @@ vi.mock('@telegram-apps/sdk-react', () => ({
   useWebApp: vi.fn(),
 }));
 
+// Создаем мок для @twa-dev/sdk
+const mockTwaWebApp = {
+  initData: 'auth_date=1234567890&user=%7B%22id%22%3A12345%7D&hash=test_hash',
+  close: vi.fn(),
+  showAlert: vi.fn((message: string, callback?: () => void) => {
+    if (callback) callback();
+  }),
+};
+
+vi.mock('@twa-dev/sdk', () => ({
+  default: mockTwaWebApp,
+}));
+
 import { useInitData, useWebApp } from '@telegram-apps/sdk-react';
 
 describe('DeliveryForm - Property-Based Tests', () => {
@@ -33,6 +46,13 @@ describe('DeliveryForm - Property-Based Tests', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    
+    // Сброс моков @twa-dev/sdk
+    mockTwaWebApp.close.mockClear();
+    mockTwaWebApp.showAlert.mockClear();
+    mockTwaWebApp.showAlert.mockImplementation((message: string, callback?: () => void) => {
+      if (callback) callback();
+    });
     
     // Настройка моков
     (useInitData as any).mockReturnValue(mockInitData);
@@ -147,7 +167,7 @@ describe('DeliveryForm - Property-Based Tests', () => {
 
         // Проверяем, что webApp.showAlert был вызван с сообщением об успехе
         await waitFor(() => {
-          expect(mockWebApp.showAlert).toHaveBeenCalledWith(
+          expect(mockTwaWebApp.showAlert).toHaveBeenCalledWith(
             'Данные успешно сохранены!',
             expect.any(Function)
           );
@@ -155,7 +175,7 @@ describe('DeliveryForm - Property-Based Tests', () => {
 
         // Проверяем, что webApp.close был вызван
         await waitFor(() => {
-          expect(mockWebApp.close).toHaveBeenCalled();
+          expect(mockTwaWebApp.close).toHaveBeenCalled();
         }, { timeout: 3000 });
 
         // Проверяем, что сообщение об ошибке не отображается
@@ -204,7 +224,7 @@ describe('DeliveryForm - Property-Based Tests', () => {
 
         // Проверяем, что webApp.close НЕ был вызван
         await waitFor(() => {
-          expect(mockWebApp.close).not.toHaveBeenCalled();
+          expect(mockTwaWebApp.close).not.toHaveBeenCalled();
         }, { timeout: 3000 });
 
         // Проверяем, что отображается сообщение об ошибке
@@ -220,6 +240,9 @@ describe('DeliveryForm - Property-Based Tests', () => {
       async (prizeId) => {
         // Очистка DOM перед каждой итерацией
         cleanup();
+        
+        // Мок отсутствия InitData - устанавливаем пустую строку
+        mockTwaWebApp.initData = '';
         
         // Мок отсутствия InitData
         (useInitData as any).mockReturnValue(null);
@@ -254,7 +277,10 @@ describe('DeliveryForm - Property-Based Tests', () => {
         }, { timeout: 3000 });
 
         // Проверяем, что webApp.close НЕ был вызван
-        expect(mockWebApp.close).not.toHaveBeenCalled();
+        expect(mockTwaWebApp.close).not.toHaveBeenCalled();
+        
+        // Восстанавливаем initData для следующих тестов
+        mockTwaWebApp.initData = 'auth_date=1234567890&user=%7B%22id%22%3A12345%7D&hash=test_hash';
       }
     );
   });

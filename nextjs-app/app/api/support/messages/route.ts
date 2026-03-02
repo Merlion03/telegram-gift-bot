@@ -18,7 +18,7 @@ import { z } from 'zod';
 const sendReplySchema = z.object({
   session_id: z.number().int().positive(),
   telegram_id: z.number().int().positive(),
-  message_text: z.string().min(2).max(4096), // Telegram лимит на длину сообщения, минимум 2 символа
+  message_text: z.string().trim().min(2).max(4096), // Telegram лимит на длину сообщения, минимум 2 символа после trim
 });
 
 /**
