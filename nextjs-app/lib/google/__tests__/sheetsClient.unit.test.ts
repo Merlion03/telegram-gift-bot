@@ -75,13 +75,18 @@ describe('GoogleSheetsClient', () => {
     it('должен успешно сохранять данные доставки в Google Sheets', async () => {
       /**
        * Тест: успешное сохранение данных
-       * Requirements: 4.5
+       * Requirements: 4.2, 4.3, 4.4
        */
       // Arrange
       const rowId = 5;
       const deliveryData: DeliveryData = {
-        full_name: 'Иван Иванов',
-        address: 'г. Москва, ул. Ленина, д. 1, кв. 10',
+        last_name: 'Иванов',
+        first_name: 'Иван',
+        patronymic: 'Иванович',
+        city: 'Москва',
+        street: 'Ленина',
+        house: '1',
+        apartment: '10',
         phone: '+79991234567',
         comment: 'Позвонить за час',
         telegram_id: 123456789,
@@ -97,14 +102,20 @@ describe('GoogleSheetsClient', () => {
       expect(mockSheetsUpdate).toHaveBeenCalledTimes(2);
 
       // Проверяем первый вызов (сохранение данных доставки)
+      // Новая структура: E-M (9 колонок)
       expect(mockSheetsUpdate).toHaveBeenNthCalledWith(1, {
         spreadsheetId: testSpreadsheetId,
-        range: `Sheet1!E${rowId}:H${rowId}`,
+        range: `Sheet1!E${rowId}:M${rowId}`,
         valueInputOption: 'RAW',
         requestBody: {
           values: [[
-            deliveryData.full_name,
-            deliveryData.address,
+            deliveryData.last_name,
+            deliveryData.first_name,
+            deliveryData.patronymic,
+            deliveryData.city,
+            deliveryData.street,
+            deliveryData.house,
+            deliveryData.apartment,
             deliveryData.phone,
             deliveryData.comment,
           ]],
@@ -114,7 +125,7 @@ describe('GoogleSheetsClient', () => {
       // Проверяем второй вызов (сохранение timestamp)
       expect(mockSheetsUpdate).toHaveBeenNthCalledWith(2, {
         spreadsheetId: testSpreadsheetId,
-        range: `Sheet1!I${rowId}`,
+        range: `Sheet1!N${rowId}`,
         valueInputOption: 'RAW',
         requestBody: {
           values: [[expect.any(String)]], // ISO timestamp
@@ -125,13 +136,18 @@ describe('GoogleSheetsClient', () => {
     it('должен сохранять данные без комментария (опциональное поле)', async () => {
       /**
        * Тест: сохранение без опционального поля
-       * Requirements: 4.5
+       * Requirements: 4.2, 4.3, 4.4
        */
       // Arrange
       const rowId = 3;
       const deliveryData: DeliveryData = {
-        full_name: 'Петр Петров',
-        address: 'г. Санкт-Петербург, Невский пр., д. 50',
+        last_name: 'Петров',
+        first_name: 'Петр',
+        patronymic: null,
+        city: 'Санкт-Петербург',
+        street: 'Невский пр.',
+        house: '50',
+        apartment: null,
         phone: '+79997654321',
         telegram_id: 987654321,
       };
@@ -142,15 +158,20 @@ describe('GoogleSheetsClient', () => {
       // Assert
       expect(result).toBe(true);
 
-      // Проверяем, что комментарий сохранён как пустая строка
+      // Проверяем, что комментарий и опциональные поля сохранены как пустые строки
       expect(mockSheetsUpdate).toHaveBeenNthCalledWith(1, {
         spreadsheetId: testSpreadsheetId,
-        range: `Sheet1!E${rowId}:H${rowId}`,
+        range: `Sheet1!E${rowId}:M${rowId}`,
         valueInputOption: 'RAW',
         requestBody: {
           values: [[
-            deliveryData.full_name,
-            deliveryData.address,
+            deliveryData.last_name,
+            deliveryData.first_name,
+            '',  // patronymic
+            deliveryData.city,
+            deliveryData.street,
+            deliveryData.house,
+            '',  // apartment
             deliveryData.phone,
             '', // Пустой комментарий
           ]],
@@ -158,16 +179,93 @@ describe('GoogleSheetsClient', () => {
       });
     });
 
+    it('должен корректно формировать диапазон столбцов E-M', async () => {
+      /**
+       * Тест: проверка корректного формирования диапазона столбцов
+       * Requirements: 4.2
+       */
+      // Arrange
+      const rowId = 42;
+      const deliveryData: DeliveryData = {
+        last_name: 'Сидоров',
+        first_name: 'Сидор',
+        patronymic: 'Сидорович',
+        city: 'Казань',
+        street: 'Пушкина',
+        house: '7',
+        apartment: '3',
+        phone: '+79995555555',
+        comment: 'Тестовый комментарий',
+        telegram_id: 555555555,
+      };
+
+      // Act
+      await client.saveDeliveryData(rowId, deliveryData);
+
+      // Assert
+      // Проверяем, что диапазон сформирован правильно: E42:M42
+      expect(mockSheetsUpdate).toHaveBeenNthCalledWith(1, 
+        expect.objectContaining({
+          range: `Sheet1!E${rowId}:M${rowId}`,
+        })
+      );
+    });
+
+    it('должен записывать claimed_at в столбец N', async () => {
+      /**
+       * Тест: проверка записи timestamp в столбец N
+       * Requirements: 4.2
+       */
+      // Arrange
+      const rowId = 8;
+      const deliveryData: DeliveryData = {
+        last_name: 'Федоров',
+        first_name: 'Федор',
+        patronymic: null,
+        city: 'Уфа',
+        street: 'Ленина',
+        house: '15',
+        apartment: '22',
+        phone: '+79996666666',
+        telegram_id: 666666666,
+      };
+
+      // Act
+      await client.saveDeliveryData(rowId, deliveryData);
+
+      // Assert
+      // Проверяем второй вызов - запись claimed_at
+      expect(mockSheetsUpdate).toHaveBeenNthCalledWith(2, {
+        spreadsheetId: testSpreadsheetId,
+        range: `Sheet1!N${rowId}`,
+        valueInputOption: 'RAW',
+        requestBody: {
+          values: [[expect.any(String)]], // ISO timestamp
+        },
+      });
+
+      // Проверяем, что timestamp - валидная ISO строка
+      const timestampCall = mockSheetsUpdate.mock.calls[1];
+      const timestamp = timestampCall[0].requestBody.values[0][0];
+      expect(() => new Date(timestamp)).not.toThrow();
+      expect(new Date(timestamp).toISOString()).toBe(timestamp);
+    });
+
     it('должен обрабатывать ошибки Google Sheets API', async () => {
       /**
        * Тест: обработка ошибок API
-       * Requirements: 4.7
+       * Requirements: 4.2, 4.3, 4.4
        */
       // Arrange
       const rowId = 10;
       const deliveryData: DeliveryData = {
-        full_name: 'Тест Тестов',
-        address: 'Тестовый адрес',
+        last_name: 'Тестов',
+        first_name: 'Тест',
+        patronymic: 'Тестович',
+        city: 'Москва',
+        street: 'Тестовая',
+        house: '1',
+        apartment: '1',
         phone: '+79991111111',
         telegram_id: 111111111,
       };
@@ -187,13 +285,18 @@ describe('GoogleSheetsClient', () => {
     it('должен обрабатывать ошибки сети', async () => {
       /**
        * Тест: обработка сетевых ошибок
-       * Requirements: 4.7
+       * Requirements: 4.2, 4.3, 4.4
        */
       // Arrange
       const rowId = 7;
       const deliveryData: DeliveryData = {
-        full_name: 'Сергей Сергеев',
-        address: 'г. Казань, ул. Баумана, д. 20',
+        last_name: 'Сергеев',
+        first_name: 'Сергей',
+        patronymic: 'Сергеевич',
+        city: 'Казань',
+        street: 'Баумана',
+        house: '20',
+        apartment: null,
         phone: '+79992222222',
         telegram_id: 222222222,
       };
@@ -210,13 +313,18 @@ describe('GoogleSheetsClient', () => {
     it('должен обрабатывать ошибки аутентификации', async () => {
       /**
        * Тест: обработка ошибок аутентификации
-       * Requirements: 4.7
+       * Requirements: 4.2, 4.3, 4.4
        */
       // Arrange
       const rowId = 12;
       const deliveryData: DeliveryData = {
-        full_name: 'Анна Аннова',
-        address: 'г. Екатеринбург, ул. Малышева, д. 5',
+        last_name: 'Аннова',
+        first_name: 'Анна',
+        patronymic: null,
+        city: 'Екатеринбург',
+        street: 'Малышева',
+        house: '5',
+        apartment: '15',
         phone: '+79993333333',
         telegram_id: 333333333,
       };
@@ -233,13 +341,18 @@ describe('GoogleSheetsClient', () => {
     it('должен обрабатывать ошибки доступа к таблице', async () => {
       /**
        * Тест: обработка ошибок доступа (недостаточно прав)
-       * Requirements: 4.7
+       * Requirements: 4.2, 4.3, 4.4
        */
       // Arrange
       const rowId = 15;
       const deliveryData: DeliveryData = {
-        full_name: 'Мария Марьева',
-        address: 'г. Новосибирск, пр. Ленина, д. 100',
+        last_name: 'Марьева',
+        first_name: 'Мария',
+        patronymic: 'Марьевна',
+        city: 'Новосибирск',
+        street: 'Ленина',
+        house: '100',
+        apartment: null,
         phone: '+79994444444',
         telegram_id: 444444444,
       };

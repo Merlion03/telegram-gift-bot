@@ -158,19 +158,35 @@ describe('Property 28: Серверная валидация пользоват�
     fc.assert(
       fc.property(
         fc.record({
-          full_name: fc.string({ minLength: 1, maxLength: 200 }),
-          address: fc.string({ minLength: 1, maxLength: 600 }),
+          last_name: fc.string({ minLength: 1, maxLength: 50 }),
+          first_name: fc.string({ minLength: 1, maxLength: 50 }),
+          patronymic: fc.option(fc.string({ maxLength: 50 })),
+          city: fc.string({ minLength: 1, maxLength: 100 }),
+          street: fc.string({ minLength: 1, maxLength: 200 }),
+          house: fc.string({ minLength: 1, maxLength: 20 }),
+          apartment: fc.option(fc.string({ maxLength: 20 })),
           phone: fc.string({ minLength: 1, maxLength: 50 }),
-          comment: fc.option(fc.string({ maxLength: 600 })),
+          comment: fc.option(fc.string({ maxLength: 500 })),
           telegram_id: fc.integer({ min: 1, max: 999999999 }),
         }),
         (data) => {
           const sanitized = sanitizeDeliveryData(data);
           
           // Все текстовые поля должны быть санитизированы
-          expect(sanitized.full_name).not.toMatch(/<[^>]*>/g);
-          expect(sanitized.address).not.toMatch(/<[^>]*>/g);
+          expect(sanitized.last_name).not.toMatch(/<[^>]*>/g);
+          expect(sanitized.first_name).not.toMatch(/<[^>]*>/g);
+          expect(sanitized.city).not.toMatch(/<[^>]*>/g);
+          expect(sanitized.street).not.toMatch(/<[^>]*>/g);
+          expect(sanitized.house).not.toMatch(/<[^>]*>/g);
           expect(sanitized.phone).not.toMatch(/<[^>]*>/g);
+          
+          if (sanitized.patronymic) {
+            expect(sanitized.patronymic).not.toMatch(/<[^>]*>/g);
+          }
+          
+          if (sanitized.apartment) {
+            expect(sanitized.apartment).not.toMatch(/<[^>]*>/g);
+          }
           
           if (sanitized.comment) {
             expect(sanitized.comment).not.toMatch(/<[^>]*>/g);
@@ -297,8 +313,13 @@ describe('Property 27 & 28: Интеграционные тесты санити
      * Проверяет защиту от сложных XSS-атак в реальных данных
      */
     const maliciousData = {
-      full_name: '<script>alert("XSS")</script>Иванов Иван',
-      address: 'Москва, <img src=x onerror=alert("XSS")> ул. Ленина',
+      last_name: '<script>alert("XSS")</script>Иванов',
+      first_name: 'Иван<img src=x onerror=alert("XSS")>',
+      patronymic: 'Иванович<svg onload=alert("XSS")>',
+      city: 'Москва<iframe src="javascript:alert(\'XSS\')">',
+      street: 'Ленина<script>alert("XSS")</script>',
+      house: '10<img src=x onerror=alert("XSS")>',
+      apartment: '5<svg onload=alert("XSS")>',
       phone: '+7999<svg onload=alert("XSS")>1234567',
       comment: 'Комментарий <iframe src="javascript:alert(\'XSS\')">',
       telegram_id: 12345,
@@ -307,11 +328,30 @@ describe('Property 27 & 28: Интеграционные тесты санити
     const sanitized = sanitizeDeliveryData(maliciousData);
 
     // Все поля должны быть очищены от XSS
-    expect(sanitized.full_name).not.toContain('<script');
-    expect(sanitized.full_name).not.toContain('</script>');
+    expect(sanitized.last_name).not.toContain('<script');
+    expect(sanitized.last_name).not.toContain('</script>');
     
-    expect(sanitized.address).not.toContain('<img');
-    expect(sanitized.address).not.toContain('onerror');
+    expect(sanitized.first_name).not.toContain('<img');
+    expect(sanitized.first_name).not.toContain('onerror');
+    
+    if (sanitized.patronymic) {
+      expect(sanitized.patronymic).not.toContain('<svg');
+      expect(sanitized.patronymic).not.toContain('onload');
+    }
+    
+    expect(sanitized.city).not.toContain('<iframe');
+    expect(sanitized.city).not.toContain('javascript:');
+    
+    expect(sanitized.street).not.toContain('<script');
+    expect(sanitized.street).not.toContain('</script>');
+    
+    expect(sanitized.house).not.toContain('<img');
+    expect(sanitized.house).not.toContain('onerror');
+    
+    if (sanitized.apartment) {
+      expect(sanitized.apartment).not.toContain('<svg');
+      expect(sanitized.apartment).not.toContain('onload');
+    }
     
     expect(sanitized.phone).not.toContain('<svg');
     expect(sanitized.phone).not.toContain('onload');
@@ -329,8 +369,13 @@ describe('Property 27 & 28: Интеграционные тесты санити
      * Санитизация не должна делать текст нечитаемым
      */
     const normalData = {
-      full_name: 'Иванов Иван Иванович',
-      address: 'Москва, ул. Ленина, д. 10, кв. 5',
+      last_name: 'Иванов',
+      first_name: 'Иван',
+      patronymic: 'Иванович',
+      city: 'Москва',
+      street: 'Ленина',
+      house: '10',
+      apartment: '5',
       phone: '+79991234567',
       comment: 'Позвонить перед доставкой',
       telegram_id: 12345,
@@ -339,8 +384,13 @@ describe('Property 27 & 28: Интеграционные тесты санити
     const sanitized = sanitizeDeliveryData(normalData);
 
     // Нормальные данные должны остаться читаемыми
-    expect(sanitized.full_name).toContain('Иванов');
-    expect(sanitized.address).toContain('Москва');
+    expect(sanitized.last_name).toContain('Иванов');
+    expect(sanitized.first_name).toContain('Иван');
+    expect(sanitized.patronymic).toContain('Иванович');
+    expect(sanitized.city).toContain('Москва');
+    expect(sanitized.street).toContain('Ленина');
+    expect(sanitized.house).toContain('10');
+    expect(sanitized.apartment).toContain('5');
     expect(sanitized.phone).toContain('+7999');
     expect(sanitized.comment).toContain('Позвонить');
   });

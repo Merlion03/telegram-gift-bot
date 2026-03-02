@@ -100,9 +100,15 @@ describe('Delivery API Route - Unit Tests (Edge Cases)', () => {
     const initData = createValidInitData(12345, currentTimestamp - 100, TEST_BOT_TOKEN);
 
     return {
-      full_name: 'Иван Иванов',
-      address: 'г. Москва, ул. Ленина, д. 1, кв. 1',
+      last_name: 'Иванов',
+      first_name: 'Иван',
+      patronymic: '',
+      city: 'Москва',
+      street: 'Ленина',
+      house: '1',
+      apartment: '',
       phone: '+79991234567',
+      comment: '',
       prize_id: 1,
       initData: initData,
       ...overrides,
@@ -129,12 +135,12 @@ describe('Delivery API Route - Unit Tests (Edge Cases)', () => {
     });
 
     /**
-     * Requirement 4.2: Слишком длинное full_name должно возвращать HTTP 400
+     * Requirement 4.2: Слишком длинное last_name должно возвращать HTTP 400
      */
-    it('должен возвращать 400 при full_name длиннее 100 символов', async () => {
-      const longName = 'А'.repeat(101);
+    it('должен возвращать 400 при last_name длиннее 50 символов', async () => {
+      const longName = 'А'.repeat(51);
       const requestBody = createValidRequestBody({
-        full_name: longName,
+        last_name: longName,
       });
 
       const request = createMockRequest(requestBody);
@@ -145,7 +151,7 @@ describe('Delivery API Route - Unit Tests (Edge Cases)', () => {
       expect(data.error).toBe('Validation error');
       expect(data.details).toBeDefined();
       expect(data.details.some((d: any) => 
-        d.field === 'full_name' && d.message.includes('100')
+        d.field === 'last_name' && d.message.includes('50')
       )).toBe(true);
     });
 

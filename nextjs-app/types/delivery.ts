@@ -4,8 +4,18 @@
 
 // Данные доставки
 export interface DeliveryData {
-  full_name: string;
-  address: string;
+  // ФИО разделено на компоненты
+  last_name: string;
+  first_name: string;
+  patronymic?: string; // Опционально
+  
+  // Адрес разделен на компоненты
+  city: string;
+  street: string;
+  house: string;
+  apartment?: string; // Опционально
+  
+  // Существующие поля
   phone: string;
   comment?: string;
 }
@@ -58,8 +68,14 @@ export interface PrizeSheetData {
   prize_type: PrizeType;
   promo_code?: string; // Для цифровых призов
   instructions?: string; // Инструкция по использованию промокода
-  full_name?: string; // Данные доставки
-  address?: string;
+  // Данные доставки - разделенные поля
+  last_name?: string;
+  first_name?: string;
+  patronymic?: string;
+  city?: string;
+  street?: string;
+  house?: string;
+  apartment?: string;
   phone?: string;
   comment?: string;
   claimed_at?: string; // Время получения приза

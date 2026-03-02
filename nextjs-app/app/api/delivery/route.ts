@@ -21,19 +21,53 @@ import { sanitizeDeliveryData } from '@/lib/utils/sanitize';
 /**
  * Схема валидации данных доставки
  * 
- * Validates: Requirements 4.1, 4.2
+ * Validates: Requirements 1.2, 1.3, 1.4, 1.5, 2.2, 2.3, 2.4, 2.5, 2.6, 3.1, 3.2, 4.5
  */
 const deliverySchema = z.object({
-  full_name: z
+  // ФИО поля
+  last_name: z
     .string()
-    .min(2, 'ФИО должно содержать минимум 2 символа')
-    .max(100, 'ФИО не должно превышать 100 символов')
+    .min(2, 'Фамилия должна содержать минимум 2 символа')
+    .max(50, 'Фамилия не должна превышать 50 символов')
     .trim(),
-  address: z
+  first_name: z
     .string()
-    .min(10, 'Адрес должен содержать минимум 10 символов')
-    .max(500, 'Адрес не должен превышать 500 символов')
+    .min(2, 'Имя должно содержать минимум 2 символа')
+    .max(50, 'Имя не должно превышать 50 символов')
     .trim(),
+  patronymic: z
+    .string()
+    .min(2, 'Отчество должно содержать минимум 2 символа')
+    .max(50, 'Отчество не должно превышать 50 символов')
+    .trim()
+    .optional()
+    .or(z.literal('')), // Разрешаем пустую строку
+  
+  // Адресные поля
+  city: z
+    .string()
+    .min(2, 'Город должен содержать минимум 2 символа')
+    .max(100, 'Город не должен превышать 100 символов')
+    .trim(),
+  street: z
+    .string()
+    .min(2, 'Улица должна содержать минимум 2 символа')
+    .max(200, 'Улица не должна превышать 200 символов')
+    .trim(),
+  house: z
+    .string()
+    .min(1, 'Дом должен содержать минимум 1 символ')
+    .max(20, 'Дом не должен превышать 20 символов')
+    .trim(),
+  apartment: z
+    .string()
+    .min(1, 'Квартира должна содержать минимум 1 символ')
+    .max(20, 'Квартира не должна превышать 20 символов')
+    .trim()
+    .optional()
+    .or(z.literal('')), // Разрешаем пустую строку
+  
+  // Существующие поля
   phone: z
     .string()
     .regex(
@@ -46,6 +80,8 @@ const deliverySchema = z.object({
     .max(500, 'Комментарий не должен превышать 500 символов')
     .trim()
     .optional(),
+  
+  // Служебные поля
   prize_id: z
     .number()
     .int('Prize ID должен быть целым числом')
@@ -180,8 +216,13 @@ export async function POST(request: NextRequest) {
 
     // Санитизация данных перед сохранением (Requirement 12.3)
     const sanitizedData = sanitizeDeliveryData({
-      full_name: validatedData.full_name,
-      address: validatedData.address,
+      last_name: validatedData.last_name,
+      first_name: validatedData.first_name,
+      patronymic: validatedData.patronymic || '',
+      city: validatedData.city,
+      street: validatedData.street,
+      house: validatedData.house,
+      apartment: validatedData.apartment || '',
       phone: validatedData.phone,
       comment: validatedData.comment,
       telegram_id: telegramId,

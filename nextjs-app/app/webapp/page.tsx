@@ -44,10 +44,13 @@ function WebAppContent() {
 
   if (!isReady) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
+      <div 
+        className="min-h-screen flex items-center justify-center p-4"
+        style={{ backgroundColor: 'var(--tg-theme-bg-color, #ffffff)' }}
+      >
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-          <p className="text-gray-600">Инициализация...</p>
+          <p style={{ color: 'var(--tg-theme-text-color, #000000)' }}>Инициализация...</p>
         </div>
       </div>
     );
@@ -55,8 +58,14 @@ function WebAppContent() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
-        <div className="max-w-md w-full bg-white rounded-lg shadow-md p-6">
+      <div 
+        className="min-h-screen flex items-center justify-center p-4"
+        style={{ backgroundColor: 'var(--tg-theme-bg-color, #ffffff)' }}
+      >
+        <div 
+          className="max-w-md w-full rounded-lg shadow-md p-6"
+          style={{ backgroundColor: 'var(--tg-theme-secondary-bg-color, #f1f1f1)' }}
+        >
           <div className="flex items-center justify-center w-12 h-12 mx-auto bg-red-100 rounded-full mb-4">
             <svg
               className="w-6 h-6 text-red-600"
@@ -72,10 +81,16 @@ function WebAppContent() {
               />
             </svg>
           </div>
-          <h2 className="text-xl font-semibold text-center text-gray-900 mb-2">
+          <h2 
+            className="text-xl font-semibold text-center mb-2"
+            style={{ color: 'var(--tg-theme-text-color, #000000)' }}
+          >
             Ошибка
           </h2>
-          <p className="text-center text-gray-600">{error}</p>
+          <p 
+            className="text-center"
+            style={{ color: 'var(--tg-theme-hint-color, #999999)' }}
+          >{error}</p>
         </div>
       </div>
     );
@@ -83,19 +98,28 @@ function WebAppContent() {
 
   if (prizeId === null) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
+      <div 
+        className="min-h-screen flex items-center justify-center p-4"
+        style={{ backgroundColor: 'var(--tg-theme-bg-color, #ffffff)' }}
+      >
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-          <p className="text-gray-600">Загрузка...</p>
+          <p style={{ color: 'var(--tg-theme-text-color, #000000)' }}>Загрузка...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div 
+      className="min-h-screen py-8"
+      style={{ backgroundColor: 'var(--tg-theme-bg-color, #ffffff)' }}
+    >
       <div className="max-w-md mx-auto">
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
+        <div 
+          className="rounded-lg shadow-md overflow-hidden"
+          style={{ backgroundColor: 'var(--tg-theme-secondary-bg-color, #f1f1f1)' }}
+        >
           <div className="bg-blue-600 px-6 py-4">
             <h1 className="text-xl font-bold text-white text-center">
               📦 Данные для доставки приза
@@ -113,10 +137,13 @@ export default function WebAppPage() {
     <ErrorBoundary>
       <Suspense
         fallback={
-          <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
+          <div 
+            className="min-h-screen flex items-center justify-center p-4"
+            style={{ backgroundColor: 'var(--tg-theme-bg-color, #ffffff)' }}
+          >
             <div className="text-center">
               <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-              <p className="text-gray-600">Загрузка...</p>
+              <p style={{ color: 'var(--tg-theme-text-color, #000000)' }}>Загрузка...</p>
             </div>
           </div>
         }

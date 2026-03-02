@@ -187,9 +187,9 @@ describe('TelegramBotApi - Property-Based Tests', () => {
       await fc.assert(
         fc.asyncProperty(
           fc.integer({ min: 1, max: 999999999 }),
-          fc.string({ minLength: 1, maxLength: 100 }),
+          fc.string({ minLength: 1, maxLength: 100 }).map(s => s.trim()).filter(s => s.length > 0), // текст сообщения (обрезаем пробелы и проверяем, что не пустой)
           fc.integer({ min: 400, max: 500 }), // error_code
-          fc.string({ minLength: 10, maxLength: 100 }).filter(s => s.trim().length > 0), // описание ошибки (не только пробелы)
+          fc.string({ minLength: 10, maxLength: 100 }).map(s => s.trim()).filter(s => s.length >= 10), // описание ошибки (обрезаем пробелы и проверяем длину)
           async (chatId, text, errorCode, errorDescription) => {
             // Мокирование ошибки от Telegram API
             const mockFetch = vi.fn().mockResolvedValue({

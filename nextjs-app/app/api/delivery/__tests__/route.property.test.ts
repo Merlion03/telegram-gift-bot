@@ -185,19 +185,25 @@ describe('Delivery API Route - Property-Based Tests', () => {
     it('должен принимать запросы с валидным InitData', async () => {
       await fc.assert(
         fc.asyncProperty(
-          fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // full_name
-          fc.string({ minLength: 10, maxLength: 100 }).map(s => s.trim()).filter(s => s.length >= 10), // address
+          fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // last_name
+          fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // first_name
+          fc.string({ minLength: 2, maxLength: 100 }).map(s => s.trim()).filter(s => s.length >= 2), // city
+          fc.string({ minLength: 2, maxLength: 200 }).map(s => s.trim()).filter(s => s.length >= 2), // street
+          fc.string({ minLength: 1, maxLength: 20 }).map(s => s.trim()).filter(s => s.length >= 1), // house
           fc.integer({ min: 1000000000, max: 9999999999 }).map(n => '+' + n.toString()), // phone
           fc.integer({ min: 1, max: 100 }), // prize_id
           fc.integer({ min: 1, max: 999999 }), // user_id
-          async (fullName, address, phone, prizeId, userId) => {
+          async (lastName, firstName, city, street, house, phone, prizeId, userId) => {
             const currentTimestamp = Math.floor(Date.now() / 1000);
             const authDate = currentTimestamp - 100;
             const initData = createValidInitData(userId, authDate, TEST_BOT_TOKEN);
 
             const requestBody = {
-              full_name: fullName,
-              address: address,
+              last_name: lastName,
+              first_name: firstName,
+              city: city,
+              street: street,
+              house: house,
               phone: phone,
               prize_id: prizeId,
               initData: initData,
@@ -221,19 +227,25 @@ describe('Delivery API Route - Property-Based Tests', () => {
      * 
      * Validates: Requirements 4.1, 4.2
      */
-    it('должен отклонять запросы без full_name', async () => {
+    it('должен отклонять запросы без last_name', async () => {
       await fc.assert(
         fc.asyncProperty(
-          fc.string({ minLength: 10, maxLength: 100 }), // address
+          fc.string({ minLength: 2, maxLength: 50 }), // first_name
+          fc.string({ minLength: 2, maxLength: 100 }), // city
+          fc.string({ minLength: 2, maxLength: 200 }), // street
+          fc.string({ minLength: 1, maxLength: 20 }), // house
           fc.string({ minLength: 10, maxLength: 15 }).map(s => '+' + s.replace(/\D/g, '')), // phone
           fc.integer({ min: 1, max: 100 }), // prize_id
-          async (address, phone, prizeId) => {
+          async (firstName, city, street, house, phone, prizeId) => {
             const currentTimestamp = Math.floor(Date.now() / 1000);
             const initData = createValidInitData(12345, currentTimestamp - 100, TEST_BOT_TOKEN);
 
             const requestBody = {
-              // full_name отсутствует
-              address: address,
+              // last_name отсутствует
+              first_name: firstName,
+              city: city,
+              street: street,
+              house: house,
               phone: phone,
               prize_id: prizeId,
               initData: initData,
@@ -245,7 +257,7 @@ describe('Delivery API Route - Property-Based Tests', () => {
 
             expect(response.status).toBe(400);
             expect(data.error).toBe('Validation error');
-            expect(data.details.some((d: any) => d.field === 'full_name')).toBe(true);
+            expect(data.details.some((d: any) => d.field === 'last_name')).toBe(true);
           }
         ),
         { numRuns: 10, timeout: 5000 }
@@ -253,23 +265,29 @@ describe('Delivery API Route - Property-Based Tests', () => {
     });
 
     /**
-     * Property: Запрос без обязательного поля address отклоняется
+     * Property: Запрос без обязательного поля city отклоняется
      * 
      * Validates: Requirements 4.1, 4.2
      */
-    it('должен отклонять запросы без address', async () => {
+    it('должен отклонять запросы без city', async () => {
       await fc.assert(
         fc.asyncProperty(
-          fc.string({ minLength: 2, maxLength: 50 }), // full_name
+          fc.string({ minLength: 2, maxLength: 50 }), // last_name
+          fc.string({ minLength: 2, maxLength: 50 }), // first_name
+          fc.string({ minLength: 2, maxLength: 200 }), // street
+          fc.string({ minLength: 1, maxLength: 20 }), // house
           fc.string({ minLength: 10, maxLength: 15 }).map(s => '+' + s.replace(/\D/g, '')), // phone
           fc.integer({ min: 1, max: 100 }), // prize_id
-          async (fullName, phone, prizeId) => {
+          async (lastName, firstName, street, house, phone, prizeId) => {
             const currentTimestamp = Math.floor(Date.now() / 1000);
             const initData = createValidInitData(12345, currentTimestamp - 100, TEST_BOT_TOKEN);
 
             const requestBody = {
-              full_name: fullName,
-              // address отсутствует
+              last_name: lastName,
+              first_name: firstName,
+              // city отсутствует
+              street: street,
+              house: house,
               phone: phone,
               prize_id: prizeId,
               initData: initData,
@@ -281,7 +299,7 @@ describe('Delivery API Route - Property-Based Tests', () => {
 
             expect(response.status).toBe(400);
             expect(data.error).toBe('Validation error');
-            expect(data.details.some((d: any) => d.field === 'address')).toBe(true);
+            expect(data.details.some((d: any) => d.field === 'city')).toBe(true);
           }
         ),
         { numRuns: 10, timeout: 5000 }
@@ -296,16 +314,22 @@ describe('Delivery API Route - Property-Based Tests', () => {
     it('должен отклонять запросы без phone', async () => {
       await fc.assert(
         fc.asyncProperty(
-          fc.string({ minLength: 2, maxLength: 50 }), // full_name
-          fc.string({ minLength: 10, maxLength: 100 }), // address
+          fc.string({ minLength: 2, maxLength: 50 }), // last_name
+          fc.string({ minLength: 2, maxLength: 50 }), // first_name
+          fc.string({ minLength: 2, maxLength: 100 }), // city
+          fc.string({ minLength: 2, maxLength: 200 }), // street
+          fc.string({ minLength: 1, maxLength: 20 }), // house
           fc.integer({ min: 1, max: 100 }), // prize_id
-          async (fullName, address, prizeId) => {
+          async (lastName, firstName, city, street, house, prizeId) => {
             const currentTimestamp = Math.floor(Date.now() / 1000);
             const initData = createValidInitData(12345, currentTimestamp - 100, TEST_BOT_TOKEN);
 
             const requestBody = {
-              full_name: fullName,
-              address: address,
+              last_name: lastName,
+              first_name: firstName,
+              city: city,
+              street: street,
+              house: house,
               // phone отсутствует
               prize_id: prizeId,
               initData: initData,
@@ -362,24 +386,30 @@ describe('Delivery API Route - Property-Based Tests', () => {
     });
 
     /**
-     * Property: Запрос с слишком коротким full_name отклоняется
+     * Property: Запрос с слишком коротким last_name отклоняется
      * 
      * Validates: Requirements 4.1, 4.2
      */
-    it('должен отклонять запросы с слишком коротким full_name', async () => {
+    it('должен отклонять запросы с слишком коротким last_name', async () => {
       await fc.assert(
         fc.asyncProperty(
-          fc.string({ minLength: 0, maxLength: 1 }), // too short full_name
-          fc.string({ minLength: 10, maxLength: 100 }), // address
+          fc.string({ minLength: 0, maxLength: 1 }), // too short last_name
+          fc.string({ minLength: 2, maxLength: 50 }), // first_name
+          fc.string({ minLength: 2, maxLength: 100 }), // city
+          fc.string({ minLength: 2, maxLength: 200 }), // street
+          fc.string({ minLength: 1, maxLength: 20 }), // house
           fc.string({ minLength: 10, maxLength: 15 }).map(s => '+' + s.replace(/\D/g, '')), // phone
           fc.integer({ min: 1, max: 100 }), // prize_id
-          async (shortName, address, phone, prizeId) => {
+          async (shortName, firstName, city, street, house, phone, prizeId) => {
             const currentTimestamp = Math.floor(Date.now() / 1000);
             const initData = createValidInitData(12345, currentTimestamp - 100, TEST_BOT_TOKEN);
 
             const requestBody = {
-              full_name: shortName,
-              address: address,
+              last_name: shortName,
+              first_name: firstName,
+              city: city,
+              street: street,
+              house: house,
               phone: phone,
               prize_id: prizeId,
               initData: initData,
@@ -391,7 +421,7 @@ describe('Delivery API Route - Property-Based Tests', () => {
 
             expect(response.status).toBe(400);
             expect(data.error).toBe('Validation error');
-            expect(data.details.some((d: any) => d.field === 'full_name')).toBe(true);
+            expect(data.details.some((d: any) => d.field === 'last_name')).toBe(true);
           }
         ),
         { numRuns: 10, timeout: 5000 }
@@ -399,24 +429,30 @@ describe('Delivery API Route - Property-Based Tests', () => {
     });
 
     /**
-     * Property: Запрос с слишком коротким address отклоняется
+     * Property: Запрос с слишком коротким city отклоняется
      * 
      * Validates: Requirements 4.1, 4.2
      */
-    it('должен отклонять запросы с слишком коротким address', async () => {
+    it('должен отклонять запросы с слишком коротким city', async () => {
       await fc.assert(
         fc.asyncProperty(
-          fc.string({ minLength: 2, maxLength: 50 }), // full_name
-          fc.string({ minLength: 0, maxLength: 9 }), // too short address
+          fc.string({ minLength: 2, maxLength: 50 }), // last_name
+          fc.string({ minLength: 2, maxLength: 50 }), // first_name
+          fc.string({ minLength: 0, maxLength: 1 }), // too short city
+          fc.string({ minLength: 2, maxLength: 200 }), // street
+          fc.string({ minLength: 1, maxLength: 20 }), // house
           fc.string({ minLength: 10, maxLength: 15 }).map(s => '+' + s.replace(/\D/g, '')), // phone
           fc.integer({ min: 1, max: 100 }), // prize_id
-          async (fullName, shortAddress, phone, prizeId) => {
+          async (lastName, firstName, shortCity, street, house, phone, prizeId) => {
             const currentTimestamp = Math.floor(Date.now() / 1000);
             const initData = createValidInitData(12345, currentTimestamp - 100, TEST_BOT_TOKEN);
 
             const requestBody = {
-              full_name: fullName,
-              address: shortAddress,
+              last_name: lastName,
+              first_name: firstName,
+              city: shortCity,
+              street: street,
+              house: house,
               phone: phone,
               prize_id: prizeId,
               initData: initData,
@@ -428,7 +464,7 @@ describe('Delivery API Route - Property-Based Tests', () => {
 
             expect(response.status).toBe(400);
             expect(data.error).toBe('Validation error');
-            expect(data.details.some((d: any) => d.field === 'address')).toBe(true);
+            expect(data.details.some((d: any) => d.field === 'city')).toBe(true);
           }
         ),
         { numRuns: 10, timeout: 5000 }
@@ -443,19 +479,25 @@ describe('Delivery API Route - Property-Based Tests', () => {
     it('должен принимать запросы без опционального поля comment', async () => {
       await fc.assert(
         fc.asyncProperty(
-          fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // full_name
-          fc.string({ minLength: 10, maxLength: 100 }).map(s => s.trim()).filter(s => s.length >= 10), // address
+          fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // last_name
+          fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // first_name
+          fc.string({ minLength: 2, maxLength: 100 }).map(s => s.trim()).filter(s => s.length >= 2), // city
+          fc.string({ minLength: 2, maxLength: 200 }).map(s => s.trim()).filter(s => s.length >= 2), // street
+          fc.string({ minLength: 1, maxLength: 20 }).map(s => s.trim()).filter(s => s.length >= 1), // house
           fc.integer({ min: 1000000000, max: 9999999999 }).map(n => '+' + n.toString()), // phone
           fc.integer({ min: 1, max: 100 }), // prize_id
           fc.integer({ min: 1, max: 999999 }), // user_id
-          async (fullName, address, phone, prizeId, userId) => {
+          async (lastName, firstName, city, street, house, phone, prizeId, userId) => {
             const currentTimestamp = Math.floor(Date.now() / 1000);
             const authDate = currentTimestamp - 100;
             const initData = createValidInitData(userId, authDate, TEST_BOT_TOKEN);
 
             const requestBody = {
-              full_name: fullName,
-              address: address,
+              last_name: lastName,
+              first_name: firstName,
+              city: city,
+              street: street,
+              house: house,
               phone: phone,
               prize_id: prizeId,
               initData: initData,
@@ -486,20 +528,30 @@ describe('Delivery API Route - Property-Based Tests', () => {
     it('должен корректно передавать данные в GoogleSheetsClient', async () => {
       await fc.assert(
         fc.asyncProperty(
-          fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // full_name
-          fc.string({ minLength: 10, maxLength: 100 }).map(s => s.trim()).filter(s => s.length >= 10), // address
+          fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // last_name
+          fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // first_name
+          fc.option(fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), { nil: undefined }), // patronymic
+          fc.string({ minLength: 2, maxLength: 100 }).map(s => s.trim()).filter(s => s.length >= 2), // city
+          fc.string({ minLength: 2, maxLength: 200 }).map(s => s.trim()).filter(s => s.length >= 2), // street
+          fc.string({ minLength: 1, maxLength: 20 }).map(s => s.trim()).filter(s => s.length >= 1), // house
+          fc.option(fc.string({ minLength: 1, maxLength: 20 }).map(s => s.trim()).filter(s => s.length >= 1), { nil: undefined }), // apartment
           fc.integer({ min: 1000000000, max: 9999999999 }).map(n => '+' + n.toString()), // phone
           fc.option(fc.string({ minLength: 1, maxLength: 100 }), { nil: undefined }), // comment
           fc.integer({ min: 1, max: 100 }), // prize_id
           fc.integer({ min: 1, max: 999999 }), // user_id
-          async (fullName, address, phone, comment, prizeId, userId) => {
+          async (lastName, firstName, patronymic, city, street, house, apartment, phone, comment, prizeId, userId) => {
             const currentTimestamp = Math.floor(Date.now() / 1000);
             const authDate = currentTimestamp - 100;
             const initData = createValidInitData(userId, authDate, TEST_BOT_TOKEN);
 
             const requestBody = {
-              full_name: fullName,
-              address: address,
+              last_name: lastName,
+              first_name: firstName,
+              ...(patronymic && { patronymic }),
+              city: city,
+              street: street,
+              house: house,
+              ...(apartment && { apartment }),
               phone: phone,
               ...(comment && { comment }),
               prize_id: prizeId,
@@ -550,19 +602,25 @@ describe('Delivery API Route - Property-Based Tests', () => {
     it('должен возвращать success при успешном сохранении', async () => {
       await fc.assert(
         fc.asyncProperty(
-          fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // full_name
-          fc.string({ minLength: 10, maxLength: 100 }).map(s => s.trim()).filter(s => s.length >= 10), // address
+          fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // last_name
+          fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // first_name
+          fc.string({ minLength: 2, maxLength: 100 }).map(s => s.trim()).filter(s => s.length >= 2), // city
+          fc.string({ minLength: 2, maxLength: 200 }).map(s => s.trim()).filter(s => s.length >= 2), // street
+          fc.string({ minLength: 1, maxLength: 20 }).map(s => s.trim()).filter(s => s.length >= 1), // house
           fc.integer({ min: 1000000000, max: 9999999999 }).map(n => '+' + n.toString()), // phone
           fc.integer({ min: 1, max: 100 }), // prize_id
           fc.integer({ min: 1, max: 999999 }), // user_id
-          async (fullName, address, phone, prizeId, userId) => {
+          async (lastName, firstName, city, street, house, phone, prizeId, userId) => {
             const currentTimestamp = Math.floor(Date.now() / 1000);
             const authDate = currentTimestamp - 100;
             const initData = createValidInitData(userId, authDate, TEST_BOT_TOKEN);
 
             const requestBody = {
-              full_name: fullName,
-              address: address,
+              last_name: lastName,
+              first_name: firstName,
+              city: city,
+              street: street,
+              house: house,
               phone: phone,
               prize_id: prizeId,
               initData: initData,
@@ -589,19 +647,25 @@ describe('Delivery API Route - Property-Based Tests', () => {
     it('должен корректно извлекать и передавать telegram_id', async () => {
       await fc.assert(
         fc.asyncProperty(
-          fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // full_name
-          fc.string({ minLength: 10, maxLength: 100 }).map(s => s.trim()).filter(s => s.length >= 10), // address
+          fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // last_name
+          fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // first_name
+          fc.string({ minLength: 2, maxLength: 100 }).map(s => s.trim()).filter(s => s.length >= 2), // city
+          fc.string({ minLength: 2, maxLength: 200 }).map(s => s.trim()).filter(s => s.length >= 2), // street
+          fc.string({ minLength: 1, maxLength: 20 }).map(s => s.trim()).filter(s => s.length >= 1), // house
           fc.integer({ min: 1000000000, max: 9999999999 }).map(n => '+' + n.toString()), // phone
           fc.integer({ min: 1, max: 100 }), // prize_id
           fc.integer({ min: 1, max: 999999 }), // user_id
-          async (fullName, address, phone, prizeId, userId) => {
+          async (lastName, firstName, city, street, house, phone, prizeId, userId) => {
             const currentTimestamp = Math.floor(Date.now() / 1000);
             const authDate = currentTimestamp - 100;
             const initData = createValidInitData(userId, authDate, TEST_BOT_TOKEN);
 
             const requestBody = {
-              full_name: fullName,
-              address: address,
+              last_name: lastName,
+              first_name: firstName,
+              city: city,
+              street: street,
+              house: house,
               phone: phone,
               prize_id: prizeId,
               initData: initData,

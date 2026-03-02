@@ -51,6 +51,7 @@ export function escapeHtml(text: string): string {
  * // Возвращает: 'Hello World'
  */
 export function stripHtmlTags(text: string): string {
+  if (!text) return '';
   return text.replace(/<[^>]*>/g, '');
 }
 
@@ -121,21 +122,36 @@ export function sanitizeUrl(url: string): string | null {
  * @returns Санитизированный объект
  */
 export function sanitizeDeliveryData(data: {
-  full_name: string;
-  address: string;
+  last_name: string;
+  first_name: string;
+  patronymic?: string;
+  city: string;
+  street: string;
+  house: string;
+  apartment?: string;
   phone: string;
   comment?: string;
   telegram_id: number;
 }): {
-  full_name: string;
-  address: string;
+  last_name: string;
+  first_name: string;
+  patronymic: string | null;
+  city: string;
+  street: string;
+  house: string;
+  apartment: string | null;
   phone: string;
   comment?: string;
   telegram_id: number;
 } {
   return {
-    full_name: sanitizeText(data.full_name),
-    address: sanitizeText(data.address),
+    last_name: sanitizeText(data.last_name),
+    first_name: sanitizeText(data.first_name),
+    patronymic: (data.patronymic && data.patronymic.trim()) ? sanitizeText(data.patronymic) : null,
+    city: sanitizeText(data.city),
+    street: sanitizeText(data.street),
+    house: sanitizeText(data.house),
+    apartment: (data.apartment && data.apartment.trim()) ? sanitizeText(data.apartment) : null,
     phone: sanitizeText(data.phone),
     comment: data.comment ? sanitizeText(data.comment) : undefined,
     telegram_id: data.telegram_id,

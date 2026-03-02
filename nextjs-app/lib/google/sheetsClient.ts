@@ -12,8 +12,13 @@ import { JWT } from 'google-auth-library';
  * Интерфейс данных доставки для сохранения в Google Sheets
  */
 export interface DeliveryData {
-  full_name: string;
-  address: string;
+  last_name: string;
+  first_name: string;
+  patronymic: string | null;
+  city: string;
+  street: string;
+  house: string;
+  apartment: string | null;
   phone: string;
   comment?: string;
   telegram_id: number;
@@ -77,19 +82,26 @@ export class GoogleSheetsClient {
   async saveDeliveryData(rowId: number, deliveryData: DeliveryData): Promise<boolean> {
     try {
       // Подготовка данных для записи
-      // Предполагаем, что столбцы E-H используются для данных доставки
-      // E: full_name, F: address, G: phone, H: comment
+      // Новая структура столбцов:
+      // E: last_name, F: first_name, G: patronymic
+      // H: city, I: street, J: house, K: apartment
+      // L: phone, M: comment
       const values = [
         [
-          deliveryData.full_name,
-          deliveryData.address,
+          deliveryData.last_name,
+          deliveryData.first_name,
+          deliveryData.patronymic || '',
+          deliveryData.city,
+          deliveryData.street,
+          deliveryData.house,
+          deliveryData.apartment || '',
           deliveryData.phone,
           deliveryData.comment || '',
         ],
       ];
 
-      // Определение диапазона для обновления (строка rowId, столбцы E-H)
-      const range = `Sheet1!E${rowId}:H${rowId}`;
+      // Определение диапазона для обновления (строка rowId, столбцы E-M)
+      const range = `Sheet1!E${rowId}:M${rowId}`;
 
       // Выполнение обновления
       await this.sheets.spreadsheets.values.update({
@@ -101,8 +113,8 @@ export class GoogleSheetsClient {
         },
       });
 
-      // Дополнительно: отметка времени получения приза в столбце I
-      const claimedAtRange = `Sheet1!I${rowId}`;
+      // Отметка времени получения приза в столбце N
+      const claimedAtRange = `Sheet1!N${rowId}`;
       await this.sheets.spreadsheets.values.update({
         spreadsheetId: this.spreadsheetId,
         range: claimedAtRange,
