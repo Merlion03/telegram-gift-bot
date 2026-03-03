@@ -13,7 +13,7 @@ import { GoogleSheetsClient, DeliveryData } from '../sheetsClient';
 
 // Мокирование googleapis
 vi.mock('googleapis', () => {
-  const mockSheetsUpdate = vi.fn();
+  const mockSheetsBatchUpdate = vi.fn();
   const mockSheetsGet = vi.fn();
   
   return {
@@ -21,7 +21,7 @@ vi.mock('googleapis', () => {
       sheets: vi.fn(() => ({
         spreadsheets: {
           values: {
-            update: mockSheetsUpdate,
+            batchUpdate: mockSheetsBatchUpdate,
           },
           get: mockSheetsGet,
         },
@@ -39,7 +39,7 @@ vi.mock('googleapis', () => {
 });
 
 describe('GoogleSheetsClient - Property-Based Tests', () => {
-  let mockSheetsUpdate: ReturnType<typeof vi.fn>;
+  let mockSheetsBatchUpdate: ReturnType<typeof vi.fn>;
   let mockSheetsGet: ReturnType<typeof vi.fn>;
   let client: GoogleSheetsClient;
 
@@ -55,11 +55,11 @@ describe('GoogleSheetsClient - Property-Based Tests', () => {
     const { google } = await import('googleapis');
     const sheetsInstance = google.sheets({} as any);
     
-    mockSheetsUpdate = sheetsInstance.spreadsheets.values.update as any;
+    mockSheetsBatchUpdate = sheetsInstance.spreadsheets.values.batchUpdate as any;
     mockSheetsGet = sheetsInstance.spreadsheets.get as any;
 
     // Настройка моков
-    mockSheetsUpdate.mockResolvedValue({ data: {} });
+    mockSheetsBatchUpdate.mockResolvedValue({ data: {} });
     mockSheetsGet.mockResolvedValue({ data: { spreadsheetId: testSpreadsheetId } });
 
     // Мокирование переменной окружения с credentials
@@ -100,6 +100,16 @@ describe('GoogleSheetsClient - Property-Based Tests', () => {
   const apartmentArbitrary = fc.string({ minLength: 1, maxLength: 20 }).filter(s => s.trim().length >= 1);
 
   /**
+   * Генератор валидных строк для страны
+   */
+  const countryArbitrary = fc.string({ minLength: 2, maxLength: 100 }).filter(s => s.trim().length >= 2);
+
+  /**
+   * Генератор валидных почтовых индексов
+   */
+  const postalCodeArbitrary = fc.string({ minLength: 3, maxLength: 20 }).filter(s => s.trim().length >= 3);
+
+  /**
    * Генератор валидных номеров телефонов
    */
   const phoneArbitrary = fc.integer({ min: 10000000000, max: 999999999999999 })
@@ -126,6 +136,8 @@ describe('GoogleSheetsClient - Property-Based Tests', () => {
         nameArbitrary,
         nameArbitrary,
         fc.option(nameArbitrary, { nil: null }),
+        countryArbitrary,
+        postalCodeArbitrary,
         cityArbitrary,
         streetArbitrary,
         houseArbitrary,
@@ -138,6 +150,8 @@ describe('GoogleSheetsClient - Property-Based Tests', () => {
           last_name,
           first_name,
           patronymic,
+          country,
+          postal_code,
           city,
           street,
           house,
@@ -152,6 +166,8 @@ describe('GoogleSheetsClient - Property-Based Tests', () => {
             last_name,
             first_name,
             patronymic,
+            country,
+            postal_code,
             city,
             street,
             house,
@@ -167,35 +183,44 @@ describe('GoogleSheetsClient - Property-Based Tests', () => {
           // Assert
           expect(result).toBe(true);
 
-          // Проверяем, что update был вызван дважды (данные + timestamp)
-          expect(mockSheetsUpdate).toHaveBeenCalledTimes(2);
+          // Проверяем, что batchUpdate был вызван один раз
+          expect(mockSheetsBatchUpdate).toHaveBeenCalledTimes(1);
 
-          // Проверяем первый вызов (сохранение данных доставки)
-          const firstCall = mockSheetsUpdate.mock.calls[0][0];
+          // Проверяем вызов batchUpdate
+          const call = mockSheetsBatchUpdate.mock.calls[0][0];
           
-          // Проверяем диапазон
-          expect(firstCall.range).toBe(`Sheet1!E${rowId}:M${rowId}`);
+          // Проверяем структуру запроса
+          expect(call.spreadsheetId).toBe(testSpreadsheetId);
+          expect(call.requestBody.valueInputOption).toBe('RAW');
+          expect(call.requestBody.data).toBeDefined();
           
           // Проверяем сохраненные значения
-          const savedValues = firstCall.requestBody.values[0];
+          const data = call.requestBody.data;
           
-          expect(savedValues[0]).toBe(last_name);
-          expect(savedValues[1]).toBe(first_name);
-          expect(savedValues[2]).toBe(patronymic || '');
-          expect(savedValues[3]).toBe(city);
-          expect(savedValues[4]).toBe(street);
-          expect(savedValues[5]).toBe(house);
-          expect(savedValues[6]).toBe(apartment || '');
-          expect(savedValues[7]).toBe(phone);
-          expect(savedValues[8]).toBe(comment || '');
+          // Находим записи по диапазонам
+          const findValue = (range: string) => {
+            const entry = data.find((d: any) => d.range === range);
+            return entry ? entry.values[0][0] : undefined;
+          };
 
-          // Проверяем второй вызов (сохранение timestamp)
-          const secondCall = mockSheetsUpdate.mock.calls[1][0];
-          expect(secondCall.range).toBe(`Sheet1!N${rowId}`);
-          expect(secondCall.requestBody.values[0][0]).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+          expect(findValue(`Sheet1!E${rowId}`)).toBe(last_name);
+          expect(findValue(`Sheet1!F${rowId}`)).toBe(first_name);
+          expect(findValue(`Sheet1!G${rowId}`)).toBe(patronymic || '');
+          expect(findValue(`Sheet1!H${rowId}`)).toBe(city);
+          expect(findValue(`Sheet1!I${rowId}`)).toBe(street);
+          expect(findValue(`Sheet1!J${rowId}`)).toBe(house);
+          expect(findValue(`Sheet1!K${rowId}`)).toBe(apartment || '');
+          expect(findValue(`Sheet1!L${rowId}`)).toBe(phone);
+          expect(findValue(`Sheet1!M${rowId}`)).toBe(comment || '');
+          expect(findValue(`Sheet1!N${rowId}`)).toBe(country);
+          expect(findValue(`Sheet1!O${rowId}`)).toBe(postal_code);
+          
+          // Проверяем timestamp в колонке P
+          const timestamp = findValue(`Sheet1!P${rowId}`);
+          expect(timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
 
           // Очищаем моки для следующей итерации
-          mockSheetsUpdate.mockClear();
+          mockSheetsBatchUpdate.mockClear();
         }
       ),
       { numRuns: 100, timeout: 10000 }
@@ -212,6 +237,8 @@ describe('GoogleSheetsClient - Property-Based Tests', () => {
       fc.asyncProperty(
         nameArbitrary,
         nameArbitrary,
+        countryArbitrary,
+        postalCodeArbitrary,
         cityArbitrary,
         streetArbitrary,
         houseArbitrary,
@@ -221,6 +248,8 @@ describe('GoogleSheetsClient - Property-Based Tests', () => {
         async (
           last_name,
           first_name,
+          country,
+          postal_code,
           city,
           street,
           house,
@@ -233,6 +262,8 @@ describe('GoogleSheetsClient - Property-Based Tests', () => {
             last_name,
             first_name,
             patronymic: null,
+            country,
+            postal_code,
             city,
             street,
             house,
@@ -246,16 +277,21 @@ describe('GoogleSheetsClient - Property-Based Tests', () => {
           await client.saveDeliveryData(rowId, deliveryData);
 
           // Assert
-          const firstCall = mockSheetsUpdate.mock.calls[0][0];
-          const savedValues = firstCall.requestBody.values[0];
+          const call = mockSheetsBatchUpdate.mock.calls[0][0];
+          const data = call.requestBody.data;
+          
+          const findValue = (range: string) => {
+            const entry = data.find((d: any) => d.range === range);
+            return entry ? entry.values[0][0] : undefined;
+          };
           
           // Проверяем, что null значения сохранены как пустые строки
-          expect(savedValues[2]).toBe(''); // patronymic
-          expect(savedValues[6]).toBe(''); // apartment
-          expect(savedValues[8]).toBe(''); // comment
+          expect(findValue(`Sheet1!G${rowId}`)).toBe(''); // patronymic
+          expect(findValue(`Sheet1!K${rowId}`)).toBe(''); // apartment
+          expect(findValue(`Sheet1!M${rowId}`)).toBe(''); // comment
 
           // Очищаем моки для следующей итерации
-          mockSheetsUpdate.mockClear();
+          mockSheetsBatchUpdate.mockClear();
         }
       ),
       { numRuns: 100, timeout: 10000 }
@@ -263,17 +299,19 @@ describe('GoogleSheetsClient - Property-Based Tests', () => {
   });
 
   /**
-   * Property: Диапазон столбцов всегда E-M независимо от данных
+   * Property: Все поля сохраняются через batchUpdate с правильными диапазонами
    * 
-   * Validates: Requirements 4.2
+   * Validates: Requirements 6.1, 6.2, 6.3, 6.4, 6.5
    */
-  it('должен всегда использовать диапазон E-M для сохранения данных', async () => {
+  it('должен использовать batchUpdate для сохранения всех полей включая новые', async () => {
     await fc.assert(
       fc.asyncProperty(
         fc.record({
           last_name: nameArbitrary,
           first_name: nameArbitrary,
           patronymic: fc.option(nameArbitrary, { nil: null }),
+          country: countryArbitrary,
+          postal_code: postalCodeArbitrary,
           city: cityArbitrary,
           street: streetArbitrary,
           house: houseArbitrary,
@@ -288,16 +326,23 @@ describe('GoogleSheetsClient - Property-Based Tests', () => {
           await client.saveDeliveryData(rowId, deliveryData);
 
           // Assert
-          const firstCall = mockSheetsUpdate.mock.calls[0][0];
+          const call = mockSheetsBatchUpdate.mock.calls[0][0];
           
-          // Проверяем, что диапазон всегда E-M
-          expect(firstCall.range).toBe(`Sheet1!E${rowId}:M${rowId}`);
+          // Проверяем, что используется batchUpdate
+          expect(call.requestBody.valueInputOption).toBe('RAW');
+          expect(call.requestBody.data).toBeDefined();
           
-          // Проверяем, что всегда сохраняется ровно 9 значений
-          expect(firstCall.requestBody.values[0]).toHaveLength(9);
+          // Проверяем, что сохраняется 12 полей (E-O + P для timestamp)
+          expect(call.requestBody.data).toHaveLength(12);
+          
+          // Проверяем наличие новых полей
+          const ranges = call.requestBody.data.map((d: any) => d.range);
+          expect(ranges).toContain(`Sheet1!N${rowId}`); // country
+          expect(ranges).toContain(`Sheet1!O${rowId}`); // postal_code
+          expect(ranges).toContain(`Sheet1!P${rowId}`); // timestamp
 
           // Очищаем моки для следующей итерации
-          mockSheetsUpdate.mockClear();
+          mockSheetsBatchUpdate.mockClear();
         }
       ),
       { numRuns: 100, timeout: 10000 }
@@ -305,17 +350,19 @@ describe('GoogleSheetsClient - Property-Based Tests', () => {
   });
 
   /**
-   * Property: Timestamp всегда записывается в столбец N
+   * Property: Timestamp всегда записывается в столбец P
    * 
-   * Validates: Requirements 4.2
+   * Validates: Requirements 6.5
    */
-  it('должен всегда записывать timestamp в столбец N', async () => {
+  it('должен всегда записывать timestamp в столбец P', async () => {
     await fc.assert(
       fc.asyncProperty(
         fc.record({
           last_name: nameArbitrary,
           first_name: nameArbitrary,
           patronymic: fc.option(nameArbitrary, { nil: null }),
+          country: countryArbitrary,
+          postal_code: postalCodeArbitrary,
           city: cityArbitrary,
           street: streetArbitrary,
           house: houseArbitrary,
@@ -330,18 +377,23 @@ describe('GoogleSheetsClient - Property-Based Tests', () => {
           await client.saveDeliveryData(rowId, deliveryData);
 
           // Assert
-          const secondCall = mockSheetsUpdate.mock.calls[1][0];
+          const call = mockSheetsBatchUpdate.mock.calls[0][0];
+          const data = call.requestBody.data;
           
-          // Проверяем, что timestamp записывается в столбец N
-          expect(secondCall.range).toBe(`Sheet1!N${rowId}`);
+          // Находим запись для timestamp
+          const timestampEntry = data.find((d: any) => d.range === `Sheet1!P${rowId}`);
+          
+          // Проверяем, что timestamp записывается в столбец P
+          expect(timestampEntry).toBeDefined();
+          expect(timestampEntry.range).toBe(`Sheet1!P${rowId}`);
           
           // Проверяем, что timestamp - валидная ISO строка
-          const timestamp = secondCall.requestBody.values[0][0];
+          const timestamp = timestampEntry.values[0][0];
           expect(() => new Date(timestamp)).not.toThrow();
           expect(new Date(timestamp).toISOString()).toBe(timestamp);
 
           // Очищаем моки для следующей итерации
-          mockSheetsUpdate.mockClear();
+          mockSheetsBatchUpdate.mockClear();
         }
       ),
       { numRuns: 100, timeout: 10000 }

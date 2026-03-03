@@ -53,6 +53,8 @@ describe('API /api/delivery - Unit Tests', () => {
       const requestBody = {
         last_name: 'Иванов',
         first_name: 'Иван',
+        country: 'Россия',
+        postal_code: '123456',
         city: 'Москва',
         street: 'Ленина',
         house: '10',
@@ -82,6 +84,8 @@ describe('API /api/delivery - Unit Tests', () => {
         last_name: 'Петров',
         first_name: 'Петр',
         patronymic: 'Петрович',
+        country: 'Россия',
+        postal_code: '190000',
         city: 'Санкт-Петербург',
         street: 'Невский проспект',
         house: '1',
@@ -112,6 +116,8 @@ describe('API /api/delivery - Unit Tests', () => {
         last_name: 'Сидоров',
         first_name: 'Сидор',
         patronymic: '',
+        country: 'Россия',
+        postal_code: '420000',
         city: 'Казань',
         street: 'Баумана',
         house: '5',
@@ -136,13 +142,122 @@ describe('API /api/delivery - Unit Tests', () => {
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
     });
+
+    it('должен успешно обработать различные форматы почтовых индексов', async () => {
+      const postalCodes = [
+        '123456',        // Россия
+        '12345',         // США
+        '12345-6789',    // США расширенный
+        'A1A 1A1',       // Канада
+        'SW1A 1AA',      // Великобритания
+      ];
+
+      for (const postal_code of postalCodes) {
+        const requestBody = {
+          last_name: 'Тестов',
+          first_name: 'Тест',
+          country: 'Тестовая страна',
+          postal_code,
+          city: 'Тестовый город',
+          street: 'Тестовая улица',
+          house: '1',
+          phone: '+79991234567',
+          prize_id: 1,
+          initData: 'valid_init_data',
+        };
+
+        const request = new NextRequest('http://localhost:3000/api/delivery', {
+          method: 'POST',
+          body: JSON.stringify(requestBody),
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        const response = await POST(request);
+        const data = await response.json();
+
+        expect(response.status).toBe(200);
+        expect(data.success).toBe(true);
+      }
+    });
   });
 
   describe('Валидация обязательных полей (Requirements 4.5, 4.6)', () => {
+    it('должен вернуть 400 при отсутствии country', async () => {
+      const requestBody = {
+        last_name: 'Иванов',
+        first_name: 'Иван',
+        // country отсутствует
+        postal_code: '123456',
+        city: 'Москва',
+        street: 'Ленина',
+        house: '10',
+        phone: '+79991234567',
+        prize_id: 1,
+        initData: 'valid_init_data',
+      };
+
+      const request = new NextRequest('http://localhost:3000/api/delivery', {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(data.error).toBe('Validation error');
+      expect(data.message).toBe('Ошибка валидации данных');
+      expect(data.details).toBeDefined();
+      
+      const countryError = data.details.find((err: any) => err.field === 'country');
+      expect(countryError).toBeDefined();
+    });
+
+    it('должен вернуть 400 при отсутствии postal_code', async () => {
+      const requestBody = {
+        last_name: 'Иванов',
+        first_name: 'Иван',
+        country: 'Россия',
+        // postal_code отсутствует
+        city: 'Москва',
+        street: 'Ленина',
+        house: '10',
+        phone: '+79991234567',
+        prize_id: 1,
+        initData: 'valid_init_data',
+      };
+
+      const request = new NextRequest('http://localhost:3000/api/delivery', {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(data.error).toBe('Validation error');
+      expect(data.message).toBe('Ошибка валидации данных');
+      expect(data.details).toBeDefined();
+      
+      const postalCodeError = data.details.find((err: any) => err.field === 'postal_code');
+      expect(postalCodeError).toBeDefined();
+    });
+
     it('должен вернуть 400 при отсутствии last_name', async () => {
       const requestBody = {
         // last_name отсутствует
         first_name: 'Иван',
+        country: 'Россия',
+        postal_code: '123456',
         city: 'Москва',
         street: 'Ленина',
         house: '10',
@@ -175,6 +290,8 @@ describe('API /api/delivery - Unit Tests', () => {
       const requestBody = {
         last_name: 'Иванов',
         // first_name отсутствует
+        country: 'Россия',
+        postal_code: '123456',
         city: 'Москва',
         street: 'Ленина',
         house: '10',
@@ -205,6 +322,8 @@ describe('API /api/delivery - Unit Tests', () => {
       const requestBody = {
         last_name: 'Иванов',
         first_name: 'Иван',
+        country: 'Россия',
+        postal_code: '123456',
         // city отсутствует
         street: 'Ленина',
         house: '10',
@@ -235,6 +354,8 @@ describe('API /api/delivery - Unit Tests', () => {
       const requestBody = {
         last_name: 'Иванов',
         first_name: 'Иван',
+        country: 'Россия',
+        postal_code: '123456',
         city: 'Москва',
         // street отсутствует
         house: '10',
@@ -265,6 +386,8 @@ describe('API /api/delivery - Unit Tests', () => {
       const requestBody = {
         last_name: 'Иванов',
         first_name: 'Иван',
+        country: 'Россия',
+        postal_code: '123456',
         city: 'Москва',
         street: 'Ленина',
         // house отсутствует
@@ -295,6 +418,8 @@ describe('API /api/delivery - Unit Tests', () => {
       const requestBody = {
         last_name: 'Иванов',
         first_name: 'Иван',
+        country: 'Россия',
+        postal_code: '123456',
         city: 'Москва',
         street: 'Ленина',
         house: '10',
@@ -325,6 +450,8 @@ describe('API /api/delivery - Unit Tests', () => {
       const requestBody = {
         last_name: 'Иванов',
         first_name: 'Иван',
+        country: 'Россия',
+        postal_code: '123456',
         city: 'Москва',
         street: 'Ленина',
         house: '10',
@@ -355,6 +482,8 @@ describe('API /api/delivery - Unit Tests', () => {
       const requestBody = {
         last_name: 'Иванов',
         first_name: 'Иван',
+        country: 'Россия',
+        postal_code: '123456',
         city: 'Москва',
         street: 'Ленина',
         house: '10',
@@ -383,10 +512,144 @@ describe('API /api/delivery - Unit Tests', () => {
   });
 
   describe('Валидация формата данных (Requirements 4.6)', () => {
+    it('должен вернуть 400 при слишком короткой стране (< 2 символов)', async () => {
+      const requestBody = {
+        last_name: 'Иванов',
+        first_name: 'Иван',
+        country: 'Р',
+        postal_code: '123456',
+        city: 'Москва',
+        street: 'Ленина',
+        house: '10',
+        phone: '+79991234567',
+        prize_id: 1,
+        initData: 'valid_init_data',
+      };
+
+      const request = new NextRequest('http://localhost:3000/api/delivery', {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(data.error).toBe('Validation error');
+      
+      const countryError = data.details.find((err: any) => err.field === 'country');
+      expect(countryError).toBeDefined();
+      expect(countryError.message).toContain('минимум 2 символа');
+    });
+
+    it('должен вернуть 400 при слишком длинной стране (> 100 символов)', async () => {
+      const requestBody = {
+        last_name: 'Иванов',
+        first_name: 'Иван',
+        country: 'Р'.repeat(101),
+        postal_code: '123456',
+        city: 'Москва',
+        street: 'Ленина',
+        house: '10',
+        phone: '+79991234567',
+        prize_id: 1,
+        initData: 'valid_init_data',
+      };
+
+      const request = new NextRequest('http://localhost:3000/api/delivery', {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(data.error).toBe('Validation error');
+      
+      const countryError = data.details.find((err: any) => err.field === 'country');
+      expect(countryError).toBeDefined();
+      expect(countryError.message).toContain('100 символов');
+    });
+
+    it('должен вернуть 400 при слишком коротком почтовом индексе (< 3 символов)', async () => {
+      const requestBody = {
+        last_name: 'Иванов',
+        first_name: 'Иван',
+        country: 'Россия',
+        postal_code: '12',
+        city: 'Москва',
+        street: 'Ленина',
+        house: '10',
+        phone: '+79991234567',
+        prize_id: 1,
+        initData: 'valid_init_data',
+      };
+
+      const request = new NextRequest('http://localhost:3000/api/delivery', {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(data.error).toBe('Validation error');
+      
+      const postalCodeError = data.details.find((err: any) => err.field === 'postal_code');
+      expect(postalCodeError).toBeDefined();
+      expect(postalCodeError.message).toContain('минимум 3 символа');
+    });
+
+    it('должен вернуть 400 при слишком длинном почтовом индексе (> 20 символов)', async () => {
+      const requestBody = {
+        last_name: 'Иванов',
+        first_name: 'Иван',
+        country: 'Россия',
+        postal_code: '1'.repeat(21),
+        city: 'Москва',
+        street: 'Ленина',
+        house: '10',
+        phone: '+79991234567',
+        prize_id: 1,
+        initData: 'valid_init_data',
+      };
+
+      const request = new NextRequest('http://localhost:3000/api/delivery', {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(data.error).toBe('Validation error');
+      
+      const postalCodeError = data.details.find((err: any) => err.field === 'postal_code');
+      expect(postalCodeError).toBeDefined();
+      expect(postalCodeError.message).toContain('20 символов');
+    });
+
     it('должен вернуть 400 при невалидном формате телефона', async () => {
       const requestBody = {
         last_name: 'Иванов',
         first_name: 'Иван',
+        country: 'Россия',
+        postal_code: '123456',
         city: 'Москва',
         street: 'Ленина',
         house: '10',
@@ -418,6 +681,8 @@ describe('API /api/delivery - Unit Tests', () => {
       const requestBody = {
         last_name: 'И',
         first_name: 'Иван',
+        country: 'Россия',
+        postal_code: '123456',
         city: 'Москва',
         street: 'Ленина',
         house: '10',
@@ -448,6 +713,8 @@ describe('API /api/delivery - Unit Tests', () => {
       const requestBody = {
         last_name: 'И'.repeat(51),
         first_name: 'Иван',
+        country: 'Россия',
+        postal_code: '123456',
         city: 'Москва',
         street: 'Ленина',
         house: '10',
@@ -478,6 +745,8 @@ describe('API /api/delivery - Unit Tests', () => {
       const requestBody = {
         last_name: 'И',
         first_name: 'И'.repeat(51),
+        country: 'Р',
+        postal_code: '12',
         city: 'Москва',
         street: 'Ленина',
         house: '10',
@@ -501,7 +770,7 @@ describe('API /api/delivery - Unit Tests', () => {
       expect(data.error).toBe('Validation error');
       expect(data.details).toBeDefined();
       expect(Array.isArray(data.details)).toBe(true);
-      expect(data.details.length).toBeGreaterThanOrEqual(3);
+      expect(data.details.length).toBeGreaterThanOrEqual(5);
       
       // Проверяем структуру ошибок
       data.details.forEach((err: any) => {
@@ -526,6 +795,8 @@ describe('API /api/delivery - Unit Tests', () => {
       const requestBody = {
         last_name: 'Иванов',
         first_name: 'Иван',
+        country: 'Россия',
+        postal_code: '123456',
         city: 'Москва',
         street: 'Ленина',
         house: '10',
@@ -561,6 +832,8 @@ describe('API /api/delivery - Unit Tests', () => {
       const requestBody = {
         last_name: 'Иванов',
         first_name: 'Иван',
+        country: 'Россия',
+        postal_code: '123456',
         city: 'Москва',
         street: 'Ленина',
         house: '10',

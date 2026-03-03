@@ -90,6 +90,8 @@ describe('sanitizeDeliveryData', () => {
       const input = {
         last_name: '<script>Иванов</script>',
         first_name: 'Иван<b>',
+        country: 'Россия<tag>',
+        postal_code: '123456<script>',
         city: 'Москва & Область',
         street: 'Ленина "123"',
         house: '10<tag>',
@@ -103,6 +105,8 @@ describe('sanitizeDeliveryData', () => {
       expect(result.last_name).not.toContain('<script>');
       expect(result.last_name).not.toContain('</script>');
       expect(result.first_name).not.toContain('<b>');
+      expect(result.country).not.toContain('<tag>');
+      expect(result.postal_code).not.toContain('<script>');
       expect(result.house).not.toContain('<tag>');
 
       // Проверяем, что специальные символы экранированы
@@ -117,6 +121,8 @@ describe('sanitizeDeliveryData', () => {
       const input = {
         last_name: 'Иванов',
         first_name: 'Иван',
+        country: 'Россия',
+        postal_code: '123456',
         city: 'Москва',
         street: 'Ленина',
         house: '10',
@@ -132,6 +138,8 @@ describe('sanitizeDeliveryData', () => {
       const input = {
         last_name: '  Иванов  ',
         first_name: 'Иван   Петрович',
+        country: '  Россия  ',
+        postal_code: '  123456  ',
         city: 'Москва    ',
         street: '  Ленина  ',
         house: '  10  ',
@@ -143,6 +151,8 @@ describe('sanitizeDeliveryData', () => {
 
       expect(result.last_name).toBe('Иванов');
       expect(result.first_name).toBe('Иван Петрович');
+      expect(result.country).toBe('Россия');
+      expect(result.postal_code).toBe('123456');
       expect(result.city).toBe('Москва');
       expect(result.street).toBe('Ленина');
       expect(result.house).toBe('10');
@@ -155,6 +165,8 @@ describe('sanitizeDeliveryData', () => {
         last_name: 'Иванов',
         first_name: 'Иван',
         patronymic: '',
+        country: 'Россия',
+        postal_code: '123456',
         city: 'Москва',
         street: 'Ленина',
         house: '10',
@@ -171,6 +183,8 @@ describe('sanitizeDeliveryData', () => {
         last_name: 'Иванов',
         first_name: 'Иван',
         patronymic: '   ',
+        country: 'Россия',
+        postal_code: '123456',
         city: 'Москва',
         street: 'Ленина',
         house: '10',
@@ -187,6 +201,8 @@ describe('sanitizeDeliveryData', () => {
         last_name: 'Иванов',
         first_name: 'Иван',
         patronymic: '<b>Петрович</b>',
+        country: 'Россия',
+        postal_code: '123456',
         city: 'Москва',
         street: 'Ленина',
         house: '10',
@@ -204,6 +220,8 @@ describe('sanitizeDeliveryData', () => {
       const input = {
         last_name: 'Иванов',
         first_name: 'Иван',
+        country: 'Россия',
+        postal_code: '123456',
         city: 'Москва',
         street: 'Ленина',
         house: '10',
@@ -220,6 +238,8 @@ describe('sanitizeDeliveryData', () => {
       const input = {
         last_name: 'Иванов',
         first_name: 'Иван',
+        country: 'Россия',
+        postal_code: '123456',
         city: 'Москва',
         street: 'Ленина',
         house: '10',
@@ -236,6 +256,8 @@ describe('sanitizeDeliveryData', () => {
       const input = {
         last_name: 'Иванов',
         first_name: 'Иван',
+        country: 'Россия',
+        postal_code: '123456',
         city: 'Москва',
         street: 'Ленина',
         house: '10',
@@ -254,6 +276,8 @@ describe('sanitizeDeliveryData', () => {
       const input = {
         last_name: 'Иванов',
         first_name: 'Иван',
+        country: 'Россия',
+        postal_code: '123456',
         city: 'Москва',
         street: 'Ленина',
         house: '10',
@@ -269,6 +293,8 @@ describe('sanitizeDeliveryData', () => {
       const input = {
         last_name: 'Иванов',
         first_name: 'Иван',
+        country: 'Россия',
+        postal_code: '123456',
         city: 'Москва',
         street: 'Ленина',
         house: '10',
@@ -288,6 +314,8 @@ describe('sanitizeDeliveryData', () => {
         last_name: 'Иванов',
         first_name: 'Иван',
         patronymic: '',
+        country: 'Россия',
+        postal_code: '123456',
         city: 'Москва',
         street: 'Ленина',
         house: '10',
@@ -303,12 +331,215 @@ describe('sanitizeDeliveryData', () => {
     });
   });
 
+  describe('Санитизация полей country и postal_code', () => {
+    it('должен удалять HTML-теги из поля country', () => {
+      const input = {
+        last_name: 'Иванов',
+        first_name: 'Иван',
+        country: '<script>Россия</script>',
+        postal_code: '123456',
+        city: 'Москва',
+        street: 'Ленина',
+        house: '10',
+        phone: '+79991234567',
+        telegram_id: 123456789,
+      };
+
+      const result = sanitizeDeliveryData(input);
+      expect(result.country).not.toContain('<script>');
+      expect(result.country).not.toContain('</script>');
+      expect(result.country).toContain('Россия');
+    });
+
+    it('должен удалять HTML-теги из поля postal_code', () => {
+      const input = {
+        last_name: 'Иванов',
+        first_name: 'Иван',
+        country: 'Россия',
+        postal_code: '<b>123456</b>',
+        city: 'Москва',
+        street: 'Ленина',
+        house: '10',
+        phone: '+79991234567',
+        telegram_id: 123456789,
+      };
+
+      const result = sanitizeDeliveryData(input);
+      expect(result.postal_code).not.toContain('<b>');
+      expect(result.postal_code).not.toContain('</b>');
+      expect(result.postal_code).toContain('123456');
+    });
+
+    it('должен экранировать специальные символы в country', () => {
+      const input = {
+        last_name: 'Иванов',
+        first_name: 'Иван',
+        country: 'Россия & СНГ',
+        postal_code: '123456',
+        city: 'Москва',
+        street: 'Ленина',
+        house: '10',
+        phone: '+79991234567',
+        telegram_id: 123456789,
+      };
+
+      const result = sanitizeDeliveryData(input);
+      expect(result.country).toContain('&amp;');
+      expect(result.country).toContain('Россия');
+      expect(result.country).toContain('СНГ');
+    });
+
+    it('должен сохранять валидные символы в postal_code (цифры)', () => {
+      const input = {
+        last_name: 'Иванов',
+        first_name: 'Иван',
+        country: 'Россия',
+        postal_code: '123456',
+        city: 'Москва',
+        street: 'Ленина',
+        house: '10',
+        phone: '+79991234567',
+        telegram_id: 123456789,
+      };
+
+      const result = sanitizeDeliveryData(input);
+      expect(result.postal_code).toBe('123456');
+    });
+
+    it('должен сохранять валидные символы в postal_code (буквы, цифры, дефисы)', () => {
+      const input = {
+        last_name: 'Иванов',
+        first_name: 'Иван',
+        country: 'США',
+        postal_code: '12345-6789',
+        city: 'Нью-Йорк',
+        street: 'Broadway',
+        house: '100',
+        phone: '+79991234567',
+        telegram_id: 123456789,
+      };
+
+      const result = sanitizeDeliveryData(input);
+      expect(result.postal_code).toBe('12345-6789');
+    });
+
+    it('должен сохранять валидные символы в postal_code (буквы и цифры с пробелами)', () => {
+      const input = {
+        last_name: 'Иванов',
+        first_name: 'Иван',
+        country: 'Канада',
+        postal_code: 'A1A 1A1',
+        city: 'Торонто',
+        street: 'Main Street',
+        house: '50',
+        phone: '+79991234567',
+        telegram_id: 123456789,
+      };
+
+      const result = sanitizeDeliveryData(input);
+      expect(result.postal_code).toBe('A1A 1A1');
+    });
+
+    it('должен обрабатывать различные форматы почтовых индексов - российский', () => {
+      const input = {
+        last_name: 'Иванов',
+        first_name: 'Иван',
+        country: 'Россия',
+        postal_code: '123456',
+        city: 'Москва',
+        street: 'Ленина',
+        house: '10',
+        phone: '+79991234567',
+        telegram_id: 123456789,
+      };
+
+      const result = sanitizeDeliveryData(input);
+      expect(result.postal_code).toBe('123456');
+      expect(result.postal_code).toMatch(/^\d{6}$/);
+    });
+
+    it('должен обрабатывать различные форматы почтовых индексов - американский', () => {
+      const input = {
+        last_name: 'Smith',
+        first_name: 'John',
+        country: 'USA',
+        postal_code: '12345-6789',
+        city: 'New York',
+        street: 'Broadway',
+        house: '100',
+        phone: '+79991234567',
+        telegram_id: 123456789,
+      };
+
+      const result = sanitizeDeliveryData(input);
+      expect(result.postal_code).toBe('12345-6789');
+      expect(result.postal_code).toMatch(/^\d{5}-\d{4}$/);
+    });
+
+    it('должен обрабатывать различные форматы почтовых индексов - канадский', () => {
+      const input = {
+        last_name: 'Dupont',
+        first_name: 'Jean',
+        country: 'Canada',
+        postal_code: 'K1A 0B1',
+        city: 'Ottawa',
+        street: 'Wellington',
+        house: '1',
+        phone: '+79991234567',
+        telegram_id: 123456789,
+      };
+
+      const result = sanitizeDeliveryData(input);
+      expect(result.postal_code).toBe('K1A 0B1');
+      expect(result.postal_code).toMatch(/^[A-Z]\d[A-Z] \d[A-Z]\d$/);
+    });
+
+    it('должен обрабатывать различные форматы почтовых индексов - британский', () => {
+      const input = {
+        last_name: 'Brown',
+        first_name: 'James',
+        country: 'United Kingdom',
+        postal_code: 'SW1A 1AA',
+        city: 'London',
+        street: 'Westminster',
+        house: '10',
+        phone: '+79991234567',
+        telegram_id: 123456789,
+      };
+
+      const result = sanitizeDeliveryData(input);
+      expect(result.postal_code).toBe('SW1A 1AA');
+      expect(result.postal_code).toMatch(/^[A-Z]{2}\d[A-Z] \d[A-Z]{2}$/);
+    });
+
+    it('должен удалять XSS-векторы из country и postal_code', () => {
+      const input = {
+        last_name: 'Иванов',
+        first_name: 'Иван',
+        country: '<img src=x onerror=alert(1)>Россия',
+        postal_code: 'javascript:alert(1)123456',
+        city: 'Москва',
+        street: 'Ленина',
+        house: '10',
+        phone: '+79991234567',
+        telegram_id: 123456789,
+      };
+
+      const result = sanitizeDeliveryData(input);
+      expect(result.country).not.toContain('<img');
+      expect(result.country).not.toContain('onerror');
+      expect(result.postal_code).not.toContain('javascript:');
+    });
+  });
+
   describe('Удаление потенциально опасных символов', () => {
     it('должен удалять XSS-векторы из всех полей', () => {
       const input = {
         last_name: '<img src=x onerror=alert(1)>Иванов',
         first_name: 'javascript:alert(1)Иван',
         patronymic: 'data:text/html,<script>alert(1)</script>Петрович',
+        country: '<iframe src="evil.com">Россия',
+        postal_code: 'vbscript:msgbox(1)123456',
         city: '<iframe src="evil.com">Москва',
         street: 'vbscript:msgbox(1)Ленина',
         house: '<svg onload=alert(1)>10',
@@ -326,6 +557,8 @@ describe('sanitizeDeliveryData', () => {
       expect(result.first_name).not.toContain('javascript:');
       expect(result.patronymic).not.toContain('data:');
       expect(result.patronymic).not.toContain('<script>');
+      expect(result.country).not.toContain('<iframe');
+      expect(result.postal_code).not.toContain('vbscript:');
       expect(result.city).not.toContain('<iframe');
       expect(result.street).not.toContain('vbscript:');
       expect(result.house).not.toContain('<svg');
@@ -341,6 +574,8 @@ describe('sanitizeDeliveryData', () => {
       const input = {
         last_name: 'Иванов\x00\x01',
         first_name: 'Иван\x02\x03',
+        country: 'Россия\x04\x05',
+        postal_code: '123456\x06\x07',
         city: 'Москва\x04\x05',
         street: 'Ленина\x06\x07',
         house: '10\x08',
@@ -352,6 +587,8 @@ describe('sanitizeDeliveryData', () => {
 
       expect(result.last_name).toBe('Иванов');
       expect(result.first_name).toBe('Иван');
+      expect(result.country).toBe('Россия');
+      expect(result.postal_code).toBe('123456');
       expect(result.city).toBe('Москва');
       expect(result.street).toBe('Ленина');
       expect(result.house).toBe('10');
@@ -361,6 +598,8 @@ describe('sanitizeDeliveryData', () => {
       const input = {
         last_name: "'; DROP TABLE users; --",
         first_name: "1' OR '1'='1",
+        country: "Russia' UNION SELECT * FROM countries--",
+        postal_code: "123456' OR 1=1--",
         city: "Moscow' UNION SELECT * FROM passwords--",
         street: "Lenin'; DELETE FROM orders WHERE '1'='1",
         house: "10' OR 1=1--",
@@ -374,6 +613,8 @@ describe('sanitizeDeliveryData', () => {
       // так как это может быть легитимный текст с апострофами
       expect(result.last_name).toBeDefined();
       expect(result.first_name).toBeDefined();
+      expect(result.country).toBeDefined();
+      expect(result.postal_code).toBeDefined();
       expect(result.city).toBeDefined();
       expect(result.street).toBeDefined();
       expect(result.house).toBeDefined();
@@ -386,6 +627,8 @@ describe('sanitizeDeliveryData', () => {
         last_name: '  <b>Иванов</b>  ',
         first_name: 'Иван   ',
         patronymic: '  Петрович  ',
+        country: '  Россия & СНГ  ',
+        postal_code: '  123456  ',
         city: 'Москва & Область',
         street: 'Ленина "проспект"',
         house: '10-А',
@@ -400,6 +643,9 @@ describe('sanitizeDeliveryData', () => {
       expect(result.last_name).toBe('Иванов');
       expect(result.first_name).toBe('Иван');
       expect(result.patronymic).toBe('Петрович');
+      expect(result.country).toContain('Россия');
+      expect(result.country).toContain('&amp;');
+      expect(result.postal_code).toBe('123456');
       expect(result.city).toContain('Москва');
       expect(result.city).toContain('&amp;');
       expect(result.street).toContain('Ленина');
@@ -414,6 +660,8 @@ describe('sanitizeDeliveryData', () => {
       const input = {
         last_name: 'Иванов',
         first_name: 'Иван',
+        country: 'Россия',
+        postal_code: '123456',
         city: 'Москва',
         street: 'Ленина',
         house: '10',
@@ -426,6 +674,8 @@ describe('sanitizeDeliveryData', () => {
       expect(result.last_name).toBe('Иванов');
       expect(result.first_name).toBe('Иван');
       expect(result.patronymic).toBeNull();
+      expect(result.country).toBe('Россия');
+      expect(result.postal_code).toBe('123456');
       expect(result.city).toBe('Москва');
       expect(result.street).toBe('Ленина');
       expect(result.house).toBe('10');
@@ -440,6 +690,8 @@ describe('sanitizeDeliveryData', () => {
         last_name: 'Иванов-Петров',
         first_name: 'Иван',
         patronymic: 'Александрович',
+        country: 'Россия',
+        postal_code: '123456',
         city: 'Санкт-Петербург',
         street: 'Невский проспект',
         house: '10/12',
@@ -454,6 +706,8 @@ describe('sanitizeDeliveryData', () => {
       expect(result.last_name).toBe('Иванов-Петров');
       expect(result.first_name).toBe('Иван');
       expect(result.patronymic).toBe('Александрович');
+      expect(result.country).toBe('Россия');
+      expect(result.postal_code).toBe('123456');
       expect(result.city).toBe('Санкт-Петербург');
       expect(result.street).toBe('Невский проспект');
       expect(result.house).toBe('10&#x2F;12');

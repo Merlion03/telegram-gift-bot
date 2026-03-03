@@ -377,6 +377,8 @@ describe('DeliveryForm - Unit Tests', () => {
       const lastNameInput = screen.getByRole('textbox', { name: /Фамилия/ });
       const firstNameInput = screen.getByRole('textbox', { name: /^Имя/ });
       const patronymicInput = screen.getByRole('textbox', { name: /Отчество/ });
+      const countryInput = screen.getByRole('textbox', { name: /Страна/ });
+      const postalCodeInput = screen.getByRole('textbox', { name: /Почтовый индекс/ });
       const cityInput = screen.getByRole('textbox', { name: /Город/ });
       const streetInput = screen.getByRole('textbox', { name: /Улица/ });
       const houseInput = screen.getByRole('textbox', { name: /Дом/ });
@@ -388,6 +390,8 @@ describe('DeliveryForm - Unit Tests', () => {
       // Заполняем обязательные поля
       await user.type(lastNameInput, 'Иванов');
       await user.type(firstNameInput, 'Иван');
+      await user.type(countryInput, 'Россия');
+      await user.type(postalCodeInput, '123456');
       await user.type(cityInput, 'Москва');
       await user.type(streetInput, 'Ленина');
       await user.type(houseInput, '10');
@@ -401,6 +405,8 @@ describe('DeliveryForm - Unit Tests', () => {
         expect(lastNameInput).toBeDisabled();
         expect(firstNameInput).toBeDisabled();
         expect(patronymicInput).toBeDisabled();
+        expect(countryInput).toBeDisabled();
+        expect(postalCodeInput).toBeDisabled();
         expect(cityInput).toBeDisabled();
         expect(streetInput).toBeDisabled();
         expect(houseInput).toBeDisabled();
@@ -440,6 +446,8 @@ describe('DeliveryForm - Unit Tests', () => {
       
       const lastNameInput = screen.getByRole('textbox', { name: /Фамилия/ });
       const firstNameInput = screen.getByRole('textbox', { name: /^Имя/ });
+      const countryInput = screen.getByRole('textbox', { name: /Страна/ });
+      const postalCodeInput = screen.getByRole('textbox', { name: /Почтовый индекс/ });
       const cityInput = screen.getByRole('textbox', { name: /Город/ });
       const streetInput = screen.getByRole('textbox', { name: /Улица/ });
       const houseInput = screen.getByRole('textbox', { name: /Дом/ });
@@ -449,6 +457,8 @@ describe('DeliveryForm - Unit Tests', () => {
       // Заполняем обязательные поля
       await user.type(lastNameInput, 'Иванов');
       await user.type(firstNameInput, 'Иван');
+      await user.type(countryInput, 'Россия');
+      await user.type(postalCodeInput, '123456');
       await user.type(cityInput, 'Москва');
       await user.type(streetInput, 'Ленина');
       await user.type(houseInput, '10');
@@ -481,6 +491,8 @@ describe('DeliveryForm - Unit Tests', () => {
       
       const lastNameInput = screen.getByRole('textbox', { name: /Фамилия/ });
       const firstNameInput = screen.getByRole('textbox', { name: /^Имя/ });
+      const countryInput = screen.getByRole('textbox', { name: /Страна/ });
+      const postalCodeInput = screen.getByRole('textbox', { name: /Почтовый индекс/ });
       const cityInput = screen.getByRole('textbox', { name: /Город/ });
       const streetInput = screen.getByRole('textbox', { name: /Улица/ });
       const houseInput = screen.getByRole('textbox', { name: /Дом/ });
@@ -490,6 +502,8 @@ describe('DeliveryForm - Unit Tests', () => {
       // Заполняем обязательные поля
       await user.type(lastNameInput, 'Иванов');
       await user.type(firstNameInput, 'Иван');
+      await user.type(countryInput, 'Россия');
+      await user.type(postalCodeInput, '123456');
       await user.type(cityInput, 'Москва');
       await user.type(streetInput, 'Ленина');
       await user.type(houseInput, '10');
@@ -507,6 +521,8 @@ describe('DeliveryForm - Unit Tests', () => {
       // Проверяем, что поля снова доступны
       expect(lastNameInput).not.toBeDisabled();
       expect(firstNameInput).not.toBeDisabled();
+      expect(countryInput).not.toBeDisabled();
+      expect(postalCodeInput).not.toBeDisabled();
       expect(cityInput).not.toBeDisabled();
       expect(streetInput).not.toBeDisabled();
       expect(houseInput).not.toBeDisabled();
@@ -631,6 +647,8 @@ describe('DeliveryForm - Unit Tests', () => {
       
       const lastNameInput = screen.getByRole('textbox', { name: /Фамилия/ });
       const firstNameInput = screen.getByRole('textbox', { name: /^Имя/ });
+      const countryInput = screen.getByRole('textbox', { name: /Страна/ });
+      const postalCodeInput = screen.getByRole('textbox', { name: /Почтовый индекс/ });
       const cityInput = screen.getByRole('textbox', { name: /Город/ });
       const streetInput = screen.getByRole('textbox', { name: /Улица/ });
       const houseInput = screen.getByRole('textbox', { name: /Дом/ });
@@ -640,6 +658,8 @@ describe('DeliveryForm - Unit Tests', () => {
       // Заполняем обязательные поля
       await user.type(lastNameInput, 'Иванов');
       await user.type(firstNameInput, 'Иван');
+      await user.type(countryInput, 'Россия');
+      await user.type(postalCodeInput, '123456');
       await user.type(cityInput, 'Москва');
       await user.type(streetInput, 'Ленина');
       await user.type(houseInput, '10');
@@ -676,6 +696,8 @@ describe('DeliveryForm - Unit Tests', () => {
       
       const lastNameInput = screen.getByRole('textbox', { name: /Фамилия/ });
       const firstNameInput = screen.getByRole('textbox', { name: /^Имя/ });
+      const countryInput = screen.getByRole('textbox', { name: /Страна/ });
+      const postalCodeInput = screen.getByRole('textbox', { name: /Почтовый индекс/ });
       const cityInput = screen.getByRole('textbox', { name: /Город/ });
       const streetInput = screen.getByRole('textbox', { name: /Улица/ });
       const houseInput = screen.getByRole('textbox', { name: /Дом/ });
@@ -685,6 +707,8 @@ describe('DeliveryForm - Unit Tests', () => {
       // Заполняем обязательные поля
       await user.type(lastNameInput, 'Иванов');
       await user.type(firstNameInput, 'Иван');
+      await user.type(countryInput, 'Россия');
+      await user.type(postalCodeInput, '123456');
       await user.type(cityInput, 'Москва');
       await user.type(streetInput, 'Ленина');
       await user.type(houseInput, '10');
@@ -719,6 +743,8 @@ describe('DeliveryForm - Unit Tests', () => {
       
       const lastNameInput = screen.getByRole('textbox', { name: /Фамилия/ });
       const firstNameInput = screen.getByRole('textbox', { name: /^Имя/ });
+      const countryInput = screen.getByRole('textbox', { name: /Страна/ });
+      const postalCodeInput = screen.getByRole('textbox', { name: /Почтовый индекс/ });
       const cityInput = screen.getByRole('textbox', { name: /Город/ });
       const streetInput = screen.getByRole('textbox', { name: /Улица/ });
       const houseInput = screen.getByRole('textbox', { name: /Дом/ });
@@ -728,6 +754,8 @@ describe('DeliveryForm - Unit Tests', () => {
       // Заполняем поля
       await user.type(lastNameInput, 'А');
       await user.type(firstNameInput, 'Иван');
+      await user.type(countryInput, 'Россия');
+      await user.type(postalCodeInput, '123456');
       await user.type(cityInput, 'Москва');
       await user.type(streetInput, 'Ленина');
       await user.type(houseInput, '10');
@@ -749,6 +777,8 @@ describe('DeliveryForm - Unit Tests', () => {
       
       const lastNameInput = screen.getByRole('textbox', { name: /Фамилия/ });
       const firstNameInput = screen.getByRole('textbox', { name: /^Имя/ });
+      const countryInput = screen.getByRole('textbox', { name: /Страна/ });
+      const postalCodeInput = screen.getByRole('textbox', { name: /Почтовый индекс/ });
       const cityInput = screen.getByRole('textbox', { name: /Город/ });
       const streetInput = screen.getByRole('textbox', { name: /Улица/ });
       const houseInput = screen.getByRole('textbox', { name: /Дом/ });
@@ -758,6 +788,8 @@ describe('DeliveryForm - Unit Tests', () => {
       // Заполняем поля
       await user.type(lastNameInput, 'Иванов');
       await user.type(firstNameInput, 'Иван');
+      await user.type(countryInput, 'Россия');
+      await user.type(postalCodeInput, '123456');
       await user.type(cityInput, 'М');
       await user.type(streetInput, 'Ленина');
       await user.type(houseInput, '10');
@@ -770,6 +802,435 @@ describe('DeliveryForm - Unit Tests', () => {
       await waitFor(() => {
         const errorMessage = screen.getByText(/Минимум 2 символа/);
         expect(errorMessage).toBeInTheDocument();
+      });
+    });
+  });
+
+  /**
+   * Requirements 9.1, 9.2: Валидация новых полей country и postal_code
+   */
+  describe('Валидация полей "Страна" и "Почтовый индекс"', () => {
+    /**
+     * Тесты для поля "Страна" (country)
+     */
+    describe('Валидация поля "Страна"', () => {
+      it('должен показывать ошибку при слишком короткой стране (< 2 символов)', async () => {
+        const user = userEvent.setup();
+        render(<DeliveryForm prizeId={1} />);
+        
+        const lastNameInput = screen.getByRole('textbox', { name: /Фамилия/ });
+        const firstNameInput = screen.getByRole('textbox', { name: /^Имя/ });
+        const countryInput = screen.getByRole('textbox', { name: /Страна/ });
+        const postalCodeInput = screen.getByRole('textbox', { name: /Почтовый индекс/ });
+        const cityInput = screen.getByRole('textbox', { name: /Город/ });
+        const streetInput = screen.getByRole('textbox', { name: /Улица/ });
+        const houseInput = screen.getByRole('textbox', { name: /Дом/ });
+        const phoneInput = screen.getByRole('textbox', { name: /Номер телефона/ });
+        const submitButton = screen.getByRole('button', { name: /Отправить данные/ });
+        
+        // Заполняем поля
+        await user.type(lastNameInput, 'Иванов');
+        await user.type(firstNameInput, 'Иван');
+        await user.type(countryInput, 'Р'); // Слишком короткое значение
+        await user.type(postalCodeInput, '123456');
+        await user.type(cityInput, 'Москва');
+        await user.type(streetInput, 'Ленина');
+        await user.type(houseInput, '10');
+        await user.type(phoneInput, '+79991234567');
+        
+        // Отправляем форму
+        await user.click(submitButton);
+        
+        // Проверяем, что появилась ошибка валидации
+        await waitFor(() => {
+          const errorMessage = screen.getByText(/Минимум 2 символа/);
+          expect(errorMessage).toBeInTheDocument();
+        });
+        
+        // Проверяем, что fetch не был вызван
+        expect(global.fetch).not.toHaveBeenCalled();
+      });
+
+      it('должен показывать ошибку при слишком длинной стране (> 100 символов)', async () => {
+        const user = userEvent.setup();
+        render(<DeliveryForm prizeId={1} />);
+        
+        const lastNameInput = screen.getByRole('textbox', { name: /Фамилия/ });
+        const firstNameInput = screen.getByRole('textbox', { name: /^Имя/ });
+        const countryInput = screen.getByRole('textbox', { name: /Страна/ });
+        const postalCodeInput = screen.getByRole('textbox', { name: /Почтовый индекс/ });
+        const cityInput = screen.getByRole('textbox', { name: /Город/ });
+        const streetInput = screen.getByRole('textbox', { name: /Улица/ });
+        const houseInput = screen.getByRole('textbox', { name: /Дом/ });
+        const phoneInput = screen.getByRole('textbox', { name: /Номер телефона/ });
+        const submitButton = screen.getByRole('button', { name: /Отправить данные/ });
+        
+        // Создаем строку длиной 101 символ
+        const longCountry = 'А'.repeat(101);
+        
+        // Заполняем поля
+        await user.type(lastNameInput, 'Иванов');
+        await user.type(firstNameInput, 'Иван');
+        await user.type(countryInput, longCountry);
+        await user.type(postalCodeInput, '123456');
+        await user.type(cityInput, 'Москва');
+        await user.type(streetInput, 'Ленина');
+        await user.type(houseInput, '10');
+        await user.type(phoneInput, '+79991234567');
+        
+        // Отправляем форму
+        await user.click(submitButton);
+        
+        // Проверяем, что появилась ошибка валидации
+        await waitFor(() => {
+          const errorMessage = screen.getByText(/Максимум 100 символов/);
+          expect(errorMessage).toBeInTheDocument();
+        });
+        
+        // Проверяем, что fetch не был вызван
+        expect(global.fetch).not.toHaveBeenCalled();
+      });
+
+      it('должен принимать валидную страну (2-100 символов)', async () => {
+        const user = userEvent.setup();
+        
+        // Мок успешного ответа от API
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ success: true }),
+        });
+        
+        render(<DeliveryForm prizeId={1} />);
+        
+        const lastNameInput = screen.getByRole('textbox', { name: /Фамилия/ });
+        const firstNameInput = screen.getByRole('textbox', { name: /^Имя/ });
+        const countryInput = screen.getByRole('textbox', { name: /Страна/ });
+        const postalCodeInput = screen.getByRole('textbox', { name: /Почтовый индекс/ });
+        const cityInput = screen.getByRole('textbox', { name: /Город/ });
+        const streetInput = screen.getByRole('textbox', { name: /Улица/ });
+        const houseInput = screen.getByRole('textbox', { name: /Дом/ });
+        const phoneInput = screen.getByRole('textbox', { name: /Номер телефона/ });
+        const submitButton = screen.getByRole('button', { name: /Отправить данные/ });
+        
+        // Заполняем поля
+        await user.type(lastNameInput, 'Иванов');
+        await user.type(firstNameInput, 'Иван');
+        await user.type(countryInput, 'Россия');
+        await user.type(postalCodeInput, '123456');
+        await user.type(cityInput, 'Москва');
+        await user.type(streetInput, 'Ленина');
+        await user.type(houseInput, '10');
+        await user.type(phoneInput, '+79991234567');
+        
+        // Отправляем форму
+        await user.click(submitButton);
+        
+        // Проверяем, что ошибки валидации нет
+        await waitFor(() => {
+          const errorMessage = screen.queryByText(/Минимум 2 символа/);
+          expect(errorMessage).not.toBeInTheDocument();
+        });
+        
+        // Проверяем, что fetch был вызван
+        expect(global.fetch).toHaveBeenCalledWith(
+          '/api/delivery',
+          expect.objectContaining({
+            method: 'POST',
+          })
+        );
+      });
+
+      it('должен автоматически удалять пробелы в начале и конце (trim)', async () => {
+        const user = userEvent.setup();
+        
+        // Мок успешного ответа от API
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ success: true }),
+        });
+        
+        render(<DeliveryForm prizeId={1} />);
+        
+        const lastNameInput = screen.getByRole('textbox', { name: /Фамилия/ });
+        const firstNameInput = screen.getByRole('textbox', { name: /^Имя/ });
+        const countryInput = screen.getByRole('textbox', { name: /Страна/ });
+        const postalCodeInput = screen.getByRole('textbox', { name: /Почтовый индекс/ });
+        const cityInput = screen.getByRole('textbox', { name: /Город/ });
+        const streetInput = screen.getByRole('textbox', { name: /Улица/ });
+        const houseInput = screen.getByRole('textbox', { name: /Дом/ });
+        const phoneInput = screen.getByRole('textbox', { name: /Номер телефона/ });
+        const submitButton = screen.getByRole('button', { name: /Отправить данные/ });
+        
+        // Заполняем поля (с пробелами в начале и конце)
+        await user.type(lastNameInput, 'Иванов');
+        await user.type(firstNameInput, 'Иван');
+        await user.type(countryInput, '  Россия  ');
+        await user.type(postalCodeInput, '123456');
+        await user.type(cityInput, 'Москва');
+        await user.type(streetInput, 'Ленина');
+        await user.type(houseInput, '10');
+        await user.type(phoneInput, '+79991234567');
+        
+        // Отправляем форму
+        await user.click(submitButton);
+        
+        // Проверяем, что fetch был вызван с обрезанным значением
+        await waitFor(() => {
+          expect(global.fetch).toHaveBeenCalledWith(
+            '/api/delivery',
+            expect.objectContaining({
+              method: 'POST',
+              body: expect.stringContaining('"country":"Россия"'),
+            })
+          );
+        });
+      });
+
+      it('должен показывать ошибку при пустом поле "Страна"', async () => {
+        const user = userEvent.setup();
+        render(<DeliveryForm prizeId={1} />);
+        
+        const lastNameInput = screen.getByRole('textbox', { name: /Фамилия/ });
+        const firstNameInput = screen.getByRole('textbox', { name: /^Имя/ });
+        const postalCodeInput = screen.getByRole('textbox', { name: /Почтовый индекс/ });
+        const cityInput = screen.getByRole('textbox', { name: /Город/ });
+        const streetInput = screen.getByRole('textbox', { name: /Улица/ });
+        const houseInput = screen.getByRole('textbox', { name: /Дом/ });
+        const phoneInput = screen.getByRole('textbox', { name: /Номер телефона/ });
+        const submitButton = screen.getByRole('button', { name: /Отправить данные/ });
+        
+        // Заполняем поля (пропускаем country)
+        await user.type(lastNameInput, 'Иванов');
+        await user.type(firstNameInput, 'Иван');
+        await user.type(postalCodeInput, '123456');
+        await user.type(cityInput, 'Москва');
+        await user.type(streetInput, 'Ленина');
+        await user.type(houseInput, '10');
+        await user.type(phoneInput, '+79991234567');
+        
+        // Отправляем форму
+        await user.click(submitButton);
+        
+        // Проверяем, что появилась ошибка валидации
+        await waitFor(() => {
+          const errorMessage = screen.getByText(/Минимум 2 символа/);
+          expect(errorMessage).toBeInTheDocument();
+        });
+        
+        // Проверяем, что fetch не был вызван
+        expect(global.fetch).not.toHaveBeenCalled();
+      });
+    });
+
+    /**
+     * Тесты для поля "Почтовый индекс" (postal_code)
+     */
+    describe('Валидация поля "Почтовый индекс"', () => {
+      it('должен показывать ошибку при слишком коротком индексе (< 3 символов)', async () => {
+        const user = userEvent.setup();
+        render(<DeliveryForm prizeId={1} />);
+        
+        const lastNameInput = screen.getByRole('textbox', { name: /Фамилия/ });
+        const firstNameInput = screen.getByRole('textbox', { name: /^Имя/ });
+        const countryInput = screen.getByRole('textbox', { name: /Страна/ });
+        const postalCodeInput = screen.getByRole('textbox', { name: /Почтовый индекс/ });
+        const cityInput = screen.getByRole('textbox', { name: /Город/ });
+        const streetInput = screen.getByRole('textbox', { name: /Улица/ });
+        const houseInput = screen.getByRole('textbox', { name: /Дом/ });
+        const phoneInput = screen.getByRole('textbox', { name: /Номер телефона/ });
+        const submitButton = screen.getByRole('button', { name: /Отправить данные/ });
+        
+        // Заполняем поля
+        await user.type(lastNameInput, 'Иванов');
+        await user.type(firstNameInput, 'Иван');
+        await user.type(countryInput, 'Россия');
+        await user.type(postalCodeInput, '12'); // Слишком короткое значение
+        await user.type(cityInput, 'Москва');
+        await user.type(streetInput, 'Ленина');
+        await user.type(houseInput, '10');
+        await user.type(phoneInput, '+79991234567');
+        
+        // Отправляем форму
+        await user.click(submitButton);
+        
+        // Проверяем, что появилась ошибка валидации
+        await waitFor(() => {
+          const errorMessage = screen.getByText(/Минимум 3 символа/);
+          expect(errorMessage).toBeInTheDocument();
+        });
+        
+        // Проверяем, что fetch не был вызван
+        expect(global.fetch).not.toHaveBeenCalled();
+      });
+
+      it('должен показывать ошибку при слишком длинном индексе (> 20 символов)', async () => {
+        const user = userEvent.setup();
+        render(<DeliveryForm prizeId={1} />);
+        
+        const lastNameInput = screen.getByRole('textbox', { name: /Фамилия/ });
+        const firstNameInput = screen.getByRole('textbox', { name: /^Имя/ });
+        const countryInput = screen.getByRole('textbox', { name: /Страна/ });
+        const postalCodeInput = screen.getByRole('textbox', { name: /Почтовый индекс/ });
+        const cityInput = screen.getByRole('textbox', { name: /Город/ });
+        const streetInput = screen.getByRole('textbox', { name: /Улица/ });
+        const houseInput = screen.getByRole('textbox', { name: /Дом/ });
+        const phoneInput = screen.getByRole('textbox', { name: /Номер телефона/ });
+        const submitButton = screen.getByRole('button', { name: /Отправить данные/ });
+        
+        // Создаем строку длиной 21 символ
+        const longPostalCode = '1'.repeat(21);
+        
+        // Заполняем поля
+        await user.type(lastNameInput, 'Иванов');
+        await user.type(firstNameInput, 'Иван');
+        await user.type(countryInput, 'Россия');
+        await user.type(postalCodeInput, longPostalCode);
+        await user.type(cityInput, 'Москва');
+        await user.type(streetInput, 'Ленина');
+        await user.type(houseInput, '10');
+        await user.type(phoneInput, '+79991234567');
+        
+        // Отправляем форму
+        await user.click(submitButton);
+        
+        // Проверяем, что появилась ошибка валидации
+        await waitFor(() => {
+          const errorMessage = screen.getByText(/Максимум 20 символов/);
+          expect(errorMessage).toBeInTheDocument();
+        });
+        
+        // Проверяем, что fetch не был вызван
+        expect(global.fetch).not.toHaveBeenCalled();
+      });
+
+      it('должен принимать валидный почтовый индекс (3-20 символов)', async () => {
+        const user = userEvent.setup();
+        
+        // Мок успешного ответа от API
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ success: true }),
+        });
+        
+        render(<DeliveryForm prizeId={1} />);
+        
+        const lastNameInput = screen.getByRole('textbox', { name: /Фамилия/ });
+        const firstNameInput = screen.getByRole('textbox', { name: /^Имя/ });
+        const countryInput = screen.getByRole('textbox', { name: /Страна/ });
+        const postalCodeInput = screen.getByRole('textbox', { name: /Почтовый индекс/ });
+        const cityInput = screen.getByRole('textbox', { name: /Город/ });
+        const streetInput = screen.getByRole('textbox', { name: /Улица/ });
+        const houseInput = screen.getByRole('textbox', { name: /Дом/ });
+        const phoneInput = screen.getByRole('textbox', { name: /Номер телефона/ });
+        const submitButton = screen.getByRole('button', { name: /Отправить данные/ });
+        
+        // Заполняем поля
+        await user.type(lastNameInput, 'Иванов');
+        await user.type(firstNameInput, 'Иван');
+        await user.type(countryInput, 'Россия');
+        await user.type(postalCodeInput, '123456');
+        await user.type(cityInput, 'Москва');
+        await user.type(streetInput, 'Ленина');
+        await user.type(houseInput, '10');
+        await user.type(phoneInput, '+79991234567');
+        
+        // Отправляем форму
+        await user.click(submitButton);
+        
+        // Проверяем, что ошибки валидации нет
+        await waitFor(() => {
+          const errorMessage = screen.queryByText(/Минимум 3 символа/);
+          expect(errorMessage).not.toBeInTheDocument();
+        });
+        
+        // Проверяем, что fetch был вызван
+        expect(global.fetch).toHaveBeenCalledWith(
+          '/api/delivery',
+          expect.objectContaining({
+            method: 'POST',
+          })
+        );
+      });
+
+      it('должен автоматически удалять пробелы в начале и конце (trim)', async () => {
+        const user = userEvent.setup();
+        
+        // Мок успешного ответа от API
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ success: true }),
+        });
+        
+        render(<DeliveryForm prizeId={1} />);
+        
+        const lastNameInput = screen.getByRole('textbox', { name: /Фамилия/ });
+        const firstNameInput = screen.getByRole('textbox', { name: /^Имя/ });
+        const countryInput = screen.getByRole('textbox', { name: /Страна/ });
+        const postalCodeInput = screen.getByRole('textbox', { name: /Почтовый индекс/ });
+        const cityInput = screen.getByRole('textbox', { name: /Город/ });
+        const streetInput = screen.getByRole('textbox', { name: /Улица/ });
+        const houseInput = screen.getByRole('textbox', { name: /Дом/ });
+        const phoneInput = screen.getByRole('textbox', { name: /Номер телефона/ });
+        const submitButton = screen.getByRole('button', { name: /Отправить данные/ });
+        
+        // Заполняем поля (с пробелами в начале и конце)
+        await user.type(lastNameInput, 'Иванов');
+        await user.type(firstNameInput, 'Иван');
+        await user.type(countryInput, 'Россия');
+        await user.type(postalCodeInput, '  123456  ');
+        await user.type(cityInput, 'Москва');
+        await user.type(streetInput, 'Ленина');
+        await user.type(houseInput, '10');
+        await user.type(phoneInput, '+79991234567');
+        
+        // Отправляем форму
+        await user.click(submitButton);
+        
+        // Проверяем, что fetch был вызван с обрезанным значением
+        await waitFor(() => {
+          expect(global.fetch).toHaveBeenCalledWith(
+            '/api/delivery',
+            expect.objectContaining({
+              method: 'POST',
+              body: expect.stringContaining('"postal_code":"123456"'),
+            })
+          );
+        });
+      });
+
+      it('должен показывать ошибку при пустом поле "Почтовый индекс"', async () => {
+        const user = userEvent.setup();
+        render(<DeliveryForm prizeId={1} />);
+        
+        const lastNameInput = screen.getByRole('textbox', { name: /Фамилия/ });
+        const firstNameInput = screen.getByRole('textbox', { name: /^Имя/ });
+        const countryInput = screen.getByRole('textbox', { name: /Страна/ });
+        const cityInput = screen.getByRole('textbox', { name: /Город/ });
+        const streetInput = screen.getByRole('textbox', { name: /Улица/ });
+        const houseInput = screen.getByRole('textbox', { name: /Дом/ });
+        const phoneInput = screen.getByRole('textbox', { name: /Номер телефона/ });
+        const submitButton = screen.getByRole('button', { name: /Отправить данные/ });
+        
+        // Заполняем поля (пропускаем postal_code)
+        await user.type(lastNameInput, 'Иванов');
+        await user.type(firstNameInput, 'Иван');
+        await user.type(countryInput, 'Россия');
+        await user.type(cityInput, 'Москва');
+        await user.type(streetInput, 'Ленина');
+        await user.type(houseInput, '10');
+        await user.type(phoneInput, '+79991234567');
+        
+        // Отправляем форму
+        await user.click(submitButton);
+        
+        // Проверяем, что появилась ошибка валидации
+        await waitFor(() => {
+          const errorMessage = screen.getByText(/Минимум 3 символа/);
+          expect(errorMessage).toBeInTheDocument();
+        });
+        
+        // Проверяем, что fetch не был вызван
+        expect(global.fetch).not.toHaveBeenCalled();
       });
     });
   });

@@ -7,7 +7,7 @@ import asyncio
 from typing import Optional
 from enum import Enum
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import structlog
 
 from services.google_sheets_service import GoogleSheetsService
@@ -165,10 +165,11 @@ class PrizeService:
             worksheet_name: Имя worksheet
         """
         try:
-            # Получаем текущее время
-            claimed_at = datetime.now(timezone.utc).isoformat()
+            # Получаем текущее время в МСК (UTC+3)
+            msk_tz = timezone(timedelta(hours=3))
+            claimed_at = datetime.now(msk_tz).strftime('%d.%m.%Y %H:%M:%S')
             
-            # Сохраняем отметку в столбец I (claimed_at)
+            # Сохраняем отметку в столбец N (claimed_at)
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(
                 None,
@@ -206,7 +207,7 @@ class PrizeService:
         Args:
             row_id: Номер строки
             worksheet_name: Имя worksheet
-            claimed_at: Время получения приза (ISO format)
+            claimed_at: Время получения приза (формат: ДД.ММ.ГГГГ ЧЧ:ММ:СС МСК)
         """
         try:
             # Открываем таблицу
@@ -215,8 +216,8 @@ class PrizeService:
             )
             worksheet = sheet.worksheet(worksheet_name)
             
-            # Обновляем ячейку I (столбец 9) с временем получения
-            worksheet.update_cell(row_id, 9, claimed_at)
+            # Обновляем ячейку N (столбец 14) с временем получения
+            worksheet.update_cell(row_id, 14, claimed_at)
             
         except Exception as e:
             logger.error(

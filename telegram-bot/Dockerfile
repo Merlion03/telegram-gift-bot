@@ -1,6 +1,6 @@
 # Multi-stage build для оптимизации размера образа
 # Stage 1: Builder - установка зависимостей
-FROM python:3.11-slim as builder
+FROM python:3.12-slim as builder
 
 # Установка системных зависимостей для сборки
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -22,7 +22,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 
 # Stage 2: Runtime - финальный образ
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 # Метаданные образа
 LABEL maintainer="telegram-bot-team"

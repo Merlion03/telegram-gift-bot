@@ -10,7 +10,7 @@ import { GoogleSheetsClient, DeliveryData } from '../sheetsClient';
 
 // Мокирование googleapis
 vi.mock('googleapis', () => {
-  const mockSheetsUpdate = vi.fn();
+  const mockSheetsBatchUpdate = vi.fn();
   const mockSheetsGet = vi.fn();
   
   return {
@@ -18,7 +18,7 @@ vi.mock('googleapis', () => {
       sheets: vi.fn(() => ({
         spreadsheets: {
           values: {
-            update: mockSheetsUpdate,
+            batchUpdate: mockSheetsBatchUpdate,
           },
           get: mockSheetsGet,
         },
@@ -36,7 +36,7 @@ vi.mock('googleapis', () => {
 });
 
 describe('GoogleSheetsClient', () => {
-  let mockSheetsUpdate: ReturnType<typeof vi.fn>;
+  let mockSheetsBatchUpdate: ReturnType<typeof vi.fn>;
   let mockSheetsGet: ReturnType<typeof vi.fn>;
   let client: GoogleSheetsClient;
 
@@ -52,11 +52,11 @@ describe('GoogleSheetsClient', () => {
     const { google } = await import('googleapis');
     const sheetsInstance = google.sheets({} as any);
     
-    mockSheetsUpdate = sheetsInstance.spreadsheets.values.update as any;
+    mockSheetsBatchUpdate = sheetsInstance.spreadsheets.values.batchUpdate as any;
     mockSheetsGet = sheetsInstance.spreadsheets.get as any;
 
     // Настройка моков
-    mockSheetsUpdate.mockResolvedValue({ data: {} });
+    mockSheetsBatchUpdate.mockResolvedValue({ data: {} });
     mockSheetsGet.mockResolvedValue({ data: { spreadsheetId: testSpreadsheetId } });
 
     // Мокирование переменной окружения с credentials
@@ -83,6 +83,8 @@ describe('GoogleSheetsClient', () => {
         last_name: 'Иванов',
         first_name: 'Иван',
         patronymic: 'Иванович',
+        country: 'Россия',
+        postal_code: '123456',
         city: 'Москва',
         street: 'Ленина',
         house: '1',
@@ -98,37 +100,28 @@ describe('GoogleSheetsClient', () => {
       // Assert
       expect(result).toBe(true);
 
-      // Проверяем, что update был вызван дважды (данные + timestamp)
-      expect(mockSheetsUpdate).toHaveBeenCalledTimes(2);
+      // Проверяем, что batchUpdate был вызван один раз
+      expect(mockSheetsBatchUpdate).toHaveBeenCalledTimes(1);
 
-      // Проверяем первый вызов (сохранение данных доставки)
-      // Новая структура: E-M (9 колонок)
-      expect(mockSheetsUpdate).toHaveBeenNthCalledWith(1, {
+      // Проверяем вызов batchUpdate с новыми полями
+      expect(mockSheetsBatchUpdate).toHaveBeenCalledWith({
         spreadsheetId: testSpreadsheetId,
-        range: `Sheet1!E${rowId}:M${rowId}`,
-        valueInputOption: 'RAW',
         requestBody: {
-          values: [[
-            deliveryData.last_name,
-            deliveryData.first_name,
-            deliveryData.patronymic,
-            deliveryData.city,
-            deliveryData.street,
-            deliveryData.house,
-            deliveryData.apartment,
-            deliveryData.phone,
-            deliveryData.comment,
-          ]],
-        },
-      });
-
-      // Проверяем второй вызов (сохранение timestamp)
-      expect(mockSheetsUpdate).toHaveBeenNthCalledWith(2, {
-        spreadsheetId: testSpreadsheetId,
-        range: `Sheet1!N${rowId}`,
-        valueInputOption: 'RAW',
-        requestBody: {
-          values: [[expect.any(String)]], // ISO timestamp
+          valueInputOption: 'RAW',
+          data: [
+            { range: `Sheet1!E${rowId}`, values: [[deliveryData.last_name]] },
+            { range: `Sheet1!F${rowId}`, values: [[deliveryData.first_name]] },
+            { range: `Sheet1!G${rowId}`, values: [[deliveryData.patronymic]] },
+            { range: `Sheet1!H${rowId}`, values: [[deliveryData.city]] },
+            { range: `Sheet1!I${rowId}`, values: [[deliveryData.street]] },
+            { range: `Sheet1!J${rowId}`, values: [[deliveryData.house]] },
+            { range: `Sheet1!K${rowId}`, values: [[deliveryData.apartment]] },
+            { range: `Sheet1!L${rowId}`, values: [[deliveryData.phone]] },
+            { range: `Sheet1!M${rowId}`, values: [[deliveryData.comment]] },
+            { range: `Sheet1!N${rowId}`, values: [[deliveryData.country]] },
+            { range: `Sheet1!O${rowId}`, values: [[deliveryData.postal_code]] },
+            { range: `Sheet1!P${rowId}`, values: [[expect.any(String)]] }, // ISO timestamp
+          ],
         },
       });
     });
@@ -144,6 +137,8 @@ describe('GoogleSheetsClient', () => {
         last_name: 'Петров',
         first_name: 'Петр',
         patronymic: null,
+        country: 'Казахстан',
+        postal_code: '050000',
         city: 'Санкт-Петербург',
         street: 'Невский пр.',
         house: '50',
@@ -158,31 +153,26 @@ describe('GoogleSheetsClient', () => {
       // Assert
       expect(result).toBe(true);
 
-      // Проверяем, что комментарий и опциональные поля сохранены как пустые строки
-      expect(mockSheetsUpdate).toHaveBeenNthCalledWith(1, {
+      // Проверяем, что опциональные поля сохранены как пустые строки
+      expect(mockSheetsBatchUpdate).toHaveBeenCalledWith({
         spreadsheetId: testSpreadsheetId,
-        range: `Sheet1!E${rowId}:M${rowId}`,
-        valueInputOption: 'RAW',
         requestBody: {
-          values: [[
-            deliveryData.last_name,
-            deliveryData.first_name,
-            '',  // patronymic
-            deliveryData.city,
-            deliveryData.street,
-            deliveryData.house,
-            '',  // apartment
-            deliveryData.phone,
-            '', // Пустой комментарий
-          ]],
+          valueInputOption: 'RAW',
+          data: expect.arrayContaining([
+            { range: `Sheet1!G${rowId}`, values: [['']] },  // patronymic
+            { range: `Sheet1!K${rowId}`, values: [['']] },  // apartment
+            { range: `Sheet1!M${rowId}`, values: [['']] },  // comment
+            { range: `Sheet1!N${rowId}`, values: [[deliveryData.country]] },
+            { range: `Sheet1!O${rowId}`, values: [[deliveryData.postal_code]] },
+          ]),
         },
       });
     });
 
-    it('должен корректно формировать диапазон столбцов E-M', async () => {
+    it('должен корректно формировать диапазон столбцов E-O для новых полей', async () => {
       /**
-       * Тест: проверка корректного формирования диапазона столбцов
-       * Requirements: 4.2
+       * Тест: проверка корректного формирования диапазонов для новых полей
+       * Requirements: 6.1, 6.2, 6.3
        */
       // Arrange
       const rowId = 42;
@@ -190,6 +180,8 @@ describe('GoogleSheetsClient', () => {
         last_name: 'Сидоров',
         first_name: 'Сидор',
         patronymic: 'Сидорович',
+        country: 'Беларусь',
+        postal_code: '220000',
         city: 'Казань',
         street: 'Пушкина',
         house: '7',
@@ -203,18 +195,23 @@ describe('GoogleSheetsClient', () => {
       await client.saveDeliveryData(rowId, deliveryData);
 
       // Assert
-      // Проверяем, что диапазон сформирован правильно: E42:M42
-      expect(mockSheetsUpdate).toHaveBeenNthCalledWith(1, 
+      // Проверяем, что диапазоны сформированы правильно для новых полей
+      expect(mockSheetsBatchUpdate).toHaveBeenCalledWith(
         expect.objectContaining({
-          range: `Sheet1!E${rowId}:M${rowId}`,
+          requestBody: expect.objectContaining({
+            data: expect.arrayContaining([
+              { range: `Sheet1!N${rowId}`, values: [[deliveryData.country]] },
+              { range: `Sheet1!O${rowId}`, values: [[deliveryData.postal_code]] },
+            ]),
+          }),
         })
       );
     });
 
-    it('должен записывать claimed_at в столбец N', async () => {
+    it('должен записывать claimed_at в столбец P', async () => {
       /**
-       * Тест: проверка записи timestamp в столбец N
-       * Requirements: 4.2
+       * Тест: проверка записи timestamp в столбец P (после новых полей)
+       * Requirements: 6.5
        */
       // Arrange
       const rowId = 8;
@@ -222,6 +219,8 @@ describe('GoogleSheetsClient', () => {
         last_name: 'Федоров',
         first_name: 'Федор',
         patronymic: null,
+        country: 'Украина',
+        postal_code: '01001',
         city: 'Уфа',
         street: 'Ленина',
         house: '15',
@@ -234,19 +233,23 @@ describe('GoogleSheetsClient', () => {
       await client.saveDeliveryData(rowId, deliveryData);
 
       // Assert
-      // Проверяем второй вызов - запись claimed_at
-      expect(mockSheetsUpdate).toHaveBeenNthCalledWith(2, {
-        spreadsheetId: testSpreadsheetId,
-        range: `Sheet1!N${rowId}`,
-        valueInputOption: 'RAW',
-        requestBody: {
-          values: [[expect.any(String)]], // ISO timestamp
-        },
-      });
+      // Проверяем, что claimed_at записан в столбец P
+      expect(mockSheetsBatchUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          requestBody: expect.objectContaining({
+            data: expect.arrayContaining([
+              { range: `Sheet1!P${rowId}`, values: [[expect.any(String)]] },
+            ]),
+          }),
+        })
+      );
 
       // Проверяем, что timestamp - валидная ISO строка
-      const timestampCall = mockSheetsUpdate.mock.calls[1];
-      const timestamp = timestampCall[0].requestBody.values[0][0];
+      const call = mockSheetsBatchUpdate.mock.calls[0];
+      const timestampEntry = call[0].requestBody.data.find(
+        (entry: any) => entry.range === `Sheet1!P${rowId}`
+      );
+      const timestamp = timestampEntry.values[0][0];
       expect(() => new Date(timestamp)).not.toThrow();
       expect(new Date(timestamp).toISOString()).toBe(timestamp);
     });
@@ -262,6 +265,8 @@ describe('GoogleSheetsClient', () => {
         last_name: 'Тестов',
         first_name: 'Тест',
         patronymic: 'Тестович',
+        country: 'Россия',
+        postal_code: '100000',
         city: 'Москва',
         street: 'Тестовая',
         house: '1',
@@ -271,7 +276,7 @@ describe('GoogleSheetsClient', () => {
       };
 
       const apiError = new Error('API Error: Rate limit exceeded');
-      mockSheetsUpdate.mockRejectedValueOnce(apiError);
+      mockSheetsBatchUpdate.mockRejectedValueOnce(apiError);
 
       // Act & Assert
       await expect(client.saveDeliveryData(rowId, deliveryData)).rejects.toThrow(
@@ -279,7 +284,7 @@ describe('GoogleSheetsClient', () => {
       );
 
       // Проверяем, что ошибка была залогирована
-      expect(mockSheetsUpdate).toHaveBeenCalledTimes(1);
+      expect(mockSheetsBatchUpdate).toHaveBeenCalledTimes(1);
     });
 
     it('должен обрабатывать ошибки сети', async () => {
@@ -293,6 +298,8 @@ describe('GoogleSheetsClient', () => {
         last_name: 'Сергеев',
         first_name: 'Сергей',
         patronymic: 'Сергеевич',
+        country: 'Россия',
+        postal_code: '420000',
         city: 'Казань',
         street: 'Баумана',
         house: '20',
@@ -302,7 +309,7 @@ describe('GoogleSheetsClient', () => {
       };
 
       const networkError = new Error('Network error: ECONNREFUSED');
-      mockSheetsUpdate.mockRejectedValueOnce(networkError);
+      mockSheetsBatchUpdate.mockRejectedValueOnce(networkError);
 
       // Act & Assert
       await expect(client.saveDeliveryData(rowId, deliveryData)).rejects.toThrow(
@@ -321,6 +328,8 @@ describe('GoogleSheetsClient', () => {
         last_name: 'Аннова',
         first_name: 'Анна',
         patronymic: null,
+        country: 'Россия',
+        postal_code: '620000',
         city: 'Екатеринбург',
         street: 'Малышева',
         house: '5',
@@ -330,7 +339,7 @@ describe('GoogleSheetsClient', () => {
       };
 
       const authError = new Error('Invalid credentials');
-      mockSheetsUpdate.mockRejectedValueOnce(authError);
+      mockSheetsBatchUpdate.mockRejectedValueOnce(authError);
 
       // Act & Assert
       await expect(client.saveDeliveryData(rowId, deliveryData)).rejects.toThrow(
@@ -349,6 +358,8 @@ describe('GoogleSheetsClient', () => {
         last_name: 'Марьева',
         first_name: 'Мария',
         patronymic: 'Марьевна',
+        country: 'Россия',
+        postal_code: '630000',
         city: 'Новосибирск',
         street: 'Ленина',
         house: '100',
@@ -358,11 +369,124 @@ describe('GoogleSheetsClient', () => {
       };
 
       const permissionError = new Error('Permission denied');
-      mockSheetsUpdate.mockRejectedValueOnce(permissionError);
+      mockSheetsBatchUpdate.mockRejectedValueOnce(permissionError);
 
       // Act & Assert
       await expect(client.saveDeliveryData(rowId, deliveryData)).rejects.toThrow(
         'Failed to save delivery data: Permission denied'
+      );
+    });
+
+    it('должен сохранять country в колонку N', async () => {
+      /**
+       * Тест: проверка сохранения поля country в колонку N
+       * Requirements: 6.1, 6.3
+       */
+      // Arrange
+      const rowId = 20;
+      const deliveryData: DeliveryData = {
+        last_name: 'Тестов',
+        first_name: 'Тест',
+        patronymic: 'Тестович',
+        country: 'Германия',
+        postal_code: '10115',
+        city: 'Берлин',
+        street: 'Hauptstraße',
+        house: '1',
+        apartment: '5',
+        phone: '+491234567890',
+        telegram_id: 777777777,
+      };
+
+      // Act
+      await client.saveDeliveryData(rowId, deliveryData);
+
+      // Assert
+      expect(mockSheetsBatchUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          requestBody: expect.objectContaining({
+            data: expect.arrayContaining([
+              { range: `Sheet1!N${rowId}`, values: [['Германия']] },
+            ]),
+          }),
+        })
+      );
+    });
+
+    it('должен сохранять postal_code в колонку O', async () => {
+      /**
+       * Тест: проверка сохранения поля postal_code в колонку O
+       * Requirements: 6.2, 6.4
+       */
+      // Arrange
+      const rowId = 21;
+      const deliveryData: DeliveryData = {
+        last_name: 'Смит',
+        first_name: 'Джон',
+        patronymic: null,
+        country: 'США',
+        postal_code: '12345-6789',
+        city: 'Нью-Йорк',
+        street: 'Broadway',
+        house: '100',
+        apartment: null,
+        phone: '+11234567890',
+        telegram_id: 888888888,
+      };
+
+      // Act
+      await client.saveDeliveryData(rowId, deliveryData);
+
+      // Assert
+      expect(mockSheetsBatchUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          requestBody: expect.objectContaining({
+            data: expect.arrayContaining([
+              { range: `Sheet1!O${rowId}`, values: [['12345-6789']] },
+            ]),
+          }),
+        })
+      );
+    });
+
+    it('должен сохранять данные в той же строке для всех полей', async () => {
+      /**
+       * Тест: проверка, что все поля сохраняются в одной строке
+       * Requirements: 6.5
+       */
+      // Arrange
+      const rowId = 25;
+      const deliveryData: DeliveryData = {
+        last_name: 'Дюпон',
+        first_name: 'Жан',
+        patronymic: null,
+        country: 'Франция',
+        postal_code: '75001',
+        city: 'Париж',
+        street: 'Rue de Rivoli',
+        house: '10',
+        apartment: '3',
+        phone: '+33123456789',
+        telegram_id: 999999999,
+      };
+
+      // Act
+      await client.saveDeliveryData(rowId, deliveryData);
+
+      // Assert
+      // Проверяем, что все диапазоны используют одну и ту же строку
+      expect(mockSheetsBatchUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          requestBody: expect.objectContaining({
+            data: expect.arrayContaining([
+              { range: `Sheet1!E${rowId}`, values: [[deliveryData.last_name]] },
+              { range: `Sheet1!F${rowId}`, values: [[deliveryData.first_name]] },
+              { range: `Sheet1!N${rowId}`, values: [[deliveryData.country]] },
+              { range: `Sheet1!O${rowId}`, values: [[deliveryData.postal_code]] },
+              { range: `Sheet1!P${rowId}`, values: [[expect.any(String)]] },
+            ]),
+          }),
+        })
       );
     });
   });

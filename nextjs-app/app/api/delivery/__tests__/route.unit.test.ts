@@ -103,6 +103,8 @@ describe('Delivery API Route - Unit Tests (Edge Cases)', () => {
       last_name: 'Иванов',
       first_name: 'Иван',
       patronymic: '',
+      country: 'Россия',
+      postal_code: '123456',
       city: 'Москва',
       street: 'Ленина',
       house: '1',

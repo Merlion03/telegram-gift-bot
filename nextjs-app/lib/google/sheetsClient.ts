@@ -15,6 +15,8 @@ export interface DeliveryData {
   last_name: string;
   first_name: string;
   patronymic: string | null;
+  country: string;
+  postal_code: string;
   city: string;
   street: string;
   house: string;
@@ -79,62 +81,64 @@ export class GoogleSheetsClient {
    * @returns true если сохранение успешно
    * @throws Error если произошла ошибка при сохранении
    */
-  async saveDeliveryData(rowId: number, deliveryData: DeliveryData): Promise<boolean> {
-    try {
-      // Подготовка данных для записи
-      // Новая структура столбцов:
-      // E: last_name, F: first_name, G: patronymic
-      // H: city, I: street, J: house, K: apartment
-      // L: phone, M: comment
-      const values = [
-        [
-          deliveryData.last_name,
-          deliveryData.first_name,
-          deliveryData.patronymic || '',
-          deliveryData.city,
-          deliveryData.street,
-          deliveryData.house,
-          deliveryData.apartment || '',
-          deliveryData.phone,
-          deliveryData.comment || '',
-        ],
-      ];
+  /**
+     * Сохраняет данные доставки в Google Sheets
+     * 
+     * @param rowId - Номер строки для обновления (row_id из Prize_Database)
+     * @param deliveryData - Данные доставки для сохранения
+     * @returns true если сохранение успешно
+     * @throws Error если произошла ошибка при сохранении
+     */
+    async saveDeliveryData(rowId: number, deliveryData: DeliveryData): Promise<boolean> {
+      try {
+        // Подготовка batch update для всех полей
+        // Структура столбцов:
+        // E: last_name, F: first_name, G: patronymic
+        // H: city, I: street, J: house, K: apartment
+        // L: phone, M: comment
+        // N: country, O: postal_code
+        // P: claimed_at (timestamp)
 
-      // Определение диапазона для обновления (строка rowId, столбцы E-M)
-      const range = `Sheet1!E${rowId}:M${rowId}`;
+        const updates = [
+          { range: `Sheet1!E${rowId}`, values: [[deliveryData.last_name]] },
+          { range: `Sheet1!F${rowId}`, values: [[deliveryData.first_name]] },
+          { range: `Sheet1!G${rowId}`, values: [[deliveryData.patronymic || '']] },
+          { range: `Sheet1!H${rowId}`, values: [[deliveryData.city]] },
+          { range: `Sheet1!I${rowId}`, values: [[deliveryData.street]] },
+          { range: `Sheet1!J${rowId}`, values: [[deliveryData.house]] },
+          { range: `Sheet1!K${rowId}`, values: [[deliveryData.apartment || '']] },
+          { range: `Sheet1!L${rowId}`, values: [[deliveryData.phone]] },
+          { range: `Sheet1!M${rowId}`, values: [[deliveryData.comment || '']] },
+          { range: `Sheet1!N${rowId}`, values: [[deliveryData.country]] },
+          { range: `Sheet1!O${rowId}`, values: [[deliveryData.postal_code]] },
+        ];
 
-      // Выполнение обновления
-      await this.sheets.spreadsheets.values.update({
-        spreadsheetId: this.spreadsheetId,
-        range,
-        valueInputOption: 'RAW',
-        requestBody: {
-          values,
-        },
-      });
+        // Отметка времени получения приза в столбце P
+        // Формат: ISO 8601 для единообразия
+        const claimedAt = new Date().toISOString();
+        updates.push({ range: `Sheet1!P${rowId}`, values: [[claimedAt]] });
 
-      // Отметка времени получения приза в столбце N
-      const claimedAtRange = `Sheet1!N${rowId}`;
-      await this.sheets.spreadsheets.values.update({
-        spreadsheetId: this.spreadsheetId,
-        range: claimedAtRange,
-        valueInputOption: 'RAW',
-        requestBody: {
-          values: [[new Date().toISOString()]],
-        },
-      });
+        // Выполнение batch update для всех полей
+        await this.sheets.spreadsheets.values.batchUpdate({
+          spreadsheetId: this.spreadsheetId,
+          requestBody: {
+            valueInputOption: 'RAW',
+            data: updates,
+          },
+        });
 
-      return true;
-    } catch (error) {
-      // Логирование ошибки
-      console.error('Error saving delivery data to Google Sheets:', error);
-      
-      // Проброс ошибки для обработки на верхнем уровне
-      throw new Error(
-        `Failed to save delivery data: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+        return true;
+      } catch (error) {
+        // Логирование ошибки
+        console.error('Error saving delivery data to Google Sheets:', error);
+
+        // Проброс ошибки для обработки на верхнем уровне
+        throw new Error(
+          `Failed to save delivery data: ${error instanceof Error ? error.message : 'Unknown error'}`
+        );
+      }
     }
-  }
+
 
   /**
    * Проверяет доступность Google Sheets API

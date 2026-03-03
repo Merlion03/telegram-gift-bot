@@ -10,6 +10,8 @@ export interface DeliveryData {
   patronymic?: string; // Опционально
   
   // Адрес разделен на компоненты
+  country: string;
+  postal_code: string;
   city: string;
   street: string;
   house: string;
@@ -72,6 +74,8 @@ export interface PrizeSheetData {
   last_name?: string;
   first_name?: string;
   patronymic?: string;
+  country?: string;
+  postal_code?: string;
   city?: string;
   street?: string;
   house?: string;

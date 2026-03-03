@@ -531,6 +531,8 @@ describe('Delivery API Route - Property-Based Tests', () => {
           fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // last_name
           fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // first_name
           fc.option(fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), { nil: undefined }), // patronymic
+          fc.string({ minLength: 2, maxLength: 100 }).map(s => s.trim()).filter(s => s.length >= 2), // country
+          fc.string({ minLength: 3, maxLength: 20 }).map(s => s.trim()).filter(s => s.length >= 3), // postal_code
           fc.string({ minLength: 2, maxLength: 100 }).map(s => s.trim()).filter(s => s.length >= 2), // city
           fc.string({ minLength: 2, maxLength: 200 }).map(s => s.trim()).filter(s => s.length >= 2), // street
           fc.string({ minLength: 1, maxLength: 20 }).map(s => s.trim()).filter(s => s.length >= 1), // house
@@ -539,7 +541,7 @@ describe('Delivery API Route - Property-Based Tests', () => {
           fc.option(fc.string({ minLength: 1, maxLength: 100 }), { nil: undefined }), // comment
           fc.integer({ min: 1, max: 100 }), // prize_id
           fc.integer({ min: 1, max: 999999 }), // user_id
-          async (lastName, firstName, patronymic, city, street, house, apartment, phone, comment, prizeId, userId) => {
+          async (lastName, firstName, patronymic, country, postalCode, city, street, house, apartment, phone, comment, prizeId, userId) => {
             const currentTimestamp = Math.floor(Date.now() / 1000);
             const authDate = currentTimestamp - 100;
             const initData = createValidInitData(userId, authDate, TEST_BOT_TOKEN);
@@ -548,6 +550,8 @@ describe('Delivery API Route - Property-Based Tests', () => {
               last_name: lastName,
               first_name: firstName,
               ...(patronymic && { patronymic }),
+              country: country,
+              postal_code: postalCode,
               city: city,
               street: street,
               house: house,
@@ -604,13 +608,15 @@ describe('Delivery API Route - Property-Based Tests', () => {
         fc.asyncProperty(
           fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // last_name
           fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // first_name
+          fc.string({ minLength: 2, maxLength: 100 }).map(s => s.trim()).filter(s => s.length >= 2), // country
+          fc.string({ minLength: 3, maxLength: 20 }).map(s => s.trim()).filter(s => s.length >= 3), // postal_code
           fc.string({ minLength: 2, maxLength: 100 }).map(s => s.trim()).filter(s => s.length >= 2), // city
           fc.string({ minLength: 2, maxLength: 200 }).map(s => s.trim()).filter(s => s.length >= 2), // street
           fc.string({ minLength: 1, maxLength: 20 }).map(s => s.trim()).filter(s => s.length >= 1), // house
           fc.integer({ min: 1000000000, max: 9999999999 }).map(n => '+' + n.toString()), // phone
           fc.integer({ min: 1, max: 100 }), // prize_id
           fc.integer({ min: 1, max: 999999 }), // user_id
-          async (lastName, firstName, city, street, house, phone, prizeId, userId) => {
+          async (lastName, firstName, country, postalCode, city, street, house, phone, prizeId, userId) => {
             const currentTimestamp = Math.floor(Date.now() / 1000);
             const authDate = currentTimestamp - 100;
             const initData = createValidInitData(userId, authDate, TEST_BOT_TOKEN);
@@ -618,6 +624,8 @@ describe('Delivery API Route - Property-Based Tests', () => {
             const requestBody = {
               last_name: lastName,
               first_name: firstName,
+              country: country,
+              postal_code: postalCode,
               city: city,
               street: street,
               house: house,
@@ -649,13 +657,15 @@ describe('Delivery API Route - Property-Based Tests', () => {
         fc.asyncProperty(
           fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // last_name
           fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // first_name
+          fc.string({ minLength: 2, maxLength: 100 }).map(s => s.trim()).filter(s => s.length >= 2), // country
+          fc.string({ minLength: 3, maxLength: 20 }).map(s => s.trim()).filter(s => s.length >= 3), // postal_code
           fc.string({ minLength: 2, maxLength: 100 }).map(s => s.trim()).filter(s => s.length >= 2), // city
           fc.string({ minLength: 2, maxLength: 200 }).map(s => s.trim()).filter(s => s.length >= 2), // street
           fc.string({ minLength: 1, maxLength: 20 }).map(s => s.trim()).filter(s => s.length >= 1), // house
           fc.integer({ min: 1000000000, max: 9999999999 }).map(n => '+' + n.toString()), // phone
           fc.integer({ min: 1, max: 100 }), // prize_id
           fc.integer({ min: 1, max: 999999 }), // user_id
-          async (lastName, firstName, city, street, house, phone, prizeId, userId) => {
+          async (lastName, firstName, country, postalCode, city, street, house, phone, prizeId, userId) => {
             const currentTimestamp = Math.floor(Date.now() / 1000);
             const authDate = currentTimestamp - 100;
             const initData = createValidInitData(userId, authDate, TEST_BOT_TOKEN);
@@ -663,6 +673,8 @@ describe('Delivery API Route - Property-Based Tests', () => {
             const requestBody = {
               last_name: lastName,
               first_name: firstName,
+              country: country,
+              postal_code: postalCode,
               city: city,
               street: street,
               house: house,

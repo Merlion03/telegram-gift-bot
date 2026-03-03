@@ -39,24 +39,19 @@ describe('DeliveryForm - Интеграционные тесты', () => {
     vi.restoreAllMocks();
   });
 
-  /**
-   * Requirement 3.3: Форма отправляет данные на endpoint /api/delivery с методом POST
-   */
-  it('должна отправлять данные на /api/delivery при успешной валидации', async () => {
-    // Мокируем успешный ответ API
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ success: true, message: 'Данные успешно сохранены' }),
-    });
-
-    render(<DeliveryForm prizeId={123} />);
-
-    // Заполняем все обязательные поля
+  // Вспомогательная функция для заполнения всех обязательных полей
+  const fillRequiredFields = () => {
     fireEvent.change(screen.getByLabelText(/Фамилия/i), {
       target: { value: 'Иванов' },
     });
     fireEvent.change(screen.getByLabelText(/Имя/i), {
       target: { value: 'Иван' },
+    });
+    fireEvent.change(screen.getByLabelText(/Страна/i), {
+      target: { value: 'Россия' },
+    });
+    fireEvent.change(screen.getByLabelText(/Почтовый индекс/i), {
+      target: { value: '123456' },
     });
     fireEvent.change(screen.getByLabelText(/Город/i), {
       target: { value: 'Москва' },
@@ -70,6 +65,22 @@ describe('DeliveryForm - Интеграционные тесты', () => {
     fireEvent.change(screen.getByLabelText(/Номер телефона/i), {
       target: { value: '+79991234567' },
     });
+  };
+
+  /**
+   * Requirement 3.3: Форма отправляет данные на endpoint /api/delivery с методом POST
+   */
+  it('должна отправлять данные на /api/delivery при успешной валидации', async () => {
+    // Мокируем успешный ответ API
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true, message: 'Данные успешно сохранены' }),
+    });
+
+    render(<DeliveryForm prizeId={123} />);
+
+    // Заполняем все обязательные поля
+    fillRequiredFields();
 
     // Отправляем форму
     const submitButton = screen.getByRole('button', { name: /Отправить данные/i });
@@ -97,6 +108,8 @@ describe('DeliveryForm - Интеграционные тесты', () => {
       last_name: 'Иванов',
       first_name: 'Иван',
       patronymic: '',
+      country: 'Россия',
+      postal_code: '123456',
       city: 'Москва',
       street: 'Ленина',
       house: '10',
@@ -125,6 +138,12 @@ describe('DeliveryForm - Интеграционные тесты', () => {
     });
     fireEvent.change(screen.getByLabelText(/Имя/i), {
       target: { value: 'Петр' },
+    });
+    fireEvent.change(screen.getByLabelText(/Страна/i), {
+      target: { value: 'Беларусь' },
+    });
+    fireEvent.change(screen.getByLabelText(/Почтовый индекс/i), {
+      target: { value: '220000' },
     });
     fireEvent.change(screen.getByLabelText(/Город/i), {
       target: { value: 'Санкт-Петербург' },
@@ -162,24 +181,7 @@ describe('DeliveryForm - Интеграционные тесты', () => {
     render(<DeliveryForm prizeId={123} />);
 
     // Заполняем форму
-    fireEvent.change(screen.getByLabelText(/Фамилия/i), {
-      target: { value: 'Сидоров' },
-    });
-    fireEvent.change(screen.getByLabelText(/Имя/i), {
-      target: { value: 'Сидор' },
-    });
-    fireEvent.change(screen.getByLabelText(/Город/i), {
-      target: { value: 'Казань' },
-    });
-    fireEvent.change(screen.getByLabelText(/Улица/i), {
-      target: { value: 'Баумана' },
-    });
-    fireEvent.change(screen.getByLabelText(/Дом/i), {
-      target: { value: '5' },
-    });
-    fireEvent.change(screen.getByLabelText(/Номер телефона/i), {
-      target: { value: '+79111234567' },
-    });
+    fillRequiredFields();
 
     fireEvent.click(screen.getByRole('button', { name: /Отправить данные/i }));
 
@@ -207,24 +209,7 @@ describe('DeliveryForm - Интеграционные тесты', () => {
     render(<DeliveryForm prizeId={123} />);
 
     // Заполняем форму
-    fireEvent.change(screen.getByLabelText(/Фамилия/i), {
-      target: { value: 'Тестов' },
-    });
-    fireEvent.change(screen.getByLabelText(/Имя/i), {
-      target: { value: 'Тест' },
-    });
-    fireEvent.change(screen.getByLabelText(/Город/i), {
-      target: { value: 'Екатеринбург' },
-    });
-    fireEvent.change(screen.getByLabelText(/Улица/i), {
-      target: { value: 'Ленина' },
-    });
-    fireEvent.change(screen.getByLabelText(/Дом/i), {
-      target: { value: '20' },
-    });
-    fireEvent.change(screen.getByLabelText(/Номер телефона/i), {
-      target: { value: '+79221234567' },
-    });
+    fillRequiredFields();
 
     fireEvent.click(screen.getByRole('button', { name: /Отправить данные/i }));
 
@@ -252,24 +237,7 @@ describe('DeliveryForm - Интеграционные тесты', () => {
     render(<DeliveryForm prizeId={123} />);
 
     // Заполняем форму
-    fireEvent.change(screen.getByLabelText(/Фамилия/i), {
-      target: { value: 'Загрузкин' },
-    });
-    fireEvent.change(screen.getByLabelText(/Имя/i), {
-      target: { value: 'Загрузка' },
-    });
-    fireEvent.change(screen.getByLabelText(/Город/i), {
-      target: { value: 'Новосибирск' },
-    });
-    fireEvent.change(screen.getByLabelText(/Улица/i), {
-      target: { value: 'Красный проспект' },
-    });
-    fireEvent.change(screen.getByLabelText(/Дом/i), {
-      target: { value: '1' },
-    });
-    fireEvent.change(screen.getByLabelText(/Номер телефона/i), {
-      target: { value: '+79331234567' },
-    });
+    fillRequiredFields();
 
     const submitButton = screen.getByRole('button', { name: /Отправить данные/i });
     fireEvent.click(submitButton);
@@ -318,6 +286,15 @@ describe('DeliveryForm - Интеграционные тесты', () => {
     fireEvent.change(screen.getByLabelText(/Город/i), {
       target: { value: 'Владивосток' },
     });
+    fireEvent.change(screen.getByLabelText(/Страна/i), {
+      target: { value: 'Россия' },
+    });
+    fireEvent.change(screen.getByLabelText(/Почтовый индекс/i), {
+      target: { value: '690091' },
+    });
+    fireEvent.change(screen.getByLabelText(/Город/i), {
+      target: { value: 'Владивосток' },
+    });
     fireEvent.change(screen.getByLabelText(/Улица/i), {
       target: { value: 'Светланская' },
     });
@@ -344,6 +321,8 @@ describe('DeliveryForm - Интеграционные тесты', () => {
         last_name: 'Полный',
         first_name: 'Полное',
         patronymic: 'Полнович',
+        country: 'Россия',
+        postal_code: '690091',
         city: 'Владивосток',
         street: 'Светланская',
         house: '15',
@@ -372,6 +351,12 @@ describe('DeliveryForm - Интеграционные тесты', () => {
     });
     fireEvent.change(screen.getByLabelText(/Имя/i), {
       target: { value: 'Ошибка' },
+    });
+    fireEvent.change(screen.getByLabelText(/Страна/i), {
+      target: { value: 'Россия' },
+    });
+    fireEvent.change(screen.getByLabelText(/Почтовый индекс/i), {
+      target: { value: '644000' },
     });
     fireEvent.change(screen.getByLabelText(/Город/i), {
       target: { value: 'Омск' },
@@ -420,6 +405,12 @@ describe('DeliveryForm - Интеграционные тесты', () => {
     });
     fireEvent.change(screen.getByLabelText(/Имя/i), {
       target: { value: 'Повтор' },
+    });
+    fireEvent.change(screen.getByLabelText(/Страна/i), {
+      target: { value: 'Россия' },
+    });
+    fireEvent.change(screen.getByLabelText(/Почтовый индекс/i), {
+      target: { value: '454000' },
     });
     fireEvent.change(screen.getByLabelText(/Город/i), {
       target: { value: 'Челябинск' },

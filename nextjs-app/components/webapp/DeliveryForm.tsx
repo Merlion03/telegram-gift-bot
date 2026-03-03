@@ -11,55 +11,65 @@ const formSchema = z.object({
   // ФИО поля
   last_name: z
     .string()
+    .trim()
     .min(2, 'Минимум 2 символа')
-    .max(50, 'Максимум 50 символов')
-    .trim(),
+    .max(50, 'Максимум 50 символов'),
   first_name: z
     .string()
+    .trim()
     .min(2, 'Минимум 2 символа')
-    .max(50, 'Максимум 50 символов')
-    .trim(),
+    .max(50, 'Максимум 50 символов'),
   patronymic: z
     .string()
+    .trim()
     .min(2, 'Минимум 2 символа')
     .max(50, 'Максимум 50 символов')
-    .trim()
     .optional()
     .or(z.literal('')), // Разрешаем пустую строку
   
   // Адресные поля
+  country: z
+    .string()
+    .trim()
+    .min(2, 'Минимум 2 символа')
+    .max(100, 'Максимум 100 символов'),
+  postal_code: z
+    .string()
+    .trim()
+    .min(3, 'Минимум 3 символа')
+    .max(20, 'Максимум 20 символов'),
   city: z
     .string()
+    .trim()
     .min(2, 'Минимум 2 символа')
-    .max(100, 'Максимум 100 символов')
-    .trim(),
+    .max(100, 'Максимум 100 символов'),
   street: z
     .string()
+    .trim()
     .min(2, 'Минимум 2 символа')
-    .max(200, 'Максимум 200 символов')
-    .trim(),
+    .max(200, 'Максимум 200 символов'),
   house: z
     .string()
+    .trim()
     .min(1, 'Минимум 1 символ')
-    .max(20, 'Максимум 20 символов')
-    .trim(),
+    .max(20, 'Максимум 20 символов'),
   apartment: z
     .string()
+    .trim()
     .min(1, 'Минимум 1 символ')
     .max(20, 'Максимум 20 символов')
-    .trim()
     .optional()
     .or(z.literal('')), // Разрешаем пустую строку
   
   // Существующие поля
   phone: z
     .string()
-    .regex(/^\+?[0-9]{10,15}$/, 'Неверный формат телефона')
-    .trim(),
+    .trim()
+    .regex(/^\+?[0-9]{10,15}$/, 'Неверный формат телефона'),
   comment: z
     .string()
-    .max(500, 'Максимум 500 символов')
     .trim()
+    .max(500, 'Максимум 500 символов')
     .optional(),
 });
 
@@ -240,6 +250,68 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
         >
           Адрес доставки
         </h3>
+      
+      {/* Поле: Страна */}
+      <div>
+        <label 
+          htmlFor="country" 
+          className="block text-sm font-medium mb-1"
+          style={{ color: 'var(--tg-theme-text-color, #000000)' }}
+        >
+          Страна <span className="text-red-500">*</span>
+        </label>
+        <input
+          {...register('country')}
+          type="text"
+          id="country"
+          placeholder="Россия"
+          aria-label="Страна"
+          aria-required="true"
+          aria-invalid={errors.country ? "true" : "false"}
+          aria-describedby={errors.country ? "country-error" : undefined}
+          className="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          style={{ 
+            backgroundColor: 'var(--tg-theme-bg-color, #ffffff)',
+            color: 'var(--tg-theme-text-color, #000000)',
+            borderColor: 'var(--tg-theme-hint-color, #999999)'
+          }}
+          disabled={isSubmitting}
+        />
+        {errors.country && (
+          <p id="country-error" className="mt-1 text-sm text-red-600">{errors.country.message}</p>
+        )}
+      </div>
+      
+      {/* Поле: Почтовый индекс */}
+      <div>
+        <label 
+          htmlFor="postal_code" 
+          className="block text-sm font-medium mb-1"
+          style={{ color: 'var(--tg-theme-text-color, #000000)' }}
+        >
+          Почтовый индекс <span className="text-red-500">*</span>
+        </label>
+        <input
+          {...register('postal_code')}
+          type="text"
+          id="postal_code"
+          placeholder="123456"
+          aria-label="Почтовый индекс"
+          aria-required="true"
+          aria-invalid={errors.postal_code ? "true" : "false"}
+          aria-describedby={errors.postal_code ? "postal_code-error" : undefined}
+          className="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          style={{ 
+            backgroundColor: 'var(--tg-theme-bg-color, #ffffff)',
+            color: 'var(--tg-theme-text-color, #000000)',
+            borderColor: 'var(--tg-theme-hint-color, #999999)'
+          }}
+          disabled={isSubmitting}
+        />
+        {errors.postal_code && (
+          <p id="postal_code-error" className="mt-1 text-sm text-red-600">{errors.postal_code.message}</p>
+        )}
+      </div>
       
       {/* Адресные поля */}
       <div>

@@ -125,6 +125,8 @@ export function sanitizeDeliveryData(data: {
   last_name: string;
   first_name: string;
   patronymic?: string;
+  country: string;
+  postal_code: string;
   city: string;
   street: string;
   house: string;
@@ -136,6 +138,8 @@ export function sanitizeDeliveryData(data: {
   last_name: string;
   first_name: string;
   patronymic: string | null;
+  country: string;
+  postal_code: string;
   city: string;
   street: string;
   house: string;
@@ -148,6 +152,8 @@ export function sanitizeDeliveryData(data: {
     last_name: sanitizeText(data.last_name),
     first_name: sanitizeText(data.first_name),
     patronymic: (data.patronymic && data.patronymic.trim()) ? sanitizeText(data.patronymic) : null,
+    country: sanitizeText(data.country),
+    postal_code: sanitizeText(data.postal_code),
     city: sanitizeText(data.city),
     street: sanitizeText(data.street),
     house: sanitizeText(data.house),

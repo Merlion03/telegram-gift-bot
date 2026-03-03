@@ -172,16 +172,22 @@ class GoogleSheetsService:
                 return None
             
             # Формируем результат
+            # Структура столбцов:
+            # A (индекс 0): telegram_id
+            # B (индекс 1): prize_type (digital/physical)
+            # C (индекс 2): promo_code (для digital)
+            # D (индекс 3): instructions (для digital)
+            # E-M (индексы 4-12): данные доставки (для physical)
             result = {
                 'row_id': cell.row,
                 'telegram_id': int(row_values[0]),
-                'prize_type': row_values[3] if len(row_values) > 3 else None,  # Колонка D (индекс 3)
+                'prize_type': row_values[1] if len(row_values) > 1 else None,  # Колонка B (индекс 1)
             }
             
             # Добавляем данные для цифрового приза
             if result['prize_type'] == 'digital':
-                result['promo_code'] = row_values[4] if len(row_values) > 4 else None  # Колонка E (индекс 4)
-                result['instructions'] = row_values[5] if len(row_values) > 5 else None  # Колонка F (индекс 5)
+                result['promo_code'] = row_values[2] if len(row_values) > 2 else None  # Колонка C (индекс 2)
+                result['instructions'] = row_values[3] if len(row_values) > 3 else None  # Колонка D (индекс 3)
             
             logger.info(
                 "winner_found",
@@ -291,22 +297,51 @@ class GoogleSheetsService:
                 worksheet = sheet.get_worksheet(0)  # Первый worksheet
             
             # Обновляем ячейки с данными доставки
-            # Предполагаем столбцы: D - ФИО, E - адрес, F - телефон, G - комментарий
+            # Новая структура столбцов для физических призов:
+            # E (индекс 4): last_name
+            # F (индекс 5): first_name
+            # G (индекс 6): patronymic
+            # H (индекс 7): city
+            # I (индекс 8): street
+            # J (индекс 9): house
+            # K (индекс 10): apartment
+            # L (индекс 11): phone
+            # M (индекс 12): comment
             updates = [
                 {
-                    'range': f'D{row_id}',
-                    'values': [[delivery_data.get('full_name', '')]]
-                },
-                {
                     'range': f'E{row_id}',
-                    'values': [[delivery_data.get('address', '')]]
+                    'values': [[delivery_data.get('last_name', '')]]
                 },
                 {
                     'range': f'F{row_id}',
-                    'values': [[delivery_data.get('phone', '')]]
+                    'values': [[delivery_data.get('first_name', '')]]
                 },
                 {
                     'range': f'G{row_id}',
+                    'values': [[delivery_data.get('patronymic', '')]]
+                },
+                {
+                    'range': f'H{row_id}',
+                    'values': [[delivery_data.get('city', '')]]
+                },
+                {
+                    'range': f'I{row_id}',
+                    'values': [[delivery_data.get('street', '')]]
+                },
+                {
+                    'range': f'J{row_id}',
+                    'values': [[delivery_data.get('house', '')]]
+                },
+                {
+                    'range': f'K{row_id}',
+                    'values': [[delivery_data.get('apartment', '')]]
+                },
+                {
+                    'range': f'L{row_id}',
+                    'values': [[delivery_data.get('phone', '')]]
+                },
+                {
+                    'range': f'M{row_id}',
                     'values': [[delivery_data.get('comment', '')]]
                 }
             ]
