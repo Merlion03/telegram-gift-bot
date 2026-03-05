@@ -61,7 +61,7 @@ class DatabaseConfig:
     @property
     def connection_url(self) -> str:
         """Возвращает URL для подключения к базе данных"""
-        return f"postgresql+asyncpg://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
+        return f"postgresql+psycopg://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
     
     @classmethod
     def from_env(cls) -> 'DatabaseConfig':

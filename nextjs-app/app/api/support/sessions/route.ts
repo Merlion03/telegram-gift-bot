@@ -15,15 +15,16 @@ import type { GetSessionsParams } from '@/types/support';
  * Получает список сессий поддержки с фильтрацией и пагинацией
  * 
  * Query параметры:
- * - status: 'active' | 'closed' (по умолчанию 'active')
+ * - status: 'active' | 'closed' (опционально)
+ * - session_type: 'chat' | 'support' (опционально)
  * - page: номер страницы (по умолчанию 1)
  * - limit: количество сессий на странице (по умолчанию 50, максимум 100)
  * 
- * Validates: Requirements 7.4, 17.4
+ * Validates: Requirements 3.1, 3.2, 5.3, 7.1, 8.1, 8.5
  */
 export async function GET(request: NextRequest) {
   try {
-    // Проверка аутентификации
+    // Проверка аутентификации (Requirements 8.1, 8.5)
     const session = await getServerSession(authOptions);
     
     if (!session) {
@@ -35,14 +36,22 @@ export async function GET(request: NextRequest) {
 
     // Извлечение параметров запроса
     const { searchParams } = new URL(request.url);
-    const status = searchParams.get('status') || 'active';
+    const status = searchParams.get('status') || undefined;
+    const session_type = searchParams.get('session_type') || undefined;
     const page = parseInt(searchParams.get('page') || '1', 10);
     const limit = parseInt(searchParams.get('limit') || '50', 10);
 
     // Валидация параметров
-    if (!['active', 'closed'].includes(status)) {
+    if (status && !['active', 'closed'].includes(status)) {
       return NextResponse.json(
         { error: 'Invalid status', message: 'Статус должен быть "active" или "closed"' },
+        { status: 400 }
+      );
+    }
+
+    if (session_type && !['chat', 'support'].includes(session_type)) {
+      return NextResponse.json(
+        { error: 'Invalid session_type', message: 'Тип сессии должен быть "chat" или "support"' },
         { status: 400 }
       );
     }
@@ -64,7 +73,8 @@ export async function GET(request: NextRequest) {
     // Получение сессий из БД
     const db = getDb();
     const params: GetSessionsParams = {
-      status: status as 'active' | 'closed',
+      status: status as 'active' | 'closed' | undefined,
+      session_type: session_type as 'chat' | 'support' | undefined,
       page,
       limit,
     };

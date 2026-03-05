@@ -99,10 +99,13 @@ export class DatabaseClient {
    * Получает список сессий поддержки с пагинацией
    * @param params - Параметры фильтрации и пагинации
    * @returns Список сессий с метаданными пагинации
+   * 
+   * Validates: Requirements 3.1, 3.2, 5.3, 7.1, 8.1, 8.5
    */
   async getSessions(params: GetSessionsParams = {}): Promise<PaginatedSessions> {
     const {
-      status = 'active',
+      status,
+      session_type,
       page = 1,
       limit = 50,
     } = params;
@@ -118,21 +121,44 @@ export class DatabaseClient {
     const offset = (page - 1) * limit;
 
     try {
+      // Строим WHERE условия динамически
+      const whereConditions: string[] = [];
+      const queryParams: any[] = [];
+      let paramIndex = 1;
+
+      if (status) {
+        whereConditions.push(`s.status = $${paramIndex}`);
+        queryParams.push(status);
+        paramIndex++;
+      }
+
+      if (session_type) {
+        whereConditions.push(`s.session_type = $${paramIndex}`);
+        queryParams.push(session_type);
+        paramIndex++;
+      }
+
+      const whereClause = whereConditions.length > 0 
+        ? `WHERE ${whereConditions.join(' AND ')}`
+        : '';
+
       // Получаем общее количество сессий
       const countQuery = `
         SELECT COUNT(*) as total
-        FROM support_sessions
-        WHERE status = $1
+        FROM support_sessions s
+        ${whereClause}
       `;
-      const countResult = await this.pool.query(countQuery, [status]);
+      const countResult = await this.pool.query(countQuery, queryParams);
       const total = parseInt(countResult.rows[0].total, 10);
 
       // Получаем сессии с подсчётом непрочитанных сообщений
+      // Сортировка по времени последнего сообщения (Requirements 3.1)
       const sessionsQuery = `
         SELECT 
           s.id,
           s.telegram_id,
           s.status,
+          s.session_type,
           s.created_at,
           s.closed_at,
           COUNT(CASE WHEN m.message_type = 'from_user' AND m.delivered = false THEN 1 END) as unread_count,
@@ -140,18 +166,22 @@ export class DatabaseClient {
           MAX(m.created_at) as last_message_at
         FROM support_sessions s
         LEFT JOIN support_messages m ON s.id = m.session_id
-        WHERE s.status = $1
-        GROUP BY s.id, s.telegram_id, s.status, s.created_at, s.closed_at
-        ORDER BY s.created_at DESC
-        LIMIT $2 OFFSET $3
+        ${whereClause}
+        GROUP BY s.id, s.telegram_id, s.status, s.session_type, s.created_at, s.closed_at
+        ORDER BY COALESCE(MAX(m.created_at), s.created_at) DESC
+        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
       `;
 
-      const sessionsResult = await this.pool.query(sessionsQuery, [status, limit, offset]);
+      const sessionsResult = await this.pool.query(
+        sessionsQuery, 
+        [...queryParams, limit, offset]
+      );
 
       const sessions: SupportSession[] = sessionsResult.rows.map((row) => ({
         id: row.id,
         telegram_id: row.telegram_id,
         status: row.status,
+        session_type: row.session_type,
         created_at: row.created_at.toISOString(),
         closed_at: row.closed_at ? row.closed_at.toISOString() : undefined,
         unread_count: parseInt(row.unread_count, 10),
@@ -331,6 +361,7 @@ export class DatabaseClient {
           id,
           telegram_id,
           status,
+          session_type,
           created_at,
           closed_at
         FROM support_sessions
@@ -349,6 +380,7 @@ export class DatabaseClient {
         id: row.id,
         telegram_id: row.telegram_id,
         status: row.status,
+        session_type: row.session_type,
         created_at: row.created_at.toISOString(),
         closed_at: row.closed_at ? row.closed_at.toISOString() : undefined,
       };
@@ -379,6 +411,42 @@ export class DatabaseClient {
   async close(): Promise<void> {
     await this.pool.end();
     DatabaseClient.instance = null;
+  }
+
+  /**
+   * Обновляет тип сессии (преобразование chat -> support)
+   * @param sessionId - ID сессии
+   * @param sessionType - Новый тип сессии ('chat' или 'support')
+   * @returns true если успешно обновлено
+   * 
+   * Validates: Requirements 1.5, 4.3
+   */
+  async updateSessionType(
+    sessionId: number,
+    sessionType: 'chat' | 'support'
+  ): Promise<boolean> {
+    if (sessionId < 1) {
+      throw new Error('Session ID must be >= 1');
+    }
+
+    if (!['chat', 'support'].includes(sessionType)) {
+      throw new Error('session_type must be "chat" or "support"');
+    }
+
+    try {
+      const query = `
+        UPDATE support_sessions
+        SET session_type = $1
+        WHERE id = $2
+      `;
+
+      const result = await this.pool.query(query, [sessionType, sessionId]);
+
+      return result.rowCount !== null && result.rowCount > 0;
+    } catch (error) {
+      console.error('Error updating session type:', error);
+      throw new Error('Failed to update session type');
+    }
   }
 }
 

@@ -1,6 +1,6 @@
 """
 Модуль подключения к PostgreSQL базе данных
-Использует асинхронный SQLAlchemy engine с connection pooling
+Использует асинхронный SQLAlchemy engine с psycopg3 и connection pooling
 """
 import logging
 from typing import AsyncGenerator
@@ -23,7 +23,7 @@ class DatabaseConnection:
     Класс для управления подключением к базе данных
     
     Обеспечивает:
-    - Асинхронное подключение через asyncpg
+    - Асинхронное подключение через psycopg3
     - Connection pooling для оптимизации производительности
     - Управление сессиями через async context manager
     """
@@ -42,7 +42,7 @@ class DatabaseConnection:
         Инициализирует подключение к базе данных
         
         Args:
-            database_url: URL подключения к PostgreSQL (формат: postgresql+asyncpg://user:pass@host:port/db)
+            database_url: URL подключения к PostgreSQL (формат: postgresql+psycopg://user:pass@host:port/db)
             echo: Логировать ли SQL запросы (для отладки)
             pool_size: Размер connection pool
             max_overflow: Максимальное количество дополнительных соединений
@@ -54,7 +54,7 @@ class DatabaseConnection:
         self.echo = echo
         
         # Создание асинхронного engine с connection pooling
-        # Для async engine не указываем poolclass - SQLAlchemy автоматически использует AsyncAdaptedQueuePool
+        # asyncpg используется для асинхронных операций
         self.engine: AsyncEngine = create_async_engine(
             database_url,
             echo=echo,
@@ -62,14 +62,7 @@ class DatabaseConnection:
             max_overflow=max_overflow,
             pool_timeout=pool_timeout,
             pool_recycle=pool_recycle,
-            pool_pre_ping=pool_pre_ping,
-            # Дополнительные параметры для asyncpg
-            connect_args={
-                "server_settings": {
-                    "application_name": "telegram_bot",
-                    "jit": "off"  # Отключение JIT для стабильности
-                }
-            }
+            pool_pre_ping=pool_pre_ping
         )
         
         # Создание session factory

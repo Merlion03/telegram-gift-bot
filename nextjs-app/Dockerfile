@@ -27,11 +27,19 @@ COPY --from=deps /app/package.json ./package.json
 # Копирование исходного кода
 COPY . .
 
+# ARG для передачи переменных окружения на этапе сборки
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
+ARG NEXT_PUBLIC_WEBAPP_URL
+
 # Переменные окружения для сборки
 # Next.js собирает статические страницы на этапе build
 ENV NEXT_TELEMETRY_DISABLED=1 \
     NODE_ENV=production \
-    NODE_OPTIONS="--max-old-space-size=2048"
+    NODE_OPTIONS="--max-old-space-size=2048" \
+    NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL} \
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY} \
+    NEXT_PUBLIC_WEBAPP_URL=${NEXT_PUBLIC_WEBAPP_URL}
 
 # Сборка приложения
 RUN npm run build

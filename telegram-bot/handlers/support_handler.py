@@ -3,6 +3,7 @@
 Управляет сессиями поддержки и перехватывает сообщения пользователей.
 """
 
+from typing import Optional
 from aiogram import Router
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
@@ -21,23 +22,26 @@ router = Router()
 class SupportHandler:
     """Обработчик режима поддержки"""
     
-    def __init__(self, support_service: SupportService):
+    def __init__(self, support_service: SupportService, session_manager=None):
         """
         Инициализирует обработчик поддержки
         
         Args:
             support_service: Сервис для работы с поддержкой
+            session_manager: Менеджер сессий для сохранения ответов бота (опционально)
         """
         self.support_service = support_service
+        self.session_manager = session_manager
         logger.info("support_handler_initialized")
     
-    async def start_support(self, message: Message, state: FSMContext) -> None:
+    async def start_support(self, message: Message, state: FSMContext, session_id: Optional[int] = None) -> None:
         """
         Начинает сессию поддержки
         
         Args:
             message: Сообщение от пользователя
             state: FSM контекст
+            session_id: ID сессии из middleware (опционально)
         """
         telegram_id = message.from_user.id
         
@@ -77,10 +81,26 @@ class SupportHandler:
                 resize_keyboard=True
             )
             
+            response_text = "Вы соединены с поддержкой. Опишите ваш вопрос"
+            
             await message.answer(
-                "Вы соединены с поддержкой. Опишите ваш вопрос",
+                response_text,
                 reply_markup=keyboard
             )
+            
+            # Сохраняем ответ бота
+            if self.session_manager and session_id:
+                try:
+                    await self.session_manager.save_bot_message(
+                        session_id=session_id,
+                        message_text=response_text
+                    )
+                except Exception as e:
+                    logger.error(
+                        "failed_to_save_bot_response",
+                        session_id=session_id,
+                        error=str(e)
+                    )
             
             logger.info(
                 "support_session_started",
@@ -95,11 +115,24 @@ class SupportHandler:
                 error=str(e),
                 exc_info=True
             )
-            await message.answer(
-                "Произошла ошибка при подключении к поддержке. Пожалуйста, попробуйте позже."
-            )
+            error_text = "Произошла ошибка при подключении к поддержке. Пожалуйста, попробуйте позже."
+            await message.answer(error_text)
+            
+            # Сохраняем ответ бота об ошибке
+            if self.session_manager and session_id:
+                try:
+                    await self.session_manager.save_bot_message(
+                        session_id=session_id,
+                        message_text=error_text
+                    )
+                except Exception as save_error:
+                    logger.error(
+                        "failed_to_save_bot_response",
+                        session_id=session_id,
+                        error=str(save_error)
+                    )
     
-    async def handle_support_message(self, message: Message, state: FSMContext) -> None:
+    async def handle_support_message(self, message: Message, state: FSMContext, session_id: Optional[int] = None) -> None:
         """
         Обрабатывает сообщение в режиме поддержки
         
@@ -191,7 +224,7 @@ class SupportHandler:
                 "Произошла ошибка при сохранении сообщения. Пожалуйста, попробуйте ещё раз."
             )
     
-    async def end_support(self, message: Message, state: FSMContext) -> None:
+    async def end_support(self, message: Message, state: FSMContext, session_id: Optional[int] = None) -> None:
         """
         Завершает сессию поддержки
         
@@ -230,10 +263,25 @@ class SupportHandler:
             await state.clear()
             
             # Удаление клавиатуры и отправка подтверждения
+            response_text = "Диалог завершён. Спасибо за обращение!"
             await message.answer(
-                "Диалог завершён. Спасибо за обращение!",
+                response_text,
                 reply_markup=ReplyKeyboardRemove()
             )
+            
+            # Сохраняем ответ бота
+            if self.session_manager and session_id:
+                try:
+                    await self.session_manager.save_bot_message(
+                        session_id=session_id,
+                        message_text=response_text
+                    )
+                except Exception as e:
+                    logger.error(
+                        "failed_to_save_bot_response",
+                        session_id=session_id,
+                        error=str(e)
+                    )
             
             logger.info(
                 "support_session_cleanup_complete",
@@ -249,7 +297,23 @@ class SupportHandler:
             )
             # Всё равно очищаем состояние
             await state.clear()
+            
+            error_text = "Диалог завершён."
             await message.answer(
-                "Диалог завершён.",
+                error_text,
                 reply_markup=ReplyKeyboardRemove()
             )
+            
+            # Сохраняем ответ бота
+            if self.session_manager and session_id:
+                try:
+                    await self.session_manager.save_bot_message(
+                        session_id=session_id,
+                        message_text=error_text
+                    )
+                except Exception as save_error:
+                    logger.error(
+                        "failed_to_save_bot_response",
+                        session_id=session_id,
+                        error=str(save_error)
+                    )

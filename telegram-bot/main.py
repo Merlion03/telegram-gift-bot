@@ -8,6 +8,7 @@ import signal
 import sys
 from aiogram import Bot, Dispatcher
 from aiogram.filters import Command, StateFilter
+from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import default_state
 from aiogram.types import Message
 import structlog
@@ -25,6 +26,10 @@ from handlers.support_handler import SupportHandler
 from services.google_sheets_service import GoogleSheetsService
 from services.prize_service import PrizeService
 from services.support_service import SupportService
+from services.session_manager import SessionManager
+
+# Импорт middleware
+from middleware.message_interceptor import MessageInterceptor
 
 # Импорт database
 from database.connection import DatabaseConnection
@@ -77,8 +82,14 @@ class BotApplication:
         # Инициализация диспетчера
         self.dp = Dispatcher(storage=storage)
         
-        # Инициализация подключения к БД
-        self.db_connection = DatabaseConnection(self.config.database.connection_url)
+        # Инициализация глобального подключения к БД
+        from database.connection import init_database
+        init_database(self.config.database.connection_url)
+        
+        # Получаем глобальное подключение для создания таблиц
+        from database.connection import get_database
+        self.db_connection = get_database()
+        
         # Создание таблиц если их нет (идемпотентная операция)
         await self.db_connection.create_tables()
         logger.info("database_connection_initialized")
@@ -91,16 +102,25 @@ class BotApplication:
         
         prize_service = PrizeService(google_sheets_service)
         
-        support_repository = SupportRepository(self.db_connection)
+        # SupportRepository работает с глобальным подключением через get_database()
+        # Передаём None, чтобы использовать глобальное подключение
+        support_repository = SupportRepository(None)
         support_service = SupportService(support_repository)
         
+        # Создание SessionManager для автоматического сохранения диалогов
+        session_manager = SessionManager(support_repository)
+        
         # Создание handlers
-        common_handler = CommonHandler()
+        common_handler = CommonHandler(session_manager)
         prize_handler = PrizeHandler(
             prize_service=prize_service,
-            webapp_url=self.config.app.webapp_url
+            webapp_url=self.config.app.webapp_url,
+            session_manager=session_manager
         )
-        support_handler = SupportHandler(support_service)
+        support_handler = SupportHandler(support_service, session_manager)
+        
+        # Регистрация middleware (должна быть ДО регистрации handlers)
+        self._register_middleware(session_manager)
         
         # Регистрация handlers
         self._register_handlers(common_handler, prize_handler, support_handler)
@@ -109,6 +129,25 @@ class BotApplication:
         setup_error_handlers(self.dp)
         
         logger.info("bot_setup_completed")
+    
+    def _register_middleware(self, session_manager: SessionManager):
+        """
+        Регистрирует middleware в диспетчере
+        
+        Middleware выполняются в порядке регистрации, поэтому MessageInterceptor
+        регистрируется первым для перехвата всех сообщений до обработчиков.
+        
+        Args:
+            session_manager: Менеджер сессий для MessageInterceptor
+        """
+        # Создание MessageInterceptor
+        message_interceptor = MessageInterceptor(session_manager)
+        
+        # Регистрация middleware для всех входящих сообщений
+        # Middleware выполняется ДО всех handlers
+        self.dp.message.middleware(message_interceptor)
+        
+        logger.info("middleware_registered")
     
     def _register_handlers(
         self,
@@ -125,35 +164,53 @@ class BotApplication:
             support_handler: Обработчик поддержки
         """
         # Регистрация обработчиков общих команд
+        # Обёртки для передачи session_id из middleware context
+        async def handle_start_wrapper(message: Message, **kwargs):
+            session_id = kwargs.get('session_id')
+            await common_handler.handle_start(message, session_id)
+        
+        async def handle_help_wrapper(message: Message, **kwargs):
+            session_id = kwargs.get('session_id')
+            await common_handler.handle_help(message, session_id)
+        
         self.dp.message.register(
-            common_handler.handle_start,
+            handle_start_wrapper,
             Command(commands=['start'])
         )
         
         self.dp.message.register(
-            common_handler.handle_help,
+            handle_help_wrapper,
             Command(commands=['help'])
         )
         
         # Регистрация обработчика кнопки "Позвать человека"
         # Эта кнопка запускает режим поддержки
+        async def start_support_wrapper(message: Message, state: FSMContext, **kwargs):
+            session_id = kwargs.get('session_id')
+            await support_handler.start_support(message, state, session_id)
+        
         self.dp.message.register(
-            support_handler.start_support,
+            start_support_wrapper,
             lambda message: message.text == "Позвать человека",
             StateFilter(default_state)  # Только когда не в режиме поддержки
         )
         
         # Регистрация обработчиков режима поддержки
         # Обработка всех сообщений в состоянии поддержки
+        async def handle_support_message_wrapper(message: Message, state: FSMContext, **kwargs):
+            session_id = kwargs.get('session_id')
+            await support_handler.handle_support_message(message, state, session_id)
+        
         self.dp.message.register(
-            support_handler.handle_support_message,
+            handle_support_message_wrapper,
             StateFilter(SupportStates.in_support)
         )
         
         # Обёртка для обработки кодовых слов (нужна для async вызова)
-        async def handle_code_word_wrapper(message: Message):
+        async def handle_code_word_wrapper(message: Message, **kwargs):
             """Обёртка для вызова handle_code_word с await"""
-            await prize_handler.handle_code_word(message, message.text)
+            session_id = kwargs.get('session_id')
+            await prize_handler.handle_code_word(message, message.text, session_id)
         
         # Регистрация обработчика кодовых слов (все остальные текстовые сообщения)
         # Этот обработчик срабатывает только вне режима поддержки

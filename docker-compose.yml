@@ -69,6 +69,10 @@ services:
     build:
       context: ./nextjs-app
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+        NEXT_PUBLIC_WEBAPP_URL: ${WEBAPP_URL:-http://localhost:3000}
     container_name: telegram-webapp
     restart: unless-stopped
     depends_on:
@@ -87,9 +91,16 @@ services:
       # Database Configuration (для Supabase или прямого подключения)
       DATABASE_URL: postgresql://${DB_USER:-botuser}:${DB_PASSWORD:-changeme}@postgres:5432/${DB_NAME:-telegram_bot}
       
+      # PostgreSQL переменные для DatabaseClient
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${DB_NAME:-telegram_bot}
+      POSTGRES_USER: ${DB_USER:-botuser}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      
       # Supabase Configuration (если используется)
-      NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_URL:-}
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
       
       # Google Sheets Configuration

@@ -48,8 +48,11 @@ describe('Middleware - Content Security Policy', () => {
      * 
      * CSP должен запрещать выполнение inline скриптов
      * для защиты от XSS-атак
+     * 
+     * Примечание: Используем путь '/' для проверки строгой CSP.
+     * Пути /login и /admin используют мягкую CSP для Next.js hydration.
      */
-    const request = new NextRequest(new URL('https://example.com/admin'));
+    const request = new NextRequest(new URL('https://example.com/'));
     const response = await middleware(request);
     
     const cspHeader = response.headers.get('Content-Security-Policy');
@@ -73,8 +76,11 @@ describe('Middleware - Content Security Policy', () => {
      * Requirement 12.4: Запрет внешних источников
      * 
      * CSP должен разрешать загрузку скриптов только с того же origin
+     * 
+     * Примечание: Используем путь '/' для проверки строгой CSP.
+     * Пути /login и /admin используют мягкую CSP для Next.js hydration.
      */
-    const request = new NextRequest(new URL('https://example.com/admin'));
+    const request = new NextRequest(new URL('https://example.com/'));
     const response = await middleware(request);
     
     const cspHeader = response.headers.get('Content-Security-Policy');
@@ -97,8 +103,11 @@ describe('Middleware - Content Security Policy', () => {
      * 
      * Middleware должен добавлять дополнительные заголовки
      * для комплексной защиты
+     * 
+     * Примечание: Используем путь '/' для проверки строгой CSP.
+     * Пути /login и /admin используют мягкую CSP и не имеют X-Frame-Options.
      */
-    const request = new NextRequest(new URL('https://example.com/admin'));
+    const request = new NextRequest(new URL('https://example.com/'));
     const response = await middleware(request);
     
     // X-Frame-Options: защита от clickjacking
@@ -124,8 +133,11 @@ describe('Middleware - Content Security Policy', () => {
      * Requirement 12.4: Защита от clickjacking
      * 
      * CSP должен запрещать загрузку страницы в iframe
+     * 
+     * Примечание: Используем путь '/' для проверки строгой CSP.
+     * Пути /login и /admin используют мягкую CSP с frame-ancestors для Telegram.
      */
-    const request = new NextRequest(new URL('https://example.com/admin'));
+    const request = new NextRequest(new URL('https://example.com/'));
     const response = await middleware(request);
     
     const cspHeader = response.headers.get('Content-Security-Policy');

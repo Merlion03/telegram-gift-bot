@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from aiogram.types import Message, User, Chat, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
-from datetime import datetime
+from datetime import datetime, timezone
 
 from handlers.support_handler import SupportHandler
 from services.support_service import SupportService
@@ -74,11 +74,11 @@ class MockRepository(SupportRepository):
         self.next_session_id += 1
         
         session = SupportSession(
-            id=session_id,
             telegram_id=telegram_id,
             status='active',
-            created_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc)
         )
+        session.id = session_id
         self.sessions[session_id] = session
         
         return session_id
@@ -99,15 +99,15 @@ class MockRepository(SupportRepository):
         self.next_message_id += 1
         
         message = SupportMessage(
-            id=message_id,
             session_id=session_id,
             telegram_id=telegram_id,
             message_type=message_type,
             message_text=message_text,
             file_id=file_id,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
             delivered=False
         )
+        message.id = message_id
         
         if session_id not in self.messages:
             self.messages[session_id] = []

@@ -100,11 +100,11 @@ async def test_property_3_prize_claimed_marking(
         assert call_args[0][0] == row_id  # row_id
         assert call_args[0][1] == code_word  # worksheet_name
         
-        # Проверяем, что claimed_at содержит валидную дату ISO
+        # Проверяем, что claimed_at содержит валидную дату в формате ДД.ММ.ГГГГ ЧЧ:ММ:СС
         claimed_at = call_args[0][2]
         assert isinstance(claimed_at, str)
-        # Проверяем, что это валидная ISO дата
-        datetime.fromisoformat(claimed_at)
+        # Проверяем, что это валидная дата в формате ДД.ММ.ГГГГ ЧЧ:ММ:СС
+        datetime.strptime(claimed_at, '%d.%m.%Y %H:%M:%S')
 
 
 # ============================================================================
@@ -251,7 +251,7 @@ async def test_mark_prize_claimed_sync(prize_service, mock_sheets_service):
         mock_sheets_service.spreadsheet_id
     )
     mock_sheet.worksheet.assert_called_once_with(worksheet_name)
-    mock_worksheet.update_cell.assert_called_once_with(row_id, 9, claimed_at)
+    mock_worksheet.update_cell.assert_called_once_with(row_id, 14, claimed_at)
 
 
 @pytest.mark.asyncio

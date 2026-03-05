@@ -159,7 +159,7 @@ async def test_integration_digital_prize_full_flow():
     mock_worksheet.update_cell.assert_called_once()
     call_args = mock_worksheet.update_cell.call_args[0]
     assert call_args[0] == 2, "Должна обновляться строка 2"
-    assert call_args[1] == 9, "Должен обновляться столбец I (claimed_at)"
+    assert call_args[1] == 14, "Должен обновляться столбец N (claimed_at)"
     
     # 4. Проверяем, что пользователю было отправлено сообщение
     assert mock_message.answer.called, "Пользователю должно быть отправлено сообщение"
@@ -248,8 +248,13 @@ async def test_integration_physical_prize_with_delivery_data_full_flow():
     
     # Act Part 2: симулируем заполнение формы и сохранение данных
     delivery_data = {
-        'full_name': 'Иван Иванов',
-        'address': 'г. Москва, ул. Тестовая, д. 1, кв. 10',
+        'last_name': 'Иванов',
+        'first_name': 'Иван',
+        'patronymic': 'Иванович',
+        'city': 'Москва',
+        'street': 'ул. Тестовая',
+        'house': '1',
+        'apartment': '10',
         'phone': '+79991234567',
         'comment': 'Доставка после 18:00',
         'telegram_id': telegram_id
@@ -272,24 +277,39 @@ async def test_integration_physical_prize_with_delivery_data_full_flow():
     
     # 8. Проверяем структуру обновлений
     updates = mock_worksheet.batch_update.call_args[0][0]
-    assert len(updates) == 4, "Должно быть 4 обновления (ФИО, адрес, телефон, комментарий)"
+    assert len(updates) == 9, "Должно быть 9 обновлений (все поля доставки E-M)"
     
-    # Проверяем, что обновляются правильные ячейки
+    # Проверяем, что обновляются правильные ячейки (E-M)
     ranges = [update['range'] for update in updates]
-    assert f'D{row_id}' in ranges, "Должна обновляться ячейка D (ФИО)"
-    assert f'E{row_id}' in ranges, "Должна обновляться ячейка E (адрес)"
-    assert f'F{row_id}' in ranges, "Должна обновляться ячейка F (телефон)"
-    assert f'G{row_id}' in ranges, "Должна обновляться ячейка G (комментарий)"
+    assert f'E{row_id}' in ranges, "Должна обновляться ячейка E (last_name)"
+    assert f'F{row_id}' in ranges, "Должна обновляться ячейка F (first_name)"
+    assert f'G{row_id}' in ranges, "Должна обновляться ячейка G (patronymic)"
+    assert f'H{row_id}' in ranges, "Должна обновляться ячейка H (city)"
+    assert f'I{row_id}' in ranges, "Должна обновляться ячейка I (street)"
+    assert f'J{row_id}' in ranges, "Должна обновляться ячейка J (house)"
+    assert f'K{row_id}' in ranges, "Должна обновляться ячейка K (apartment)"
+    assert f'L{row_id}' in ranges, "Должна обновляться ячейка L (phone)"
+    assert f'M{row_id}' in ranges, "Должна обновляться ячейка M (comment)"
     
     # Проверяем содержимое обновлений
     for update in updates:
-        if update['range'] == f'D{row_id}':
-            assert update['values'][0][0] == 'Иван Иванов'
-        elif update['range'] == f'E{row_id}':
-            assert update['values'][0][0] == 'г. Москва, ул. Тестовая, д. 1, кв. 10'
+        if update['range'] == f'E{row_id}':
+            assert update['values'][0][0] == 'Иванов'
         elif update['range'] == f'F{row_id}':
-            assert update['values'][0][0] == '+79991234567'
+            assert update['values'][0][0] == 'Иван'
         elif update['range'] == f'G{row_id}':
+            assert update['values'][0][0] == 'Иванович'
+        elif update['range'] == f'H{row_id}':
+            assert update['values'][0][0] == 'Москва'
+        elif update['range'] == f'I{row_id}':
+            assert update['values'][0][0] == 'ул. Тестовая'
+        elif update['range'] == f'J{row_id}':
+            assert update['values'][0][0] == '1'
+        elif update['range'] == f'K{row_id}':
+            assert update['values'][0][0] == '10'
+        elif update['range'] == f'L{row_id}':
+            assert update['values'][0][0] == '+79991234567'
+        elif update['range'] == f'M{row_id}':
             assert update['values'][0][0] == 'Доставка после 18:00'
 
 

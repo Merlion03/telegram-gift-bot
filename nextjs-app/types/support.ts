@@ -5,19 +5,23 @@
 // Статус сессии поддержки
 export type SupportSessionStatus = 'active' | 'closed';
 
+// Тип сессии
+export type SessionType = 'chat' | 'support';
+
 // Тип сообщения
-export type MessageType = 'from_user' | 'from_support';
+export type MessageType = 'from_user' | 'from_support' | 'from_bot';
 
 // Сессия поддержки
 export interface SupportSession {
   id: number;
   telegram_id: number;
   status: SupportSessionStatus;
+  session_type: SessionType; // Тип сессии: обычный диалог или поддержка
   created_at: string; // ISO 8601 timestamp
   closed_at?: string; // ISO 8601 timestamp
   unread_count?: number; // Количество непрочитанных сообщений
   last_message?: string; // Текст последнего сообщения
-  last_message_at?: string; // Время последнего сообщения
+  last_message_at?: string; // Время последнего сообщения (ISO 8601 timestamp)
 }
 
 // Сообщение поддержки
@@ -44,6 +48,7 @@ export interface CreateMessageData {
 // Параметры для получения списка сессий
 export interface GetSessionsParams {
   status?: SupportSessionStatus;
+  session_type?: SessionType; // Фильтр по типу сессии
   page?: number;
   limit?: number;
 }

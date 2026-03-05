@@ -302,14 +302,19 @@ async def test_missing_promo_code_for_digital_prize(google_sheets_service):
 
 @given(
     row_id=st.integers(min_value=2, max_value=1000),
-    full_name=st.text(min_size=5, max_size=100, alphabet=st.characters(whitelist_categories=('Lu', 'Ll', 'Zs'))),
-    address=st.text(min_size=10, max_size=200, alphabet=st.characters(whitelist_categories=('Lu', 'Ll', 'Nd', 'Zs', 'Po'))),
+    last_name=st.text(min_size=2, max_size=50, alphabet=st.characters(whitelist_categories=('Lu', 'Ll'))),
+    first_name=st.text(min_size=2, max_size=50, alphabet=st.characters(whitelist_categories=('Lu', 'Ll'))),
+    patronymic=st.text(min_size=0, max_size=50, alphabet=st.characters(whitelist_categories=('Lu', 'Ll'))),
+    city=st.text(min_size=2, max_size=100, alphabet=st.characters(whitelist_categories=('Lu', 'Ll', 'Zs'))),
+    street=st.text(min_size=5, max_size=100, alphabet=st.characters(whitelist_categories=('Lu', 'Ll', 'Nd', 'Zs', 'Po'))),
+    house=st.text(min_size=1, max_size=10, alphabet=st.characters(min_codepoint=48, max_codepoint=90)),  # 0-9, A-Z
+    apartment=st.text(min_size=0, max_size=10, alphabet=st.characters(min_codepoint=48, max_codepoint=57)),  # 0-9
     phone=st.from_regex(r'^\+?[0-9]{10,15}$', fullmatch=True),
     comment=st.text(max_size=500, alphabet=st.characters(whitelist_categories=('Lu', 'Ll', 'Nd', 'Zs', 'Po')))
 )
 @settings(max_examples=100, deadline=None)
 @pytest.mark.asyncio
-async def test_property_8_round_trip_delivery_data(row_id, full_name, address, phone, comment):
+async def test_property_8_round_trip_delivery_data(row_id, last_name, first_name, patronymic, city, street, house, apartment, phone, comment):
     """
     Property 8: Round-trip сохранения данных доставки
     Feature: telegram-bot-webapp-system, Property 8
@@ -360,10 +365,15 @@ async def test_property_8_round_trip_delivery_data(row_id, full_name, address, p
             
             mock_worksheet.batch_update.side_effect = mock_batch_update
             
-            # Подготавливаем данные доставки
+            # Подготавливаем данные доставки (новая структура)
             delivery_data = {
-                'full_name': full_name,
-                'address': address,
+                'last_name': last_name,
+                'first_name': first_name,
+                'patronymic': patronymic,
+                'city': city,
+                'street': street,
+                'house': house,
+                'apartment': apartment,
                 'phone': phone,
                 'comment': comment,
                 'telegram_id': 12345
@@ -375,17 +385,27 @@ async def test_property_8_round_trip_delivery_data(row_id, full_name, address, p
             # Assert: проверяем успешность сохранения
             assert result is True, "Сохранение должно быть успешным"
             
-            # Проверяем, что данные были сохранены в правильные ячейки
-            assert f'D{row_id}' in saved_data, "ФИО должно быть сохранено в столбец D"
-            assert f'E{row_id}' in saved_data, "Адрес должен быть сохранён в столбец E"
-            assert f'F{row_id}' in saved_data, "Телефон должен быть сохранён в столбец F"
-            assert f'G{row_id}' in saved_data, "Комментарий должен быть сохранён в столбец G"
+            # Проверяем, что данные были сохранены в правильные ячейки (E-M)
+            assert f'E{row_id}' in saved_data, "Фамилия должна быть сохранена в столбец E"
+            assert f'F{row_id}' in saved_data, "Имя должно быть сохранено в столбец F"
+            assert f'G{row_id}' in saved_data, "Отчество должно быть сохранено в столбец G"
+            assert f'H{row_id}' in saved_data, "Город должен быть сохранён в столбец H"
+            assert f'I{row_id}' in saved_data, "Улица должна быть сохранена в столбец I"
+            assert f'J{row_id}' in saved_data, "Дом должен быть сохранён в столбец J"
+            assert f'K{row_id}' in saved_data, "Квартира должна быть сохранена в столбец K"
+            assert f'L{row_id}' in saved_data, "Телефон должен быть сохранён в столбец L"
+            assert f'M{row_id}' in saved_data, "Комментарий должен быть сохранён в столбец M"
             
             # Round-trip проверка: сохранённые данные должны совпадать с исходными
-            assert saved_data[f'D{row_id}'] == full_name, "ФИО должно совпадать после сохранения"
-            assert saved_data[f'E{row_id}'] == address, "Адрес должен совпадать после сохранения"
-            assert saved_data[f'F{row_id}'] == phone, "Телефон должен совпадать после сохранения"
-            assert saved_data[f'G{row_id}'] == comment, "Комментарий должен совпадать после сохранения"
+            assert saved_data[f'E{row_id}'] == last_name, "Фамилия должна совпадать после сохранения"
+            assert saved_data[f'F{row_id}'] == first_name, "Имя должно совпадать после сохранения"
+            assert saved_data[f'G{row_id}'] == patronymic, "Отчество должно совпадать после сохранения"
+            assert saved_data[f'H{row_id}'] == city, "Город должен совпадать после сохранения"
+            assert saved_data[f'I{row_id}'] == street, "Улица должна совпадать после сохранения"
+            assert saved_data[f'J{row_id}'] == house, "Дом должен совпадать после сохранения"
+            assert saved_data[f'K{row_id}'] == apartment, "Квартира должна совпадать после сохранения"
+            assert saved_data[f'L{row_id}'] == phone, "Телефон должен совпадать после сохранения"
+            assert saved_data[f'M{row_id}'] == comment, "Комментарий должен совпадать после сохранения"
             
             # Проверяем, что batch_update был вызван один раз
             mock_worksheet.batch_update.assert_called_once()

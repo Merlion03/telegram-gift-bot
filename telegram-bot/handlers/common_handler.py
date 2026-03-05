@@ -3,6 +3,7 @@
 Обрабатывает команды /start, /help и кнопку "Позвать человека".
 """
 
+from typing import Optional
 from aiogram import Router
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import Command
@@ -17,16 +18,23 @@ router = Router()
 class CommonHandler:
     """Обработчик общих команд"""
     
-    def __init__(self):
-        """Инициализирует обработчик общих команд"""
+    def __init__(self, session_manager=None):
+        """
+        Инициализирует обработчик общих команд
+        
+        Args:
+            session_manager: Менеджер сессий для сохранения ответов бота (опционально)
+        """
+        self.session_manager = session_manager
         logger.info("common_handler_initialized")
     
-    async def handle_start(self, message: Message) -> None:
+    async def handle_start(self, message: Message, session_id: Optional[int] = None) -> None:
         """
         Обрабатывает команду /start
         
         Args:
             message: Сообщение от пользователя
+            session_id: ID сессии из middleware (опционально)
         """
         telegram_id = message.from_user.id
         username = message.from_user.username or message.from_user.first_name
@@ -55,17 +63,32 @@ class CommonHandler:
         
         await message.answer(welcome_text, reply_markup=keyboard)
         
+        # Сохраняем ответ бота, если есть session_manager и session_id
+        if self.session_manager and session_id:
+            try:
+                await self.session_manager.save_bot_message(
+                    session_id=session_id,
+                    message_text=welcome_text
+                )
+            except Exception as e:
+                logger.error(
+                    "failed_to_save_bot_response",
+                    session_id=session_id,
+                    error=str(e)
+                )
+        
         logger.info(
             "start_command_handled",
             telegram_id=telegram_id
         )
     
-    async def handle_help(self, message: Message) -> None:
+    async def handle_help(self, message: Message, session_id: Optional[int] = None) -> None:
         """
         Обрабатывает команду /help
         
         Args:
             message: Сообщение от пользователя
+            session_id: ID сессии из middleware (опционально)
         """
         telegram_id = message.from_user.id
         
@@ -89,6 +112,20 @@ class CommonHandler:
         )
         
         await message.answer(help_text)
+        
+        # Сохраняем ответ бота, если есть session_manager и session_id
+        if self.session_manager and session_id:
+            try:
+                await self.session_manager.save_bot_message(
+                    session_id=session_id,
+                    message_text=help_text
+                )
+            except Exception as e:
+                logger.error(
+                    "failed_to_save_bot_response",
+                    session_id=session_id,
+                    error=str(e)
+                )
         
         logger.info(
             "help_command_handled",

@@ -282,9 +282,9 @@ describe('ChatWindow Property-Based Tests', () => {
             expect(screen.queryByText(/Загрузка сообщений/i)).not.toBeInTheDocument();
           });
 
-          // Assert: проверяем, что API был вызван с правильным session_id
+          // Assert: проверяем, что API был вызван с правильным URL
           expect(global.fetch).toHaveBeenCalledWith(
-            expect.stringContaining(`session_id=${session.id}`)
+            expect.stringContaining(`/api/support/sessions/${session.id}/messages`)
           );
 
           // Проверяем, что все сообщения загружены

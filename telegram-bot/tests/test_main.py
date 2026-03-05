@@ -39,6 +39,7 @@ class TestBotApplication:
              patch('main.PrizeService'), \
              patch('main.SupportRepository'), \
              patch('main.SupportService'), \
+             patch('main.SessionManager'), \
              patch('main.CommonHandler'), \
              patch('main.PrizeHandler'), \
              patch('main.SupportHandler'), \
@@ -58,7 +59,7 @@ class TestBotApplication:
             mock_storage.return_value = Mock()
             
             mock_db_instance = Mock()
-            mock_db_instance.init = AsyncMock()
+            mock_db_instance.create_tables = AsyncMock()
             mock_db_conn.return_value = mock_db_instance
             
             # Создание и настройка приложения
@@ -71,8 +72,8 @@ class TestBotApplication:
             assert app.dp is not None
             assert app.db_connection is not None
             
-            # Проверяем, что init БД был вызван
-            mock_db_instance.init.assert_called_once()
+            # Проверяем, что create_tables БД был вызван
+            mock_db_instance.create_tables.assert_called_once()
     
     @pytest.mark.asyncio
     async def test_register_handlers_called(self):
@@ -89,6 +90,7 @@ class TestBotApplication:
              patch('main.PrizeService'), \
              patch('main.SupportRepository'), \
              patch('main.SupportService'), \
+             patch('main.SessionManager'), \
              patch('main.CommonHandler') as mock_common, \
              patch('main.PrizeHandler') as mock_prize, \
              patch('main.SupportHandler') as mock_support, \
@@ -108,13 +110,14 @@ class TestBotApplication:
             mock_storage.return_value = Mock()
             
             mock_db_instance = Mock()
-            mock_db_instance.init = AsyncMock()
+            mock_db_instance.create_tables = AsyncMock()
             mock_db_conn.return_value = mock_db_instance
             
             # Мокаем dispatcher
             mock_dp_instance = Mock()
             mock_dp_instance.message = Mock()
             mock_dp_instance.message.register = Mock()
+            mock_dp_instance.message.middleware = Mock()
             mock_dispatcher.return_value = mock_dp_instance
             
             # Создание и настройка приложения

@@ -222,7 +222,8 @@ describe('Middleware Authentication - Unit Tests', () => {
     it('должен добавлять CSP заголовки для авторизованных пользователей', async () => {
       getToken.mockResolvedValue({ id: '1', name: 'admin' });
 
-      const request = new NextRequest(new URL('http://localhost:3000/admin'));
+      // Используем /api/support вместо /admin, так как /admin теперь использует мягкую CSP
+      const request = new NextRequest(new URL('http://localhost:3000/api/support'));
       
       const { middleware } = await import('../middleware');
       const response = await middleware(request);

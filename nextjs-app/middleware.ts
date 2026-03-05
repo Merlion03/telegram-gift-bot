@@ -173,19 +173,27 @@ export async function middleware(request: NextRequest) {
   const response = NextResponse.next();
   
   // Применяем роут-специфичную CSP политику (Requirement 12.4)
-  // Для /webapp используем более мягкую политику, разрешающую Telegram WebApp SDK
+  // Для /webapp, /login и /admin используем более мягкую политику с 'unsafe-inline'
+  // Это необходимо для корректной работы Next.js hydration и Client Components
   // Для всех остальных роутов используем строгую CSP для защиты от XSS
-  const cspHeader = pathname === '/webapp' 
-    ? buildWebAppCSPHeader()  // Мягкая CSP для Telegram WebApp
+  const needsRelaxedCSP = 
+    pathname === '/webapp' || pathname.startsWith('/webapp/') ||
+    pathname === '/login' || pathname.startsWith('/login/') ||
+    pathname === '/admin' || pathname.startsWith('/admin/');
+  
+  const cspHeader = needsRelaxedCSP
+    ? buildWebAppCSPHeader()  // Мягкая CSP для /webapp, /login, /admin
     : buildCSPHeader();        // Строгая CSP для остальных роутов
+  
   response.headers.set('Content-Security-Policy', cspHeader);
   
   // Дополнительные заголовки безопасности
   
   // X-Frame-Options: защита от clickjacking
-  // Для /webapp не устанавливаем этот заголовок, чтобы разрешить встраивание в Telegram iframe
+  // Для роутов с мягкой CSP (/webapp, /login, /admin) не устанавливаем этот заголовок,
+  // так как они используют frame-ancestors в CSP
   // Для всех остальных роутов применяем DENY для защиты от clickjacking атак
-  if (pathname !== '/webapp') {
+  if (!needsRelaxedCSP) {
     response.headers.set('X-Frame-Options', 'DENY');
   }
   

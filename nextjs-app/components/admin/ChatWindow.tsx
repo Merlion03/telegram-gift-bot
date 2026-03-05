@@ -2,7 +2,8 @@
  * ChatWindow - компонент окна переписки с пользователем
  * Отображает историю сообщений с real-time обновлениями
  * Позволяет отправлять ответы пользователю
- * Requirements: 7.2, 7.3, 7.5, 8.1
+ * Поддерживает работу с Chat_Session и Support_Session
+ * Requirements: 4.1, 4.2, 4.3, 7.2, 7.3, 7.5, 8.1
  */
 
 'use client';
@@ -18,15 +19,23 @@ interface ChatWindowProps {
 
 /**
  * Компонент окна чата с пользователем
- * Requirements: 7.2, 7.3, 7.5, 8.1
+ * Поддерживает работу с Chat_Session и Support_Session
+ * Requirements: 4.1, 4.2, 4.3, 7.2, 7.3, 7.5, 8.1
  */
 export function ChatWindow({ session }: ChatWindowProps) {
   const [messages, setMessages] = useState<SupportMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [currentSessionType, setCurrentSessionType] = useState<'chat' | 'support'>(session.session_type);
+  const [hasMore, setHasMore] = useState(false);
+  const [totalMessages, setTotalMessages] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const MESSAGES_PER_PAGE = 50;
 
   // Загрузка истории сообщений при изменении сессии
   useEffect(() => {
@@ -66,29 +75,53 @@ export function ChatWindow({ session }: ChatWindowProps) {
 
   /**
    * Загружает историю сообщений с сервера
-   * Requirements: 7.5
+   * Использует новый API endpoint для получения истории с пагинацией
+   * Requirements: 3.4, 7.3, 7.5
    */
-  const loadMessages = async () => {
-    setIsLoading(true);
+  const loadMessages = async (offset: number = 0, append: boolean = false) => {
+    if (append) {
+      setIsLoadingMore(true);
+    } else {
+      setIsLoading(true);
+    }
     setError(null);
 
     try {
-      const response = await fetch(`/api/support/messages?session_id=${session.id}`);
+      const url = `/api/support/sessions/${session.id}/messages?limit=${MESSAGES_PER_PAGE}&offset=${offset}`;
+      const response = await fetch(url);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
       const data = await response.json();
-      setMessages(data.messages || []);
       
-      // Скроллим к последнему сообщению после загрузки
-      setTimeout(scrollToBottom, 100);
+      if (append) {
+        // Добавляем новые сообщения к существующим (для infinite scroll)
+        setMessages(prev => [...data.messages, ...prev]);
+      } else {
+        // Заменяем все сообщения (первая загрузка)
+        setMessages(data.messages || []);
+      }
+      
+      setTotalMessages(data.total || 0);
+      setHasMore(data.has_more || false);
+      
+      // Обновляем текущий тип сессии, если он изменился
+      if (data.session && data.session.session_type) {
+        setCurrentSessionType(data.session.session_type);
+      }
+      
+      // Скроллим к последнему сообщению после первой загрузки
+      if (!append) {
+        setTimeout(scrollToBottom, 100);
+      }
     } catch (err) {
       console.error('Ошибка загрузки сообщений:', err);
       setError(getReadableErrorMessage(err));
     } finally {
       setIsLoading(false);
+      setIsLoadingMore(false);
     }
   };
 
@@ -104,8 +137,87 @@ export function ChatWindow({ session }: ChatWindowProps) {
   };
 
   /**
-   * Отправляет ответ пользователю
-   * Requirements: 8.1
+   * Загружает предыдущие сообщения при скролле вверх
+   * Requirements: 7.3
+   */
+  const loadMoreMessages = async () => {
+    if (isLoadingMore || !hasMore) {
+      return;
+    }
+
+    const currentOffset = messages.length;
+    await loadMessages(currentOffset, true);
+  };
+
+  /**
+   * Обработчик скролла для infinite scroll
+   * Requirements: 7.3
+   */
+  const handleScroll = () => {
+    if (!messagesContainerRef.current || isLoadingMore || !hasMore) {
+      return;
+    }
+
+    const container = messagesContainerRef.current;
+    // Проверяем, достиг ли пользователь верха контейнера
+    if (container.scrollTop === 0) {
+      loadMoreMessages();
+    }
+  };
+
+  // Добавляем обработчик скролла
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    container.addEventListener('scroll', handleScroll);
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+    };
+  }, [messages.length, hasMore, isLoadingMore]);
+
+  /**
+   * Подключается к Chat_Session, преобразуя её в Support_Session
+   * Requirements: 4.1, 4.3
+   */
+  const handleConnectToChat = async () => {
+    setIsConnecting(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/support/sessions/${session.id}/convert`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Не удалось подключиться к диалогу');
+      }
+
+      const data = await response.json();
+
+      // Обновляем тип сессии
+      if (data.session && data.session.session_type) {
+        setCurrentSessionType(data.session.session_type);
+      }
+
+      // Перезагружаем сообщения
+      await loadMessages();
+    } catch (err) {
+      console.error('Ошибка подключения к диалогу:', err);
+      setError(getReadableErrorMessage(err));
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  /**
+   * Отправляет ответ пользователю через новый API endpoint
+   * Автоматически преобразует Chat_Session в Support_Session при первом сообщении
+   * Requirements: 4.2, 4.3, 8.1
    */
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,14 +230,12 @@ export function ChatWindow({ session }: ChatWindowProps) {
     setError(null);
 
     try {
-      const response = await fetch('/api/support/messages', {
+      const response = await fetch(`/api/support/sessions/${session.id}/messages`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          session_id: session.id,
-          telegram_id: session.telegram_id,
           message_text: newMessage.trim(),
         }),
       });
@@ -136,6 +246,11 @@ export function ChatWindow({ session }: ChatWindowProps) {
       }
 
       const data = await response.json();
+
+      // Обновляем тип сессии, если произошло автоматическое преобразование
+      if (data.session && data.session.session_type) {
+        setCurrentSessionType(data.session.session_type);
+      }
 
       // Добавляем отправленное сообщение в список
       if (data.message) {
@@ -232,20 +347,67 @@ export function ChatWindow({ session }: ChatWindowProps) {
             <h2 className="font-semibold text-gray-900">
               Пользователь: {session.telegram_id}
             </h2>
-            <p className="text-sm text-gray-500">
-              Сессия #{session.id} • {session.status === 'active' ? 'Активна' : 'Завершена'}
-            </p>
+            <div className="flex items-center gap-2 mt-1">
+              <p className="text-sm text-gray-500">
+                Сессия #{session.id}
+              </p>
+              <span className="text-gray-400">•</span>
+              <span className={`text-sm font-medium ${
+                currentSessionType === 'support' ? 'text-blue-600' : 'text-gray-600'
+              }`}>
+                {currentSessionType === 'support' ? 'Поддержка' : 'Обычный диалог'}
+              </span>
+              <span className="text-gray-400">•</span>
+              <span className={`text-sm ${
+                session.status === 'active' ? 'text-green-600' : 'text-gray-500'
+              }`}>
+                {session.status === 'active' ? 'Активна' : 'Завершена'}
+              </span>
+            </div>
           </div>
-          {session.status === 'active' && (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-              Онлайн
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {/* Кнопка подключения к Chat_Session (Requirements 4.1) */}
+            {currentSessionType === 'chat' && session.status === 'active' && (
+              <button
+                onClick={handleConnectToChat}
+                disabled={isConnecting}
+                className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {isConnecting ? 'Подключение...' : 'Подключиться к диалогу'}
+              </button>
+            )}
+            {session.status === 'active' && (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                Онлайн
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Список сообщений */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Индикатор загрузки предыдущих сообщений */}
+        {isLoadingMore && (
+          <div className="flex justify-center py-2">
+            <div className="text-sm text-gray-500 animate-pulse">
+              Загрузка предыдущих сообщений...
+            </div>
+          </div>
+        )}
+
+        {/* Индикатор наличия ещё сообщений */}
+        {hasMore && !isLoadingMore && messages.length > 0 && (
+          <div className="flex justify-center py-2">
+            <button
+              onClick={loadMoreMessages}
+              className="text-sm text-blue-600 hover:text-blue-800 underline"
+            >
+              Загрузить предыдущие сообщения ({totalMessages - messages.length} осталось)
+            </button>
+          </div>
+        )}
+
         {messageGroups.length === 0 ? (
           <div className="text-center text-gray-500 mt-8">
             <p>Нет сообщений</p>
@@ -262,45 +424,63 @@ export function ChatWindow({ session }: ChatWindowProps) {
               </div>
 
               {/* Сообщения группы */}
-              {group.messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex mb-3 ${
-                    message.message_type === 'from_support' ? 'justify-end' : 'justify-start'
-                  }`}
-                >
+              {group.messages.map((message) => {
+                // Определяем стиль в зависимости от типа сообщения (Requirements 4.1)
+                const isFromSupport = message.message_type === 'from_support';
+                const isFromBot = message.message_type === 'from_bot';
+                const isFromUser = message.message_type === 'from_user';
+
+                return (
                   <div
-                    className={`max-w-[70%] rounded-lg px-4 py-2 ${
-                      message.message_type === 'from_support'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-white text-gray-900 shadow-sm'
+                    key={message.id}
+                    className={`flex mb-3 ${
+                      isFromSupport ? 'justify-end' : 'justify-start'
                     }`}
                   >
-                    {/* Текст сообщения */}
-                    <p className="text-sm whitespace-pre-wrap break-words">
-                      {message.message_text}
-                    </p>
-
-                    {/* Метаданные сообщения */}
                     <div
-                      className={`flex items-center justify-end gap-2 mt-1 text-xs ${
-                        message.message_type === 'from_support'
-                          ? 'text-blue-100'
-                          : 'text-gray-500'
+                      className={`max-w-[70%] rounded-lg px-4 py-2 ${
+                        isFromSupport
+                          ? 'bg-blue-600 text-white'
+                          : isFromBot
+                          ? 'bg-purple-100 text-purple-900 border border-purple-200'
+                          : 'bg-white text-gray-900 shadow-sm'
                       }`}
                     >
-                      <span>{formatTime(message.created_at)}</span>
-                      
-                      {/* Индикатор доставки для сообщений от поддержки */}
-                      {message.message_type === 'from_support' && (
-                        <span className="ml-1">
-                          {message.delivered ? '✓✓' : '✓'}
-                        </span>
+                      {/* Метка отправителя для сообщений бота */}
+                      {isFromBot && (
+                        <div className="flex items-center gap-1 mb-1">
+                          <span className="text-xs font-semibold text-purple-700">🤖 Бот</span>
+                        </div>
                       )}
+
+                      {/* Текст сообщения */}
+                      <p className="text-sm whitespace-pre-wrap break-words">
+                        {message.message_text}
+                      </p>
+
+                      {/* Метаданные сообщения */}
+                      <div
+                        className={`flex items-center justify-end gap-2 mt-1 text-xs ${
+                          isFromSupport
+                            ? 'text-blue-100'
+                            : isFromBot
+                            ? 'text-purple-600'
+                            : 'text-gray-500'
+                        }`}
+                      >
+                        <span>{formatTime(message.created_at)}</span>
+                        
+                        {/* Индикатор доставки для сообщений от поддержки */}
+                        {isFromSupport && (
+                          <span className="ml-1">
+                            {message.delivered ? '✓✓' : '✓'}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ))
         )}

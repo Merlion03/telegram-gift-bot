@@ -4,7 +4,7 @@ Repository слой для работы с базой данных поддер�
 """
 import structlog
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import select, and_, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -14,6 +14,24 @@ from database.connection import get_database
 
 
 logger = structlog.get_logger(__name__)
+
+
+def sanitize_text(text: str) -> str:
+    """
+    Удаляет NUL bytes из текста для совместимости с PostgreSQL
+    
+    PostgreSQL text fields не могут содержать NUL (0x00) bytes.
+    Эта функция удаляет их из входного текста.
+    
+    Args:
+        text: Исходный текст
+    
+    Returns:
+        str: Текст без NUL bytes
+    """
+    if not text:
+        return text
+    return text.replace('\x00', '')
 
 
 class SupportRepository:
@@ -52,8 +70,7 @@ class SupportRepository:
         try:
             new_session = SupportSession(
                 telegram_id=telegram_id,
-                status='active',
-                created_at=datetime.utcnow()
+                status='active'
             )
             
             if self.session:
@@ -108,21 +125,23 @@ class SupportRepository:
             ValueError: Если message_type невалиден
             Exception: При ошибке сохранения
         """
-        if message_type not in ('from_user', 'from_support'):
+        if message_type not in ('from_user', 'from_support', 'from_bot'):
             raise ValueError(
                 f"Invalid message_type: {message_type}. "
-                "Must be 'from_user' or 'from_support'"
+                "Must be 'from_user', 'from_support', or 'from_bot'"
             )
         
         try:
+            # Санитизация текста от NUL bytes для совместимости с PostgreSQL
+            sanitized_text = sanitize_text(message_text)
+            sanitized_file_id = sanitize_text(file_id) if file_id else None
+            
             new_message = SupportMessage(
                 session_id=session_id,
                 telegram_id=telegram_id,
                 message_type=message_type,
-                message_text=message_text,
-                file_id=file_id,
-                created_at=datetime.utcnow(),
-                delivered=False
+                message_text=sanitized_text,
+                file_id=sanitized_file_id
             )
             
             if self.session:
@@ -443,3 +462,317 @@ class SupportRepository:
                 exc_info=True
             )
             raise
+    
+    async def update_session_type(
+        self,
+        session_id: int,
+        session_type: str
+    ) -> bool:
+        """
+        Обновляет тип сессии
+        
+        Args:
+            session_id: ID сессии
+            session_type: Новый тип ('chat' или 'support')
+        
+        Returns:
+            bool: True если успешно обновлено, False если сессия не найдена
+        
+        Raises:
+            ValueError: Если session_type невалиден
+            Exception: При ошибке обновления
+        """
+        if session_type not in ('chat', 'support'):
+            raise ValueError(
+                f"Invalid session_type: {session_type}. "
+                "Must be 'chat' or 'support'"
+            )
+        
+        try:
+            query = select(SupportSession).where(SupportSession.id == session_id)
+            
+            if self.session:
+                result = await self.session.execute(query)
+                support_session = result.scalar_one_or_none()
+                
+                if support_session:
+                    support_session.session_type = session_type
+                    await self.session.flush()
+            else:
+                db = get_database()
+                async with db.session() as session:
+                    result = await session.execute(query)
+                    support_session = result.scalar_one_or_none()
+                    
+                    if support_session:
+                        support_session.session_type = session_type
+            
+            if support_session:
+                logger.info(
+                    "session_type_updated",
+                    session_id=session_id,
+                    new_type=session_type
+                )
+                return True
+            else:
+                logger.warning("session_not_found", session_id=session_id)
+                return False
+                
+        except Exception as e:
+            logger.error(
+                "error_updating_session_type",
+                session_id=session_id,
+                session_type=session_type,
+                error=str(e),
+                exc_info=True
+            )
+            raise
+    
+    async def get_all_sessions(
+        self,
+        status: Optional[str] = None,
+        session_type: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: int = 0
+    ) -> List[SupportSession]:
+        """
+        Получает список всех сессий с фильтрацией
+        
+        Args:
+            status: Фильтр по статусу ('active' или 'closed'), None = все
+            session_type: Фильтр по типу ('chat' или 'support'), None = все
+            limit: Максимальное количество сессий (None = дефолтный лимит 50)
+            offset: Смещение для пагинации
+        
+        Returns:
+            List[SupportSession]: Список сессий, отсортированных по времени последнего сообщения (новые первыми)
+        
+        Raises:
+            ValueError: Если status или session_type невалидны
+            Exception: При ошибке получения сессий
+        """
+        if status is not None and status not in ('active', 'closed'):
+            raise ValueError(
+                f"Invalid status: {status}. "
+                "Must be 'active', 'closed', or None"
+            )
+        
+        if session_type is not None and session_type not in ('chat', 'support'):
+            raise ValueError(
+                f"Invalid session_type: {session_type}. "
+                "Must be 'chat', 'support', or None"
+            )
+        
+        try:
+            # Применяем дефолтный лимит 50 если не указан
+            effective_limit = limit if limit is not None else 50
+            
+            # Базовый запрос с eager loading сообщений для определения времени последнего сообщения
+            query = (
+                select(SupportSession)
+                .options(selectinload(SupportSession.messages))
+            )
+            
+            # Применяем фильтры
+            conditions = []
+            if status is not None:
+                conditions.append(SupportSession.status == status)
+            if session_type is not None:
+                conditions.append(SupportSession.session_type == session_type)
+            
+            if conditions:
+                query = query.where(and_(*conditions))
+            
+            # Сортировка по времени создания (будет уточнена после загрузки)
+            query = query.order_by(desc(SupportSession.created_at))
+            
+            # Пагинация
+            query = query.offset(offset).limit(effective_limit)
+            
+            if self.session:
+                result = await self.session.execute(query)
+            else:
+                db = get_database()
+                async with db.session() as session:
+                    result = await session.execute(query)
+            
+            sessions = result.scalars().all()
+            
+            # Сортируем по времени последнего сообщения
+            sessions_list = list(sessions)
+            sessions_list.sort(
+                key=lambda s: (
+                    max((m.created_at for m in s.messages), default=s.created_at)
+                ),
+                reverse=True
+            )
+            
+            logger.debug(
+                "all_sessions_retrieved",
+                count=len(sessions_list),
+                status=status,
+                session_type=session_type
+            )
+            return sessions_list
+            
+        except Exception as e:
+            logger.error(
+                "error_getting_all_sessions",
+                status=status,
+                session_type=session_type,
+                error=str(e),
+                exc_info=True
+            )
+            raise
+    
+    async def close_sessions_by_inactivity(
+        self,
+        inactive_hours: int
+    ) -> int:
+        """
+        Закрывает сессии без активности более указанного времени
+        
+        Args:
+            inactive_hours: Количество часов неактивности
+        
+        Returns:
+            int: Количество закрытых сессий
+        
+        Raises:
+            ValueError: Если inactive_hours невалиден
+            Exception: При ошибке закрытия сессий
+        """
+        if inactive_hours <= 0:
+            raise ValueError(
+                f"Invalid inactive_hours: {inactive_hours}. "
+                "Must be positive integer"
+            )
+        
+        try:
+            from datetime import timedelta
+            
+            # Вычисляем пороговое время
+            threshold_time = datetime.now(timezone.utc) - timedelta(hours=inactive_hours)
+            
+            # Получаем все активные сессии с сообщениями
+            query = (
+                select(SupportSession)
+                .where(SupportSession.status == 'active')
+                .options(selectinload(SupportSession.messages))
+            )
+            
+            if self.session:
+                result = await self.session.execute(query)
+                sessions = result.scalars().all()
+                
+                closed_count = 0
+                for session in sessions:
+                    last_activity = await self._get_last_activity_time(session)
+                    
+                    if last_activity < threshold_time:
+                        session.close()
+                        closed_count += 1
+                
+                await self.session.flush()
+            else:
+                db = get_database()
+                async with db.session() as session:
+                    result = await session.execute(query)
+                    sessions_list = result.scalars().all()
+                    
+                    closed_count = 0
+                    for support_session in sessions_list:
+                        last_activity = await self._get_last_activity_time(support_session)
+                        
+                        if last_activity < threshold_time:
+                            support_session.close()
+                            closed_count += 1
+            
+            logger.info(
+                "inactive_sessions_closed",
+                count=closed_count,
+                inactive_hours=inactive_hours
+            )
+            return closed_count
+            
+        except Exception as e:
+            logger.error(
+                "error_closing_inactive_sessions",
+                inactive_hours=inactive_hours,
+                error=str(e),
+                exc_info=True
+            )
+            raise
+    
+    async def get_session_last_activity(
+        self,
+        session_id: int
+    ) -> Optional[datetime]:
+        """
+        Получает время последней активности в сессии
+        
+        Args:
+            session_id: ID сессии
+        
+        Returns:
+            Optional[datetime]: Время последнего сообщения или время создания сессии,
+                               None если сессия не найдена
+        
+        Raises:
+            Exception: При ошибке получения времени активности
+        """
+        try:
+            query = (
+                select(SupportSession)
+                .where(SupportSession.id == session_id)
+                .options(selectinload(SupportSession.messages))
+            )
+            
+            if self.session:
+                result = await self.session.execute(query)
+            else:
+                db = get_database()
+                async with db.session() as session:
+                    result = await session.execute(query)
+            
+            support_session = result.scalar_one_or_none()
+            
+            if not support_session:
+                logger.debug("session_not_found", session_id=session_id)
+                return None
+            
+            last_activity = await self._get_last_activity_time(support_session)
+            
+            logger.debug(
+                "session_last_activity_retrieved",
+                session_id=session_id,
+                last_activity=last_activity
+            )
+            return last_activity
+            
+        except Exception as e:
+            logger.error(
+                "error_getting_session_last_activity",
+                session_id=session_id,
+                error=str(e),
+                exc_info=True
+            )
+            raise
+    
+    async def _get_last_activity_time(
+        self,
+        session: SupportSession
+    ) -> datetime:
+        """
+        Вспомогательный метод для получения времени последней активности
+        
+        Args:
+            session: Объект сессии с загруженными сообщениями
+        
+        Returns:
+            datetime: Время последнего сообщения или время создания сессии
+        """
+        if session.messages:
+            return max(message.created_at for message in session.messages)
+        return session.created_at
+
