@@ -10,6 +10,7 @@ import { getServerSession } from 'next-auth';
 import { GET, POST } from '../route';
 import { getDb } from '@/lib/database/client';
 import type { SupportSession, SupportMessage } from '@/types/support';
+import { createRouteParams } from '@/app/api/__tests__/test-utils';
 
 // Мокируем зависимости
 vi.mock('next-auth');
@@ -41,7 +42,7 @@ describe('GET /api/support/sessions/[id]/messages', () => {
     // Arrange
     vi.mocked(getServerSession).mockResolvedValue(null);
     const request = new NextRequest('http://localhost/api/support/sessions/1/messages');
-    const params = { params: { id: '1' } };
+    const params = createRouteParams({ id: '1' });
 
     // Act
     const response = await GET(request, params);
@@ -56,7 +57,7 @@ describe('GET /api/support/sessions/[id]/messages', () => {
     // Arrange
     vi.mocked(getServerSession).mockResolvedValue({ user: { email: 'admin@test.com' } } as any);
     const request = new NextRequest('http://localhost/api/support/sessions/invalid/messages');
-    const params = { params: { id: 'invalid' } };
+    const params = createRouteParams({ id: 'invalid' });
 
     // Act
     const response = await GET(request, params);
@@ -72,7 +73,7 @@ describe('GET /api/support/sessions/[id]/messages', () => {
     vi.mocked(getServerSession).mockResolvedValue({ user: { email: 'admin@test.com' } } as any);
     mockDb.getSession.mockResolvedValue(null);
     const request = new NextRequest('http://localhost/api/support/sessions/999/messages');
-    const params = { params: { id: '999' } };
+    const params = createRouteParams({ id: '999' });
 
     // Act
     const response = await GET(request, params);
@@ -109,7 +110,7 @@ describe('GET /api/support/sessions/[id]/messages', () => {
     mockDb.getMessages.mockResolvedValue(mockMessages.slice(0, 50)); // Имитируем limit
 
     const request = new NextRequest('http://localhost/api/support/sessions/1/messages?limit=50');
-    const params = { params: { id: '1' } };
+    const params = createRouteParams({ id: '1' });
 
     // Act
     const response = await GET(request, params);
@@ -173,7 +174,7 @@ describe('GET /api/support/sessions/[id]/messages', () => {
     mockDb.getMessages.mockResolvedValue(filteredMessages);
 
     const request = new NextRequest('http://localhost/api/support/sessions/1/messages');
-    const params = { params: { id: '1' } };
+    const params = createRouteParams({ id: '1' });
 
     // Act
     const response = await GET(request, params);
@@ -222,7 +223,7 @@ describe('GET /api/support/sessions/[id]/messages', () => {
     mockDb.getMessages.mockResolvedValue(mockMessages);
 
     const request = new NextRequest('http://localhost/api/support/sessions/1/messages?filter_commands=false');
-    const params = { params: { id: '1' } };
+    const params = createRouteParams({ id: '1' });
 
     // Act
     const response = await GET(request, params);
@@ -258,7 +259,7 @@ describe('POST /api/support/sessions/[id]/messages', () => {
       method: 'POST',
       body: JSON.stringify({ message_text: 'Test' }),
     });
-    const params = { params: { id: '1' } };
+    const params = createRouteParams({ id: '1' });
 
     // Act
     const response = await POST(request, params);
@@ -276,7 +277,7 @@ describe('POST /api/support/sessions/[id]/messages', () => {
       method: 'POST',
       body: JSON.stringify({ message_text: '   ' }),
     });
-    const params = { params: { id: '1' } };
+    const params = createRouteParams({ id: '1' });
 
     // Act
     const response = await POST(request, params);
@@ -295,7 +296,7 @@ describe('POST /api/support/sessions/[id]/messages', () => {
       method: 'POST',
       body: JSON.stringify({ message_text: 'Test message' }),
     });
-    const params = { params: { id: '999' } };
+    const params = createRouteParams({ id: '999' });
 
     // Act
     const response = await POST(request, params);
@@ -324,7 +325,7 @@ describe('POST /api/support/sessions/[id]/messages', () => {
       method: 'POST',
       body: JSON.stringify({ message_text: 'Test message' }),
     });
-    const params = { params: { id: '1' } };
+    const params = createRouteParams({ id: '1' });
 
     // Act
     const response = await POST(request, params);
@@ -367,7 +368,7 @@ describe('POST /api/support/sessions/[id]/messages', () => {
       method: 'POST',
       body: JSON.stringify({ message_text: 'Здравствуйте!' }),
     });
-    const params = { params: { id: '1' } };
+    const params = createRouteParams({ id: '1' });
 
     // Act
     const response = await POST(request, params);
@@ -410,7 +411,7 @@ describe('POST /api/support/sessions/[id]/messages', () => {
       method: 'POST',
       body: JSON.stringify({ message_text: 'Тестовое сообщение' }),
     });
-    const params = { params: { id: '1' } };
+    const params = createRouteParams({ id: '1' });
 
     // Act
     const response = await POST(request, params);
@@ -457,7 +458,7 @@ describe('POST /api/support/sessions/[id]/messages', () => {
       method: 'POST',
       body: JSON.stringify({ message_text: 'Тестовое сообщение' }),
     });
-    const params = { params: { id: '1' } };
+    const params = createRouteParams({ id: '1' });
 
     // Act
     const response = await POST(request, params);
@@ -469,3 +470,4 @@ describe('POST /api/support/sessions/[id]/messages', () => {
     expect(data.saved_message).toBeDefined(); // Сообщение сохранено, но не доставлено
   });
 });
+

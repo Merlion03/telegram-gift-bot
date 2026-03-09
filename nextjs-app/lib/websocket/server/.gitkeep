@@ -1,0 +1,9 @@
+# Директория для серверных модулей WebSocket
+# Здесь будут размещены:
+# - ConnectionHandler.ts
+# - AuthenticationHandler.ts
+# - NotificationRouter.ts
+# - SubscriptionRegistry.ts
+# - HeartbeatManager.ts
+# - MetricsCollector.ts
+# - RealtimeWebSocketServer.ts (главный класс)

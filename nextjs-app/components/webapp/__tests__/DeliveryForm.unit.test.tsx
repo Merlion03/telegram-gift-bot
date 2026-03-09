@@ -15,8 +15,8 @@ import { DeliveryForm } from '../DeliveryForm';
 
 // Мок для @telegram-apps/sdk-react
 vi.mock('@telegram-apps/sdk-react', () => ({
-  useInitData: vi.fn(),
-  useWebApp: vi.fn(),
+  useRawInitData: vi.fn(),
+  useLaunchParams: vi.fn(),
 }));
 
 // Мок для @twa-dev/sdk
@@ -28,14 +28,12 @@ vi.mock('@twa-dev/sdk', () => ({
   },
 }));
 
-import { useInitData, useWebApp } from '@telegram-apps/sdk-react';
+import { useRawInitData, useLaunchParams } from '@telegram-apps/sdk-react';
 
 describe('DeliveryForm - Unit Tests', () => {
-  const mockInitData = {
-    raw: 'auth_date=1234567890&user=%7B%22id%22%3A12345%7D&hash=test_hash',
-  };
+  const mockInitData = 'auth_date=1234567890&user=%7B%22id%22%3A12345%7D&hash=test_hash';
 
-  const mockWebApp = {
+  const mockLaunchParams = {
     showAlert: vi.fn((message: string, callback?: () => void) => {
       if (callback) callback();
     }),
@@ -46,8 +44,8 @@ describe('DeliveryForm - Unit Tests', () => {
     vi.clearAllMocks();
     
     // Настройка моков
-    (useInitData as any).mockReturnValue(mockInitData);
-    (useWebApp as any).mockReturnValue(mockWebApp);
+    (useRawInitData as any).mockReturnValue(mockInitData);
+    (useLaunchParams as any).mockReturnValue(mockLaunchParams);
     
     // Мок для fetch
     global.fetch = vi.fn();

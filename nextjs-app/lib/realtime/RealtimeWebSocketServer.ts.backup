@@ -1,0 +1,1125 @@
+﻿/**
+ * RealtimeWebSocketServer - WebSocket СЃРµСЂРІРµСЂ РґР»СЏ real-time СѓРІРµРґРѕРјР»РµРЅРёР№
+ * РСЃРїРѕР»СЊР·СѓРµС‚ PostgreSQL LISTEN/NOTIFY РґР»СЏ РїРѕР»СѓС‡РµРЅРёСЏ СѓРІРµРґРѕРјР»РµРЅРёР№ РѕС‚ Р‘Р”
+ * Рё С‚СЂР°РЅСЃР»РёСЂСѓРµС‚ РёС… РїРѕРґРєР»СЋС‡С‘РЅРЅС‹Рј WebSocket РєР»РёРµРЅС‚Р°Рј
+ */
+
+import { WebSocketServer, WebSocket } from 'ws';
+import { Server as HttpServer } from 'http';
+import { Client as PgClient, Pool as PgPool } from 'pg';
+import { randomUUID } from 'crypto';
+import type { IncomingMessage } from 'http';
+import type {
+  ClientConnection,
+  ServerState,
+  ServerConfig,
+  ClientMessage,
+  ServerMessage,
+  UnsubscribeMessage,
+  NewMessageNotification,
+  StatusChangeNotification,
+  TypeChangeNotification,
+  PingMessage,
+  ClosingMessage,
+} from './types';
+import { DEFAULT_SERVER_CONFIG } from './types';
+import { authenticateWebSocketClient, type AuthResult } from './auth';
+
+/**
+ * РћСЃРЅРѕРІРЅРѕР№ РєР»Р°СЃСЃ WebSocket СЃРµСЂРІРµСЂР° РґР»СЏ real-time СѓРІРµРґРѕРјР»РµРЅРёР№
+ */
+export class RealtimeWebSocketServer {
+  private wss: WebSocketServer;
+  private pgListenClient: PgClient | null = null;
+  private pgPool: PgPool;
+  private state: ServerState;
+  private config: ServerConfig;
+  private heartbeatInterval: NodeJS.Timeout | null = null;
+  private metricsInterval: NodeJS.Timeout | null = null;
+
+  /**
+   * РЎРѕР·РґР°С‘С‚ РЅРѕРІС‹Р№ СЌРєР·РµРјРїР»СЏСЂ WebSocket СЃРµСЂРІРµСЂР°
+   * @param server - HTTP СЃРµСЂРІРµСЂ РґР»СЏ WebSocket upgrade
+   * @param pgPool - Connection pool РґР»СЏ Р·Р°РїСЂРѕСЃРѕРІ Рє Р‘Р”
+   * @param config - РљРѕРЅС„РёРіСѓСЂР°С†РёСЏ СЃРµСЂРІРµСЂР° (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)
+   */
+  constructor(
+    server: HttpServer,
+    pgPool: PgPool,
+    config?: Partial<ServerConfig>
+  ) {
+    this.pgPool = pgPool;
+    this.config = { ...DEFAULT_SERVER_CONFIG, ...config };
+
+    // РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ СЃРѕСЃС‚РѕСЏРЅРёСЏ
+    this.state = {
+      clients: new Map(),
+      sessionSubscribers: new Map(),
+      allMessagesSubscribers: new Set(),
+      statusChangeSubscribers: new Set(),
+      isShuttingDown: false,
+      pgReconnectAttempts: 0,
+      metrics: {
+        totalConnections: 0,
+        activeConnections: 0,
+        totalNotifications: 0,
+        totalErrors: 0,
+        totalPongsReceived: 0,
+        lastNotificationAt: 0,
+      },
+    };
+
+    // РЎРѕР·РґР°РЅРёРµ WebSocket СЃРµСЂРІРµСЂР°
+    // РћС‚РєР»СЋС‡Р°РµРј СЃР¶Р°С‚РёРµ РґР»СЏ СѓРїСЂРѕС‰РµРЅРёСЏ РѕР±СЂР°Р±РѕС‚РєРё WebSocket frames РїСЂРѕРєСЃРё
+    this.wss = new WebSocketServer({ noServer: true, perMessageDeflate: false });
+
+    console.log('[RealtimeWebSocketServer] РРЅРёС†РёР°Р»РёР·РёСЂРѕРІР°РЅ');
+  }
+
+  /**
+   * РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ СЃРµСЂРІРµСЂР°: РїРѕРґРєР»СЋС‡РµРЅРёРµ Рє PostgreSQL LISTEN Рё Р·Р°РїСѓСЃРє heartbeat
+   * Validates: Requirements 3.1, 3.2, 7.1, 7.5
+   */
+  async initialize(): Promise<void> {
+    console.log('[RealtimeWebSocketServer] Р—Р°РїСѓСЃРє РёРЅРёС†РёР°Р»РёР·Р°С†РёРё...');
+
+    // РџР РРњР•Р§РђРќРР•: РЎР»СѓС€Р°С‚РµР»СЊ СЃРѕР±С‹С‚РёСЏ 'connection' РќР• РЅСѓР¶РµРЅ РїСЂРё СЂСѓС‡РЅРѕРј handleUpgrade
+    // РџСЂРё СЂСѓС‡РЅРѕРј РІС‹Р·РѕРІРµ wss.handleUpgrade() РІ server.ts Р±РёР±Р»РёРѕС‚РµРєР° ws РќР• СЌРјРёС‚РёС‚ СЃРѕР±С‹С‚РёРµ 'connection'
+    // Р’РјРµСЃС‚Рѕ СЌС‚РѕРіРѕ handleConnection РІС‹Р·С‹РІР°РµС‚СЃСЏ РЅР°РїСЂСЏРјСѓСЋ РёР· callback С„СѓРЅРєС†РёРё handleUpgrade
+    // Р­С‚Рѕ РїСЂР°РІРёР»СЊРЅР°СЏ Р°СЂС…РёС‚РµРєС‚СѓСЂР° РґР»СЏ custom upgrade Р»РѕРіРёРєРё СЃ РїСЂРµРґРІР°СЂРёС‚РµР»СЊРЅРѕР№ Р°СѓС‚РµРЅС‚РёС„РёРєР°С†РёРµР№
+
+    // РџРѕРґРєР»СЋС‡РµРЅРёРµ Рє PostgreSQL LISTEN
+    await this.connectPostgresListen();
+
+    // Р—Р°РїСѓСЃРє heartbeat РјРµС…Р°РЅРёР·РјР°
+    this.startHeartbeat();
+
+    // Р—Р°РїСѓСЃРє РїРµСЂРёРѕРґРёС‡РµСЃРєРѕРіРѕ Р»РѕРіРёСЂРѕРІР°РЅРёСЏ РјРµС‚СЂРёРє
+    this.startMetricsLogging();
+
+    // РќР°СЃС‚СЂРѕР№РєР° РѕР±СЂР°Р±РѕС‚С‡РёРєРѕРІ graceful shutdown
+    this.setupShutdownHandlers();
+
+    console.log('[RealtimeWebSocketServer] РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ Р·Р°РІРµСЂС€РµРЅР° СѓСЃРїРµС€РЅРѕ');
+  }
+
+  /**
+   * РџРѕРґРєР»СЋС‡РµРЅРёРµ Рє PostgreSQL РґР»СЏ LISTEN РѕРїРµСЂР°С†РёР№
+   * РЎРѕР·РґР°С‘С‚ РІС‹РґРµР»РµРЅРЅРѕРµ РїРѕРґРєР»СЋС‡РµРЅРёРµ РІРЅРµ pool
+   */
+  private async connectPostgresListen(): Promise<void> {
+    try {
+      // РЎРѕР·РґР°С‘Рј РІС‹РґРµР»РµРЅРЅС‹Р№ РєР»РёРµРЅС‚ РґР»СЏ LISTEN (РІРЅРµ pool)
+      this.pgListenClient = new PgClient({
+        host: process.env.DB_HOST || process.env.POSTGRES_HOST || 'localhost',
+        port: parseInt(process.env.DB_PORT || process.env.POSTGRES_PORT || '5432', 10),
+        database: process.env.DB_NAME || process.env.POSTGRES_DB || 'telegram_bot',
+        user: process.env.DB_USER || process.env.POSTGRES_USER || 'postgres',
+        password: process.env.DB_PASSWORD || process.env.POSTGRES_PASSWORD || '',
+      });
+
+      await this.pgListenClient.connect();
+      console.log('[RealtimeWebSocketServer] PostgreSQL LISTEN РїРѕРґРєР»СЋС‡РµРЅРёРµ СѓСЃС‚Р°РЅРѕРІР»РµРЅРѕ');
+
+      // РџРѕРґРїРёСЃРєР° РЅР° РєР°РЅР°Р»С‹ СѓРІРµРґРѕРјР»РµРЅРёР№
+      await this.pgListenClient.query('LISTEN new_message');
+      await this.pgListenClient.query('LISTEN session_status_change');
+      await this.pgListenClient.query('LISTEN session_type_change');
+      console.log('[RealtimeWebSocketServer] LISTEN РїРѕРґРїРёСЃРєРё Р°РєС‚РёРІРёСЂРѕРІР°РЅС‹');
+
+      // РќР°СЃС‚СЂРѕР№РєР° РѕР±СЂР°Р±РѕС‚С‡РёРєР° СѓРІРµРґРѕРјР»РµРЅРёР№
+      this.pgListenClient.on('notification', (msg) => {
+        this.handlePostgresNotification(msg.channel, msg.payload || '');
+      });
+
+      // РћР±СЂР°Р±РѕС‚РєР° РѕС€РёР±РѕРє РїРѕРґРєР»СЋС‡РµРЅРёСЏ
+      this.pgListenClient.on('error', (err) => {
+        console.error('[RealtimeWebSocketServer] PostgreSQL LISTEN РѕС€РёР±РєР°:', err);
+        this.state.metrics.totalErrors++;
+        this.reconnectPostgresListen();
+      });
+
+      // РЎР±СЂРѕСЃ СЃС‡С‘С‚С‡РёРєР° РїРѕРїС‹С‚РѕРє РїСЂРё СѓСЃРїРµС€РЅРѕРј РїРѕРґРєР»СЋС‡РµРЅРёРё
+      this.state.pgReconnectAttempts = 0;
+    } catch (error) {
+      console.error('[RealtimeWebSocketServer] РћС€РёР±РєР° РїРѕРґРєР»СЋС‡РµРЅРёСЏ Рє PostgreSQL LISTEN:', error);
+      this.state.metrics.totalErrors++;
+      this.reconnectPostgresListen();
+    }
+  }
+
+  /**
+   * РџРµСЂРµРїРѕРґРєР»СЋС‡РµРЅРёРµ Рє PostgreSQL LISTEN СЃ Р·Р°РґРµСЂР¶РєРѕР№
+   * Validates: Requirements 7.2, 7.5, 7.6
+   */
+  private reconnectPostgresListen(): void {
+    this.state.pgReconnectAttempts++;
+
+    // РљСЂРёС‚РёС‡РµСЃРєРѕРµ Р»РѕРіРёСЂРѕРІР°РЅРёРµ РїРѕСЃР»Рµ 3 РїРѕСЃР»РµРґРѕРІР°С‚РµР»СЊРЅС‹С… СЂР°Р·СЂС‹РІРѕРІ
+    if (this.state.pgReconnectAttempts >= this.config.pgMaxReconnectAttempts) {
+      console.error(
+        `[RealtimeWebSocketServer] CRITICAL: ${this.state.pgReconnectAttempts} РїРѕСЃР»РµРґРѕРІР°С‚РµР»СЊРЅС‹С… СЂР°Р·СЂС‹РІРѕРІ PostgreSQL LISTEN`
+      );
+    }
+
+    console.log(
+      `[RealtimeWebSocketServer] РџРµСЂРµРїРѕРґРєР»СЋС‡РµРЅРёРµ Рє PostgreSQL LISTEN С‡РµСЂРµР· ${this.config.pgReconnectDelay}ms (РїРѕРїС‹С‚РєР° ${this.state.pgReconnectAttempts})`
+    );
+
+    setTimeout(() => {
+      this.connectPostgresListen();
+    }, this.config.pgReconnectDelay);
+  }
+
+  /**
+   * РћР±СЂР°Р±РѕС‚РєР° РЅРѕРІРѕРіРѕ WebSocket РїРѕРґРєР»СЋС‡РµРЅРёСЏ
+   * Validates: Requirements 2.2, 8.1, 8.2, 8.3, 8.4, 8.5, 9.1
+   */
+  /**
+   * РћР±СЂР°Р±РѕС‚РєР° РЅРѕРІРѕРіРѕ WebSocket РїРѕРґРєР»СЋС‡РµРЅРёСЏ
+   * Validates: Requirements 2.2, 2.6, 8.1, 8.2, 8.3, 8.4, 9.2
+   * 
+   * РќРћР’Р«Р™ РџРћР”РҐРћР”: РђСѓС‚РµРЅС‚РёС„РёРєР°С†РёСЏ РІС‹РїРѕР»РЅСЏРµС‚СЃСЏ РџРћРЎР›Р• СѓСЃС‚Р°РЅРѕРІРєРё WebSocket СЃРѕРµРґРёРЅРµРЅРёСЏ
+   * Р­С‚Рѕ СѓСЃС‚СЂР°РЅСЏРµС‚ race condition РјРµР¶РґСѓ async Р°СѓС‚РµРЅС‚РёС„РёРєР°С†РёРµР№ Рё Р·Р°РєСЂС‹С‚РёРµРј TCP-СЃРѕРєРµС‚Р°
+   * 
+   * @param ws - WebSocket СЃРѕРµРґРёРЅРµРЅРёРµ
+   * @param request - HTTP Р·Р°РїСЂРѕСЃ СЃ upgrade
+   */
+  async handleConnection(ws: WebSocket, request: IncomingMessage): Promise<void> {
+    const connectionId = Math.random().toString(36).substring(7);
+    
+    // Р›РѕРіРёСЂСѓРµРј РёРЅС„РѕСЂРјР°С†РёСЋ Рѕ РїРѕРґРєР»СЋС‡РµРЅРёРё
+    const clientIp = request?.headers?.['x-forwarded-for'] || request?.socket?.remoteAddress || 'unknown';
+    const userAgent = request?.headers?.['user-agent'] || 'unknown';
+    const origin = request?.headers?.['origin'] || 'unknown';
+    
+    console.log(`[RealtimeWebSocketServer][${connectionId}] ========== РќРћР’РћР• РџРћР”РљР›Р®Р§Р•РќРР• ==========`);
+    console.log(`[RealtimeWebSocketServer][${connectionId}] ClientIP: ${clientIp}`);
+    console.log(`[RealtimeWebSocketServer][${connectionId}] Origin: ${origin}`);
+    console.log(`[RealtimeWebSocketServer][${connectionId}] UserAgent: ${userAgent}`);
+    console.log(`[RealtimeWebSocketServer][${connectionId}] URL: ${request?.url || 'unknown'}`);
+    console.log(`[RealtimeWebSocketServer][${connectionId}] WebSocket readyState: ${ws.readyState} (0=CONNECTING, 1=OPEN, 2=CLOSING, 3=CLOSED)`);
+    
+    // РџСЂРѕРІРµСЂРєР° graceful shutdown
+    if (this.state.isShuttingDown) {
+      console.log(`[RealtimeWebSocketServer][${connectionId}] вќЊ РЎРµСЂРІРµСЂ РІ СЂРµР¶РёРјРµ shutdown, РѕС‚РєР»РѕРЅСЏРµРј РїРѕРґРєР»СЋС‡РµРЅРёРµ`);
+      ws.close(1001, 'Server is shutting down');
+      return;
+    }
+
+    // РљР РРўРР§РќРћ: РџСЂРѕРІРµСЂСЏРµРј СЃРѕСЃС‚РѕСЏРЅРёРµ WebSocket
+    if (ws.readyState !== WebSocket.OPEN) {
+      console.error(`[RealtimeWebSocketServer][${connectionId}] вќЊ WebSocket РЅРµ РІ СЃРѕСЃС‚РѕСЏРЅРёРё OPEN РїСЂРё РІС…РѕРґРµ РІ handleConnection, readyState: ${ws.readyState}`);
+      return;
+    }
+
+    console.log(`[RealtimeWebSocketServer][${connectionId}] вњ“ WebSocket РІ СЃРѕСЃС‚РѕСЏРЅРёРё OPEN`);
+
+    // РќРћР’Р«Р™ РџРћР”РҐРћР”: Р’С‹РїРѕР»РЅСЏРµРј Р°СѓС‚РµРЅС‚РёС„РёРєР°С†РёСЋ РЎР РђР—РЈ Р±РµР· РїСЂРѕРјРµР¶СѓС‚РѕС‡РЅС‹С… СЃРѕРѕР±С‰РµРЅРёР№
+    // РџСЂРѕРјРµР¶СѓС‚РѕС‡РЅС‹Р№ handshake РІС‹Р·С‹РІР°РµС‚ РїСЂРѕР±Р»РµРјС‹ РІ Р±СЂР°СѓР·РµСЂР°С… - РѕРЅРё Р·Р°РєСЂС‹РІР°СЋС‚ СЃРѕРµРґРёРЅРµРЅРёРµ
+    console.log(`[RealtimeWebSocketServer][${connectionId}] рџ”ђ РќР°С‡РёРЅР°РµРј Р°СѓС‚РµРЅС‚РёС„РёРєР°С†РёСЋ...`);
+    const authStartTime = Date.now();
+    
+    const authResult = await authenticateWebSocketClient(request);
+    
+    const authDuration = Date.now() - authStartTime;
+    console.log(`[RealtimeWebSocketServer][${connectionId}] рџ”ђ РђСѓС‚РµРЅС‚РёС„РёРєР°С†РёСЏ Р·Р°РІРµСЂС€РµРЅР° Р·Р° ${authDuration}ms`);
+    console.log(`[RealtimeWebSocketServer][${connectionId}] рџ”ђ Р РµР·СѓР»СЊС‚Р°С‚: success=${authResult.success}, userId=${authResult.userId}, isAdmin=${authResult.isAdmin}`);
+
+    if (!authResult.success) {
+      console.warn(`[RealtimeWebSocketServer][${connectionId}] вќЊ РђСѓС‚РµРЅС‚РёС„РёРєР°С†РёСЏ РЅРµ РїСЂРѕР№РґРµРЅР°: ${authResult.errorMessage}`);
+      // WebSocket close codes: 1000-1015 Р·Р°СЂРµР·РµСЂРІРёСЂРѕРІР°РЅС‹, РёСЃРїРѕР»СЊР·СѓРµРј 4000+ РґР»СЏ custom errors
+      // 4401 = Unauthorized, 4403 = Forbidden
+      const wsCloseCode = authResult.errorCode === 403 ? 4403 : 4401;
+      
+      // РџСЂРѕРІРµСЂСЏРµРј СЃРѕСЃС‚РѕСЏРЅРёРµ РїРµСЂРµРґ Р·Р°РєСЂС‹С‚РёРµРј
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.close(wsCloseCode, authResult.errorMessage);
+        } catch (error) {
+          console.error(`[RealtimeWebSocketServer][${connectionId}] вќЊ РћС€РёР±РєР° РїСЂРё Р·Р°РєСЂС‹С‚РёРё WebSocket РїРѕСЃР»Рµ РЅРµСѓРґР°С‡РЅРѕР№ Р°СѓС‚РµРЅС‚РёС„РёРєР°С†РёРё:`, error);
+        }
+      }
+      return;
+    }
+
+    console.log(`[RealtimeWebSocketServer][${connectionId}] вњ… РђСѓС‚РµРЅС‚РёС„РёРєР°С†РёСЏ СѓСЃРїРµС€РЅР°: userId=${authResult.userId}, userName=${authResult.userName}`);
+
+    console.log(`[RealtimeWebSocketServer][${connectionId}] рџ”§ РЎРѕР·РґР°С‘Рј РєР»РёРµРЅС‚Р°...`);
+    // РЎРѕР·РґР°РЅРёРµ РєР»РёРµРЅС‚СЃРєРѕРіРѕ РїРѕРґРєР»СЋС‡РµРЅРёСЏ
+    const clientId = randomUUID();
+    const client: ClientConnection = {
+      id: clientId,
+      ws,
+      userId: authResult.userId!,
+      isAdmin: authResult.isAdmin,
+      subscriptions: new Set(),
+      lastPing: Date.now(),
+      lastPong: Date.now(),
+      connectedAt: Date.now(),
+    };
+
+    // Р”РѕР±Р°РІР»РµРЅРёРµ РєР»РёРµРЅС‚Р° РІ state
+    this.state.clients.set(clientId, client);
+    this.state.metrics.totalConnections++;
+    this.state.metrics.activeConnections++;
+
+    console.log(`[RealtimeWebSocketServer][${connectionId}] вњ… РљР»РёРµРЅС‚ СЃРѕР·РґР°РЅ Рё РґРѕР±Р°РІР»РµРЅ РІ state`);
+    console.log(`[RealtimeWebSocketServer][${connectionId}] ClientID: ${clientId}`);
+    console.log(`[RealtimeWebSocketServer][${connectionId}] UserID: ${authResult.userId}, UserName: ${authResult.userName}`);
+    console.log(`[RealtimeWebSocketServer][${connectionId}] РњРµС‚СЂРёРєРё: Р°РєС‚РёРІРЅС‹С…=${this.state.metrics.activeConnections}, РІСЃРµРіРѕ=${this.state.metrics.totalConnections}`);
+    console.log(`[RealtimeWebSocketServer][${connectionId}] Timestamp: ${new Date().toISOString()}`);
+
+    console.log(`[RealtimeWebSocketServer][${connectionId}] рџ”§ РќР°СЃС‚СЂР°РёРІР°РµРј РѕР±СЂР°Р±РѕС‚С‡РёРєРё СЃРѕР±С‹С‚РёР№...`);
+    
+    // РќР• СѓРґР°Р»СЏРµРј РѕР±СЂР°Р±РѕС‚С‡РёРєРё - СЌС‚Рѕ РјРѕР¶РµС‚ РЅР°СЂСѓС€РёС‚СЊ РІРЅСѓС‚СЂРµРЅРЅСЋСЋ СЂР°Р±РѕС‚Сѓ WebSocket
+    // ws.removeAllListeners РјРѕР¶РµС‚ СѓРґР°Р»РёС‚СЊ РєСЂРёС‚РёС‡РЅС‹Рµ РІРЅСѓС‚СЂРµРЅРЅРёРµ РѕР±СЂР°Р±РѕС‚С‡РёРєРё
+    // Р’РјРµСЃС‚Рѕ СЌС‚РѕРіРѕ РїСЂРѕСЃС‚Рѕ РґРѕР±Р°РІР»СЏРµРј РЅР°С€Рё РѕР±СЂР°Р±РѕС‚С‡РёРєРё
+    
+    console.log(`[RealtimeWebSocketServer][${connectionId}] вњ“ Р“РѕС‚РѕРІС‹ Рє РЅР°СЃС‚СЂРѕР№РєРµ РѕР±СЂР°Р±РѕС‚С‡РёРєРѕРІ`);
+    
+    // РќР°СЃС‚СЂРѕР№РєР° РѕР±СЂР°Р±РѕС‚С‡РёРєР° WebSocket pong frames (Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРёР№ РѕС‚РІРµС‚ Р±СЂР°СѓР·РµСЂР° РЅР° ping)
+    ws.on('pong', () => {
+      console.log(`[RealtimeWebSocketServer][${connectionId}] рџ“Ё РџРѕР»СѓС‡РµРЅ WebSocket pong frame РѕС‚ client_id=${clientId}`);
+      
+      // РРЅРєСЂРµРјРµРЅС‚РёСЂСѓРµРј РјРµС‚СЂРёРєСѓ
+      this.state.metrics.totalPongsReceived++;
+      
+      // РџСЂРѕРІРµСЂСЏРµРј СЃСѓС‰РµСЃС‚РІРѕРІР°РЅРёРµ РєР»РёРµРЅС‚Р° РїРµСЂРµРґ РѕР±РЅРѕРІР»РµРЅРёРµРј
+      const currentClient = this.state.clients.get(clientId);
+      if (!currentClient) {
+        console.warn(`[RealtimeWebSocketServer][${connectionId}] РљР»РёРµРЅС‚ ${clientId} РЅРµ РЅР°Р№РґРµРЅ РїСЂРё РѕР±СЂР°Р±РѕС‚РєРµ pong frame`);
+        return;
+      }
+      
+      // РћР±РЅРѕРІР»СЏРµРј lastPong
+      currentClient.lastPong = Date.now();
+      console.log(`[RealtimeWebSocketServer][${connectionId}] вњ“ РћР±РЅРѕРІР»С‘РЅ lastPong РґР»СЏ client_id=${clientId}, РЅРѕРІРѕРµ Р·РЅР°С‡РµРЅРёРµ=${currentClient.lastPong}`);
+    });
+    
+    // РќР°СЃС‚СЂРѕР№РєР° РѕР±СЂР°Р±РѕС‚С‡РёРєРѕРІ СЃРѕРѕР±С‰РµРЅРёР№
+    ws.on('message', (data) => {
+      console.log(`[RealtimeWebSocketServer][${connectionId}] рџ“Ё РџРѕР»СѓС‡РµРЅРѕ СЃРѕРѕР±С‰РµРЅРёРµ РѕС‚ client_id=${clientId}:`, data.toString());
+      this.handleClientMessage(clientId, data.toString());
+    });
+
+    // РќР°СЃС‚СЂРѕР№РєР° РѕР±СЂР°Р±РѕС‚С‡РёРєР° Р·Р°РєСЂС‹С‚РёСЏ СЃРѕРµРґРёРЅРµРЅРёСЏ
+    ws.on('close', (code, reason) => {
+      const reasonStr = reason.toString();
+      console.log(`[RealtimeWebSocketServer][${connectionId}] рџ”ґ WebSocket close event: client_id=${clientId}, code=${code}, reason=${reasonStr}`);
+      this.handleClientDisconnect(clientId, code, reasonStr);
+    });
+
+    // РћР±СЂР°Р±РѕС‚РєР° РѕС€РёР±РѕРє WebSocket
+    ws.on('error', (error) => {
+      console.error(`[RealtimeWebSocketServer][${connectionId}] рџ”ґ WebSocket РѕС€РёР±РєР° РґР»СЏ client_id=${clientId}:`, error.message);
+      this.state.metrics.totalErrors++;
+    });
+    
+    console.log(`[RealtimeWebSocketServer][${connectionId}] вњ“ РћР±СЂР°Р±РѕС‚С‡РёРєРё РЅР°СЃС‚СЂРѕРµРЅС‹, WebSocket readyState: ${ws.readyState}`);
+    
+    // РЈРґР°Р»СЏРµРј server-first РїР°С‚С‚РµСЂРЅ - С‚РµРїРµСЂСЊ СЃРµСЂРІРµСЂ Р¶РґС‘С‚ init РѕС‚ РєР»РёРµРЅС‚Р°
+    // РљР»РёРµРЅС‚ РѕС‚РїСЂР°РІРёС‚ init СЃРѕРѕР±С‰РµРЅРёРµ РїРµСЂРІС‹Рј, РґР°РІР°СЏ РїСЂРѕРєСЃРё РІСЂРµРјСЏ РЅР° РїРµСЂРµСЃС‚СЂРѕР№РєСѓ С€Р»СЋР·РѕРІ
+    console.log(`[RealtimeWebSocketServer][${connectionId}] вЏі РћР¶РёРґР°РµРј init СЃРѕРѕР±С‰РµРЅРёРµ РѕС‚ РєР»РёРµРЅС‚Р°...`);
+    
+    console.log(`[RealtimeWebSocketServer][${connectionId}] ========== РџРћР”РљР›Р®Р§Р•РќРР• Р—РђР’Р•Р РЁР•РќРћ ==========`);
+  }
+
+  /**
+   * РћР±СЂР°Р±РѕС‚РєР° РѕС‚РєР»СЋС‡РµРЅРёСЏ РєР»РёРµРЅС‚Р°
+   * Validates: Requirements 2.6, 9.2
+   */
+  private handleClientDisconnect(clientId: string, code?: number, reason?: string): void {
+    const client = this.state.clients.get(clientId);
+    if (!client) return;
+
+    // РЈРґР°Р»РµРЅРёРµ РёР· РІСЃРµС… РїРѕРґРїРёСЃРѕРє
+    client.subscriptions.forEach((subscriptionId) => {
+      this.unsubscribe(clientId, subscriptionId);
+    });
+
+    // РЈРґР°Р»РµРЅРёРµ РєР»РёРµРЅС‚Р°
+    this.state.clients.delete(clientId);
+    this.state.metrics.activeConnections--;
+
+    // РћРїСЂРµРґРµР»РµРЅРёРµ РїСЂРёС‡РёРЅС‹ РѕС‚РєР»СЋС‡РµРЅРёСЏ
+    let disconnectReason = 'unknown';
+    if (code === 1000) disconnectReason = 'normal_close';
+    else if (code === 1001) disconnectReason = 'going_away';
+    else if (code === 1006) disconnectReason = 'abnormal_close';
+    else if (code) disconnectReason = `code_${code}`;
+    
+    if (reason) disconnectReason += `: ${reason}`;
+
+    console.log(
+      `[RealtimeWebSocketServer] РљР»РёРµРЅС‚ РѕС‚РєР»СЋС‡С‘РЅ: ` +
+      `client_id=${clientId}, ` +
+      `user_id=${client.userId}, ` +
+      `РїСЂРёС‡РёРЅР°=${disconnectReason}, ` +
+      `timestamp=${new Date().toISOString()}`
+    );
+  }
+
+  /**
+   * РћР±СЂР°Р±РѕС‚РєР° СЃРѕРѕР±С‰РµРЅРёР№ РѕС‚ РєР»РёРµРЅС‚Р°
+   * Validates: Requirements 2.3, 2.4, 2.5, 4.1, 4.2
+   */
+  private handleClientMessage(clientId: string, rawMessage: string): void {
+    const client = this.state.clients.get(clientId);
+    if (!client) {
+      console.warn(`[RealtimeWebSocketServer] РЎРѕРѕР±С‰РµРЅРёРµ РѕС‚ РЅРµРёР·РІРµСЃС‚РЅРѕРіРѕ РєР»РёРµРЅС‚Р°: ${clientId}`);
+      return;
+    }
+
+    try {
+      console.log(`[RealtimeWebSocketServer] РџР°СЂСЃРёРј СЃРѕРѕР±С‰РµРЅРёРµ РѕС‚ client_id=${clientId}`);
+      const message: ClientMessage = JSON.parse(rawMessage);
+      console.log(`[RealtimeWebSocketServer] РўРёРї СЃРѕРѕР±С‰РµРЅРёСЏ: ${message.type}`);
+
+      switch (message.type) {
+        case 'init':
+          // РћР±СЂР°Р±Р°С‚С‹РІР°РµРј init РѕС‚ РєР»РёРµРЅС‚Р° Рё РѕС‚РїСЂР°РІР»СЏРµРј connected РІ РѕС‚РІРµС‚
+          // РљР»РёРµРЅС‚ РёРЅРёС†РёРёСЂРѕРІР°Р» handshake, РѕС‚РїСЂР°РІР»СЏРµРј РїРѕРґС‚РІРµСЂР¶РґРµРЅРёРµ
+          console.log(`[RealtimeWebSocketServer] РџРѕР»СѓС‡РµРЅ init РѕС‚ client_id=${clientId}`);
+          const connectedMsg: ServerMessage = {
+            type: 'connected',
+            clientId: clientId,
+            timestamp: Date.now()
+          };
+          this.sendToClient(clientId, connectedMsg);
+          break;
+
+        case 'subscribe':
+          this.handleSubscribe(clientId, message);
+          break;
+
+        case 'unsubscribe':
+          console.log(`[RealtimeWebSocketServer] РџРѕР»СѓС‡РµРЅ unsubscribe РѕС‚ client_id=${clientId}`);
+          this.handleUnsubscribe(clientId, message);
+          break;
+
+        case 'pong':
+          // РћР±СЂР°Р±РѕС‚РєР° JSON pong СЃРѕРѕР±С‰РµРЅРёСЏ РѕС‚ РєР»РёРµРЅС‚Р°
+          console.log(`[RealtimeWebSocketServer] РџРѕР»СѓС‡РµРЅ JSON pong РѕС‚ client_id=${clientId}`);
+          client.lastPong = Date.now();
+          this.state.metrics.totalPongsReceived++;
+          console.log(`[RealtimeWebSocketServer] вњ“ РћР±РЅРѕРІР»С‘РЅ lastPong РґР»СЏ client_id=${clientId}, РЅРѕРІРѕРµ Р·РЅР°С‡РµРЅРёРµ=${client.lastPong}`);
+          break;
+
+        default:
+          console.warn(`[RealtimeWebSocketServer] РќРµРёР·РІРµСЃС‚РЅС‹Р№ С‚РёРї СЃРѕРѕР±С‰РµРЅРёСЏ: ${(message as any).type}`);
+          this.sendToClient(clientId, {
+            type: 'error',
+            code: 'UNKNOWN_MESSAGE_TYPE',
+            message: `Unknown message type: ${(message as any).type}`,
+          });
+      }
+    } catch (error) {
+      console.error(`[RealtimeWebSocketServer] РћС€РёР±РєР° РїР°СЂСЃРёРЅРіР° СЃРѕРѕР±С‰РµРЅРёСЏ РѕС‚ client_id=${clientId}:`, error);
+      console.error(`[RealtimeWebSocketServer] РЎС‹СЂРѕРµ СЃРѕРѕР±С‰РµРЅРёРµ:`, rawMessage);
+      this.state.metrics.totalErrors++;
+      this.sendToClient(clientId, {
+        type: 'error',
+        code: 'INVALID_MESSAGE',
+        message: 'Failed to parse message',
+      });
+    }
+  }
+
+  /**
+   * РћР±СЂР°Р±РѕС‚РєР° РїРѕРґРїРёСЃРєРё РєР»РёРµРЅС‚Р°
+   */
+  private handleSubscribe(clientId: string, message: ClientMessage): void {
+    if (message.type !== 'subscribe') return;
+
+    const client = this.state.clients.get(clientId);
+    if (!client) return;
+
+    const subscriptionId = message.subscriptionId;
+
+    switch (message.channel) {
+      case 'session_messages':
+        if ('sessionId' in message) {
+          this.subscribeToSession(clientId, message.sessionId, subscriptionId);
+        }
+        break;
+
+      case 'all_messages':
+        this.subscribeToAllMessages(clientId, subscriptionId);
+        break;
+
+      case 'status_changes':
+        this.subscribeToStatusChanges(clientId, subscriptionId);
+        break;
+
+      default:
+        console.warn(`[RealtimeWebSocketServer] РќРµРёР·РІРµСЃС‚РЅС‹Р№ РєР°РЅР°Р»: ${(message as any).channel}`);
+        this.sendToClient(clientId, {
+          type: 'error',
+          code: 'UNKNOWN_CHANNEL',
+          message: `Unknown channel: ${(message as any).channel}`,
+          subscriptionId: subscriptionId,
+        });
+    }
+  }
+
+  /**
+   * РћР±СЂР°Р±РѕС‚РєР° РѕС‚РїРёСЃРєРё РєР»РёРµРЅС‚Р°
+   */
+  private handleUnsubscribe(clientId: string, message: UnsubscribeMessage): void {
+    this.unsubscribe(clientId, message.subscriptionId);
+  }
+
+  /**
+   * РћР±СЂР°Р±РѕС‚РєР° СѓРІРµРґРѕРјР»РµРЅРёР№ РѕС‚ PostgreSQL
+   * Validates: Requirements 3.3, 3.4, 3.5, 3.6, 3.7, 4.3, 4.4, 9.3
+   */
+  /**
+     * РћР±СЂР°Р±РѕС‚РєР° СѓРІРµРґРѕРјР»РµРЅРёР№ РѕС‚ PostgreSQL
+     * Validates: Requirements 3.3, 3.4, 3.5, 3.6, 3.7, 4.3, 4.4, 9.3
+     */
+    private async handlePostgresNotification(channel: string, payload: string): Promise<void> {
+      this.state.metrics.totalNotifications++;
+      this.state.metrics.lastNotificationAt = Date.now();
+
+      console.log(
+        `[RealtimeWebSocketServer] РџРѕР»СѓС‡РµРЅРѕ СѓРІРµРґРѕРјР»РµРЅРёРµ: channel=${channel}, ` +
+        `timestamp=${new Date().toISOString()}`
+      );
+
+      try {
+        // РџР°СЂСЃРёРЅРі JSON payload РѕС‚ PostgreSQL
+        const notification = JSON.parse(payload);
+
+        if (channel === 'new_message') {
+          await this.handleNewMessageNotification(notification);
+        } else if (channel === 'session_status_change') {
+          await this.handleSessionStatusChangeNotification(notification);
+        } else if (channel === 'session_type_change') {
+          await this.handleSessionTypeChangeNotification(notification);
+        } else {
+          console.warn(`[RealtimeWebSocketServer] РќРµРёР·РІРµСЃС‚РЅС‹Р№ РєР°РЅР°Р» СѓРІРµРґРѕРјР»РµРЅРёСЏ: ${channel}`);
+        }
+      } catch (error) {
+        console.error(
+          `[RealtimeWebSocketServer] РћС€РёР±РєР° РѕР±СЂР°Р±РѕС‚РєРё СѓРІРµРґРѕРјР»РµРЅРёСЏ: channel=${channel}, error=`,
+          error
+        );
+        this.state.metrics.totalErrors++;
+      }
+    }
+
+    /**
+     * РћР±СЂР°Р±РѕС‚РєР° СѓРІРµРґРѕРјР»РµРЅРёСЏ Рѕ РЅРѕРІРѕРј СЃРѕРѕР±С‰РµРЅРёРё
+     */
+    private async handleNewMessageNotification(notification: any): Promise<void> {
+      const sessionId = notification.session_id;
+      const messageId = notification.message_id;
+
+      console.log(
+        `[RealtimeWebSocketServer] РћР±СЂР°Р±РѕС‚РєР° new_message: session_id=${sessionId}, message_id=${messageId}`
+      );
+
+      try {
+        // Р—Р°РіСЂСѓР·РєР° РїРѕР»РЅС‹С… РґР°РЅРЅС‹С… СЃРѕРѕР±С‰РµРЅРёСЏ РёР· Р‘Р”
+        const result = await this.pgPool.query(
+          `SELECT id, session_id, telegram_id, message_type, message_text, file_id, created_at, delivered
+           FROM support_messages
+           WHERE id = $1`,
+          [messageId]
+        );
+
+        if (result.rows.length === 0) {
+          console.warn(
+            `[RealtimeWebSocketServer] РЎРѕРѕР±С‰РµРЅРёРµ РЅРµ РЅР°Р№РґРµРЅРѕ РІ Р‘Р”: message_id=${messageId}`
+          );
+          return;
+        }
+
+        const messageData = result.rows[0];
+
+        // Р¤РѕСЂРјРёСЂРѕРІР°РЅРёРµ СѓРІРµРґРѕРјР»РµРЅРёСЏ РґР»СЏ РєР»РёРµРЅС‚РѕРІ
+        const notification: NewMessageNotification = {
+          type: 'new_message',
+          data: {
+            id: messageData.id,
+            session_id: messageData.session_id,
+            telegram_id: messageData.telegram_id,
+            message_type: messageData.message_type,
+            message_text: messageData.message_text,
+            file_id: messageData.file_id || undefined,
+            created_at: messageData.created_at,
+            delivered: messageData.delivered,
+          },
+        };
+
+        // РћРїСЂРµРґРµР»РµРЅРёРµ СЂРµР»РµРІР°РЅС‚РЅС‹С… РїРѕРґРїРёСЃС‡РёРєРѕРІ
+        const subscribers = new Set<string>();
+
+        // Р”РѕР±Р°РІР»СЏРµРј РїРѕРґРїРёСЃС‡РёРєРѕРІ РЅР° РєРѕРЅРєСЂРµС‚РЅСѓСЋ СЃРµСЃСЃРёСЋ
+        const sessionSubscribers = this.state.sessionSubscribers.get(sessionId);
+        if (sessionSubscribers) {
+          sessionSubscribers.forEach((clientId) => subscribers.add(clientId));
+        }
+
+        // Р”РѕР±Р°РІР»СЏРµРј РїРѕРґРїРёСЃС‡РёРєРѕРІ РЅР° РІСЃРµ СЃРѕРѕР±С‰РµРЅРёСЏ
+        this.state.allMessagesSubscribers.forEach((clientId) => subscribers.add(clientId));
+
+        // РћС‚РїСЂР°РІРєР° СѓРІРµРґРѕРјР»РµРЅРёСЏ РїРѕРґРїРёСЃС‡РёРєР°Рј
+        if (subscribers.size > 0) {
+          console.log(
+            `[RealtimeWebSocketServer] РћС‚РїСЂР°РІРєР° new_message ${subscribers.size} РїРѕРґРїРёСЃС‡РёРєР°Рј`
+          );
+          this.broadcastToSubscribers(subscribers, notification);
+        }
+      } catch (error) {
+        console.error(
+          `[RealtimeWebSocketServer] РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё РґР°РЅРЅС‹С… СЃРѕРѕР±С‰РµРЅРёСЏ: message_id=${messageId}, error=`,
+          error
+        );
+        this.state.metrics.totalErrors++;
+      }
+    }
+
+    /**
+     * РћР±СЂР°Р±РѕС‚РєР° СѓРІРµРґРѕРјР»РµРЅРёСЏ РѕР± РёР·РјРµРЅРµРЅРёРё СЃС‚Р°С‚СѓСЃР° СЃРµСЃСЃРёРё
+     */
+    private async handleSessionStatusChangeNotification(notification: any): Promise<void> {
+      const sessionId = notification.session_id;
+      const oldStatus = notification.old_status;
+      const newStatus = notification.new_status;
+
+      console.log(
+        `[RealtimeWebSocketServer] РћР±СЂР°Р±РѕС‚РєР° session_status_change: ` +
+        `session_id=${sessionId}, ${oldStatus} -> ${newStatus}`
+      );
+
+      try {
+        // Р—Р°РіСЂСѓР·РєР° РїРѕР»РЅС‹С… РґР°РЅРЅС‹С… СЃРµСЃСЃРёРё РёР· Р‘Р”
+        const result = await this.pgPool.query(
+          `SELECT id, telegram_id, status, session_type, created_at, closed_at
+           FROM support_sessions
+           WHERE id = $1`,
+          [sessionId]
+        );
+
+        if (result.rows.length === 0) {
+          console.warn(
+            `[RealtimeWebSocketServer] РЎРµСЃСЃРёСЏ РЅРµ РЅР°Р№РґРµРЅР° РІ Р‘Р”: session_id=${sessionId}`
+          );
+          return;
+        }
+
+        const sessionData = result.rows[0];
+
+        // Р¤РѕСЂРјРёСЂРѕРІР°РЅРёРµ СѓРІРµРґРѕРјР»РµРЅРёСЏ РґР»СЏ РєР»РёРµРЅС‚РѕРІ
+        const statusNotification: StatusChangeNotification = {
+          type: 'status_change',
+          sessionId: sessionId,
+          oldStatus: oldStatus,
+          newStatus: newStatus,
+          data: {
+            id: sessionData.id,
+            telegram_id: sessionData.telegram_id,
+            status: sessionData.status,
+            session_type: sessionData.session_type,
+            created_at: sessionData.created_at,
+            closed_at: sessionData.closed_at || undefined,
+          },
+        };
+
+        // РћРїСЂРµРґРµР»РµРЅРёРµ СЂРµР»РµРІР°РЅС‚РЅС‹С… РїРѕРґРїРёСЃС‡РёРєРѕРІ
+        const subscribers = new Set<string>();
+
+        // Р”РѕР±Р°РІР»СЏРµРј РїРѕРґРїРёСЃС‡РёРєРѕРІ РЅР° РєРѕРЅРєСЂРµС‚РЅСѓСЋ СЃРµСЃСЃРёСЋ
+        const sessionSubscribers = this.state.sessionSubscribers.get(sessionId);
+        if (sessionSubscribers) {
+          sessionSubscribers.forEach((clientId) => subscribers.add(clientId));
+        }
+
+        // Р”РѕР±Р°РІР»СЏРµРј РїРѕРґРїРёСЃС‡РёРєРѕРІ РЅР° РёР·РјРµРЅРµРЅРёСЏ СЃС‚Р°С‚СѓСЃРѕРІ
+        this.state.statusChangeSubscribers.forEach((clientId) => subscribers.add(clientId));
+
+        // РћС‚РїСЂР°РІРєР° СѓРІРµРґРѕРјР»РµРЅРёСЏ РїРѕРґРїРёСЃС‡РёРєР°Рј
+        if (subscribers.size > 0) {
+          console.log(
+            `[RealtimeWebSocketServer] РћС‚РїСЂР°РІРєР° status_change ${subscribers.size} РїРѕРґРїРёСЃС‡РёРєР°Рј`
+          );
+          this.broadcastToSubscribers(subscribers, statusNotification);
+        }
+      } catch (error) {
+        console.error(
+          `[RealtimeWebSocketServer] РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё РґР°РЅРЅС‹С… СЃРµСЃСЃРёРё: session_id=${sessionId}, error=`,
+          error
+        );
+        this.state.metrics.totalErrors++;
+      }
+    }
+
+    /**
+     * РћР±СЂР°Р±РѕС‚РєР° СѓРІРµРґРѕРјР»РµРЅРёСЏ РѕР± РёР·РјРµРЅРµРЅРёРё С‚РёРїР° СЃРµСЃСЃРёРё
+     */
+    private async handleSessionTypeChangeNotification(notification: any): Promise<void> {
+      const sessionId = notification.session_id;
+      const oldType = notification.old_type;
+      const newType = notification.new_type;
+
+      console.log(
+        `[RealtimeWebSocketServer] РћР±СЂР°Р±РѕС‚РєР° session_type_change: ` +
+        `session_id=${sessionId}, ${oldType} -> ${newType}`
+      );
+
+      try {
+        // Р—Р°РіСЂСѓР·РєР° РїРѕР»РЅС‹С… РґР°РЅРЅС‹С… СЃРµСЃСЃРёРё РёР· Р‘Р”
+        const result = await this.pgPool.query(
+          `SELECT id, telegram_id, status, session_type, created_at, closed_at
+           FROM support_sessions
+           WHERE id = $1`,
+          [sessionId]
+        );
+
+        if (result.rows.length === 0) {
+          console.warn(
+            `[RealtimeWebSocketServer] РЎРµСЃСЃРёСЏ РЅРµ РЅР°Р№РґРµРЅР° РІ Р‘Р”: session_id=${sessionId}`
+          );
+          return;
+        }
+
+        const sessionData = result.rows[0];
+
+        // Р¤РѕСЂРјРёСЂРѕРІР°РЅРёРµ СѓРІРµРґРѕРјР»РµРЅРёСЏ РґР»СЏ РєР»РёРµРЅС‚РѕРІ
+        const typeNotification: TypeChangeNotification = {
+          type: 'type_change',
+          sessionId: sessionId,
+          oldType: oldType,
+          newType: newType,
+          data: {
+            id: sessionData.id,
+            telegram_id: sessionData.telegram_id,
+            status: sessionData.status,
+            session_type: sessionData.session_type,
+            created_at: sessionData.created_at,
+            closed_at: sessionData.closed_at || undefined,
+          },
+        };
+
+        // РћРїСЂРµРґРµР»РµРЅРёРµ СЂРµР»РµРІР°РЅС‚РЅС‹С… РїРѕРґРїРёСЃС‡РёРєРѕРІ
+        const subscribers = new Set<string>();
+
+        // Р”РѕР±Р°РІР»СЏРµРј РїРѕРґРїРёСЃС‡РёРєРѕРІ РЅР° РєРѕРЅРєСЂРµС‚РЅСѓСЋ СЃРµСЃСЃРёСЋ
+        const sessionSubscribers = this.state.sessionSubscribers.get(sessionId);
+        if (sessionSubscribers) {
+          sessionSubscribers.forEach((clientId) => subscribers.add(clientId));
+        }
+
+        // Р”РѕР±Р°РІР»СЏРµРј РїРѕРґРїРёСЃС‡РёРєРѕРІ РЅР° РёР·РјРµРЅРµРЅРёСЏ СЃС‚Р°С‚СѓСЃРѕРІ (type_change С‚РѕР¶Рµ РёРґС‘С‚ С‚СѓРґР°)
+        this.state.statusChangeSubscribers.forEach((clientId) => subscribers.add(clientId));
+
+        // РћС‚РїСЂР°РІРєР° СѓРІРµРґРѕРјР»РµРЅРёСЏ РїРѕРґРїРёСЃС‡РёРєР°Рј
+        if (subscribers.size > 0) {
+          console.log(
+            `[RealtimeWebSocketServer] РћС‚РїСЂР°РІРєР° type_change ${subscribers.size} РїРѕРґРїРёСЃС‡РёРєР°Рј`
+          );
+          this.broadcastToSubscribers(subscribers, typeNotification);
+        }
+      } catch (error) {
+        console.error(
+          `[RealtimeWebSocketServer] РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё РґР°РЅРЅС‹С… СЃРµСЃСЃРёРё: session_id=${sessionId}, error=`,
+          error
+        );
+        this.state.metrics.totalErrors++;
+      }
+    }
+
+
+  /**
+   * РџРѕРґРїРёСЃРєР° РєР»РёРµРЅС‚Р° РЅР° СЃРѕРѕР±С‰РµРЅРёСЏ РєРѕРЅРєСЂРµС‚РЅРѕР№ СЃРµСЃСЃРёРё
+   * Validates: Requirements 2.3, 4.5
+   */
+  private subscribeToSession(clientId: string, sessionId: number, subscriptionId: string): void {
+    const client = this.state.clients.get(clientId);
+    if (!client) return;
+
+    // Р”РѕР±Р°РІР»СЏРµРј РєР»РёРµРЅС‚Р° РІ РїРѕРґРїРёСЃС‡РёРєРё СЃРµСЃСЃРёРё
+    if (!this.state.sessionSubscribers.has(sessionId)) {
+      this.state.sessionSubscribers.set(sessionId, new Set());
+    }
+    this.state.sessionSubscribers.get(sessionId)!.add(clientId);
+
+    // Р”РѕР±Р°РІР»СЏРµРј subscriptionId РІ СЃРїРёСЃРѕРє РїРѕРґРїРёСЃРѕРє РєР»РёРµРЅС‚Р°
+    client.subscriptions.add(subscriptionId);
+
+    console.log(
+      `[RealtimeWebSocketServer] РљР»РёРµРЅС‚ РїРѕРґРїРёСЃР°РЅ: client_id=${clientId}, ` +
+      `session_id=${sessionId}, subscription_id=${subscriptionId}`
+    );
+
+    // РћС‚РїСЂР°РІР»СЏРµРј РїРѕРґС‚РІРµСЂР¶РґРµРЅРёРµ
+    this.sendToClient(clientId, {
+      type: 'subscription_confirmed',
+      subscriptionId: subscriptionId,
+      channel: 'session_messages',
+    });
+  }
+
+  /**
+   * РџРѕРґРїРёСЃРєР° РєР»РёРµРЅС‚Р° РЅР° РІСЃРµ СЃРѕРѕР±С‰РµРЅРёСЏ
+   * Validates: Requirements 2.4, 4.5
+   */
+  private subscribeToAllMessages(clientId: string, subscriptionId: string): void {
+    const client = this.state.clients.get(clientId);
+    if (!client) return;
+
+    // РџСЂРѕРІРµСЂРєР° РїСЂР°РІ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂР°
+    if (!client.isAdmin) {
+      console.warn(
+        `[RealtimeWebSocketServer] РћС‚РєР»РѕРЅРµРЅР° РїРѕРґРїРёСЃРєР° РЅР° РІСЃРµ СЃРѕРѕР±С‰РµРЅРёСЏ: ` +
+        `client_id=${clientId}, РїСЂРёС‡РёРЅР°=not_admin`
+      );
+      this.sendToClient(clientId, {
+        type: 'error',
+        code: 'FORBIDDEN',
+        message: 'Admin access required for all_messages subscription',
+        subscriptionId: subscriptionId,
+      });
+      return;
+    }
+
+    // Р”РѕР±Р°РІР»СЏРµРј РєР»РёРµРЅС‚Р° РІ РїРѕРґРїРёСЃС‡РёРєРё РІСЃРµС… СЃРѕРѕР±С‰РµРЅРёР№
+    this.state.allMessagesSubscribers.add(clientId);
+
+    // Р”РѕР±Р°РІР»СЏРµРј subscriptionId РІ СЃРїРёСЃРѕРє РїРѕРґРїРёСЃРѕРє РєР»РёРµРЅС‚Р°
+    client.subscriptions.add(subscriptionId);
+
+    console.log(
+      `[RealtimeWebSocketServer] РљР»РёРµРЅС‚ РїРѕРґРїРёСЃР°РЅ РЅР° РІСЃРµ СЃРѕРѕР±С‰РµРЅРёСЏ: ` +
+      `client_id=${clientId}, subscription_id=${subscriptionId}`
+    );
+
+    // РћС‚РїСЂР°РІР»СЏРµРј РїРѕРґС‚РІРµСЂР¶РґРµРЅРёРµ
+    this.sendToClient(clientId, {
+      type: 'subscription_confirmed',
+      subscriptionId: subscriptionId,
+      channel: 'all_messages',
+    });
+  }
+
+  /**
+   * РџРѕРґРїРёСЃРєР° РєР»РёРµРЅС‚Р° РЅР° РёР·РјРµРЅРµРЅРёСЏ СЃС‚Р°С‚СѓСЃРѕРІ
+   * Validates: Requirements 2.5, 4.5
+   */
+  private subscribeToStatusChanges(clientId: string, subscriptionId: string): void {
+    const client = this.state.clients.get(clientId);
+    if (!client) return;
+
+    // РџСЂРѕРІРµСЂРєР° РїСЂР°РІ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂР°
+    if (!client.isAdmin) {
+      console.warn(
+        `[RealtimeWebSocketServer] РћС‚РєР»РѕРЅРµРЅР° РїРѕРґРїРёСЃРєР° РЅР° РёР·РјРµРЅРµРЅРёСЏ СЃС‚Р°С‚СѓСЃРѕРІ: ` +
+        `client_id=${clientId}, РїСЂРёС‡РёРЅР°=not_admin`
+      );
+      this.sendToClient(clientId, {
+        type: 'error',
+        code: 'FORBIDDEN',
+        message: 'Admin access required for status_changes subscription',
+        subscriptionId: subscriptionId,
+      });
+      return;
+    }
+
+    // Р”РѕР±Р°РІР»СЏРµРј РєР»РёРµРЅС‚Р° РІ РїРѕРґРїРёСЃС‡РёРєРё РёР·РјРµРЅРµРЅРёР№ СЃС‚Р°С‚СѓСЃРѕРІ
+    this.state.statusChangeSubscribers.add(clientId);
+
+    // Р”РѕР±Р°РІР»СЏРµРј subscriptionId РІ СЃРїРёСЃРѕРє РїРѕРґРїРёСЃРѕРє РєР»РёРµРЅС‚Р°
+    client.subscriptions.add(subscriptionId);
+
+    console.log(
+      `[RealtimeWebSocketServer] РљР»РёРµРЅС‚ РїРѕРґРїРёСЃР°РЅ РЅР° РёР·РјРµРЅРµРЅРёСЏ СЃС‚Р°С‚СѓСЃРѕРІ: ` +
+      `client_id=${clientId}, subscription_id=${subscriptionId}`
+    );
+
+    // РћС‚РїСЂР°РІР»СЏРµРј РїРѕРґС‚РІРµСЂР¶РґРµРЅРёРµ
+    this.sendToClient(clientId, {
+      type: 'subscription_confirmed',
+      subscriptionId: subscriptionId,
+      channel: 'status_changes',
+    });
+  }
+
+  /**
+   * РћС‚РїРёСЃРєР° РєР»РёРµРЅС‚Р° РѕС‚ РєР°РЅР°Р»Р°
+   * Validates: Requirements 2.5
+   */
+  private unsubscribe(clientId: string, subscriptionId: string): void {
+    const client = this.state.clients.get(clientId);
+    if (!client) return;
+
+    // РЈРґР°Р»СЏРµРј subscriptionId РёР· СЃРїРёСЃРєР° РїРѕРґРїРёСЃРѕРє РєР»РёРµРЅС‚Р°
+    client.subscriptions.delete(subscriptionId);
+
+    // РЈРґР°Р»СЏРµРј РєР»РёРµРЅС‚Р° РёР· РІСЃРµС… РїРѕРґРїРёСЃРѕРє (С‚Р°Рє РєР°Рє РјС‹ РЅРµ С…СЂР°РЅРёРј mapping subscriptionId -> channel)
+    // Р­С‚Рѕ СѓРїСЂРѕС‰С‘РЅРЅР°СЏ СЂРµР°Р»РёР·Р°С†РёСЏ - РІ production РјРѕР¶РЅРѕ РґРѕР±Р°РІРёС‚СЊ mapping РґР»СЏ С‚РѕС‡РЅРѕР№ РѕС‚РїРёСЃРєРё
+    this.state.allMessagesSubscribers.delete(clientId);
+    this.state.statusChangeSubscribers.delete(clientId);
+    
+    // РЈРґР°Р»СЏРµРј РёР· РїРѕРґРїРёСЃРѕРє РЅР° СЃРµСЃСЃРёРё
+    for (const [sessionId, subscribers] of this.state.sessionSubscribers) {
+      subscribers.delete(clientId);
+      // РЈРґР°Р»СЏРµРј РїСѓСЃС‚С‹Рµ Set'С‹
+      if (subscribers.size === 0) {
+        this.state.sessionSubscribers.delete(sessionId);
+      }
+    }
+
+    console.log(
+      `[RealtimeWebSocketServer] РљР»РёРµРЅС‚ РѕС‚РїРёСЃР°РЅ: ` +
+      `client_id=${clientId}, subscription_id=${subscriptionId}`
+    );
+  }
+
+  /**
+   * РћС‚РїСЂР°РІРєР° СЃРѕРѕР±С‰РµРЅРёСЏ РєРѕРЅРєСЂРµС‚РЅРѕРјСѓ РєР»РёРµРЅС‚Сѓ
+   * Validates: Requirements 3.6, 9.5
+   */
+  private sendToClient(clientId: string, message: ServerMessage): boolean {
+    const client = this.state.clients.get(clientId);
+    if (!client) {
+      console.warn(`[RealtimeWebSocketServer] РџРѕРїС‹С‚РєР° РѕС‚РїСЂР°РІРєРё СЃРѕРѕР±С‰РµРЅРёСЏ РЅРµСЃСѓС‰РµСЃС‚РІСѓСЋС‰РµРјСѓ РєР»РёРµРЅС‚Сѓ: ${clientId}`);
+      return false;
+    }
+
+    if (client.ws.readyState !== WebSocket.OPEN) {
+      console.warn(`[RealtimeWebSocketServer] WebSocket РЅРµ РѕС‚РєСЂС‹С‚ РґР»СЏ client_id=${clientId}, readyState=${client.ws.readyState}`);
+      return false;
+    }
+
+    try {
+      const messageStr = JSON.stringify(message);
+      console.log(`[RealtimeWebSocketServer] РћС‚РїСЂР°РІРєР° СЃРѕРѕР±С‰РµРЅРёСЏ client_id=${clientId}: type=${message.type}`);
+      client.ws.send(messageStr);
+      return true;
+    } catch (error) {
+      console.error(`[RealtimeWebSocketServer] РћС€РёР±РєР° РѕС‚РїСЂР°РІРєРё СЃРѕРѕР±С‰РµРЅРёСЏ client_id=${clientId}:`, error);
+      this.state.metrics.totalErrors++;
+      return false;
+    }
+  }
+
+  /**
+   * РћС‚РїСЂР°РІРєР° СЃРѕРѕР±С‰РµРЅРёСЏ РІСЃРµРј РїРѕРґРїРёСЃС‡РёРєР°Рј
+   * Validates: Requirements 3.6
+   */
+  private broadcastToSubscribers(subscribers: Set<string>, message: ServerMessage): void {
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const clientId of subscribers) {
+      if (this.sendToClient(clientId, message)) {
+        successCount++;
+      } else {
+        failCount++;
+      }
+    }
+
+    if (failCount > 0) {
+      console.warn(
+        `[RealtimeWebSocketServer] Broadcast Р·Р°РІРµСЂС€С‘РЅ: СѓСЃРїРµС€РЅРѕ=${successCount}, РѕС€РёР±РѕРє=${failCount}`
+      );
+    }
+  }
+
+  /**
+   * Р—Р°РїСѓСЃРє heartbeat РјРµС…Р°РЅРёР·РјР°
+   * Validates: Requirements 2.7, 2.8
+   * 
+   * РРЎРџР РђР’Р›Р•РќРР•: РСЃРїРѕР»СЊР·СѓРµРј WebSocket ping frames РІРјРµСЃС‚Рѕ JSON СЃРѕРѕР±С‰РµРЅРёР№
+   * Р‘СЂР°СѓР·РµСЂС‹ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё РѕС‚РІРµС‡Р°СЋС‚ pong frames РЅР° ping frames
+   */
+  private startHeartbeat(): void {
+    this.heartbeatInterval = setInterval(() => {
+      const now = Date.now();
+
+      // РћС‚РїСЂР°РІР»СЏРµРј ping РІСЃРµРј РїРѕРґРєР»СЋС‡С‘РЅРЅС‹Рј РєР»РёРµРЅС‚Р°Рј
+      for (const [clientId, client] of this.state.clients) {
+        // РџСЂРѕРІРµСЂСЏРµРј, РЅРµ РёСЃС‚С‘Рє Р»Рё timeout РґР»СЏ pong
+        const timeSinceLastPong = now - client.lastPong;
+        
+        if (timeSinceLastPong > this.config.heartbeatTimeout) {
+          console.warn(
+            `[RealtimeWebSocketServer] Heartbeat timeout РґР»СЏ client_id=${clientId}, ` +
+            `РїРѕСЃР»РµРґРЅРёР№ pong ${timeSinceLastPong}ms РЅР°Р·Р°Рґ`
+          );
+          // Р—Р°РєСЂС‹РІР°РµРј СЃРѕРµРґРёРЅРµРЅРёРµ РёР·-Р·Р° timeout
+          client.ws.close(1000, 'Heartbeat timeout');
+          this.handleClientDisconnect(clientId, 1000, 'Heartbeat timeout');
+          continue;
+        }
+
+        // РћС‚РїСЂР°РІР»СЏРµРј WebSocket ping frame (РЅРµ JSON СЃРѕРѕР±С‰РµРЅРёРµ!)
+        if (client.ws.readyState === WebSocket.OPEN) {
+          try {
+            client.ws.ping();
+            client.lastPing = now;
+          } catch (error) {
+            console.error(`[RealtimeWebSocketServer] РћС€РёР±РєР° РѕС‚РїСЂР°РІРєРё ping РґР»СЏ client_id=${clientId}:`, error);
+          }
+        }
+      }
+    }, this.config.heartbeatInterval);
+
+    console.log(
+      `[RealtimeWebSocketServer] Heartbeat РјРµС…Р°РЅРёР·Рј Р·Р°РїСѓС‰РµРЅ: ` +
+      `РёРЅС‚РµСЂРІР°Р»=${this.config.heartbeatInterval}ms, timeout=${this.config.heartbeatTimeout}ms`
+    );
+  }
+
+  /**
+   * Р—Р°РїСѓСЃРє РїРµСЂРёРѕРґРёС‡РµСЃРєРѕРіРѕ Р»РѕРіРёСЂРѕРІР°РЅРёСЏ РјРµС‚СЂРёРє
+   * Validates: Requirements 9.4, 9.6
+   */
+  private startMetricsLogging(): void {
+    this.metricsInterval = setInterval(() => {
+      console.log(
+        `[RealtimeWebSocketServer] РњРµС‚СЂРёРєРё: Р°РєС‚РёРІРЅС‹С… РїРѕРґРєР»СЋС‡РµРЅРёР№=${this.state.metrics.activeConnections}, ` +
+        `РІСЃРµРіРѕ РїРѕРґРєР»СЋС‡РµРЅРёР№=${this.state.metrics.totalConnections}, ` +
+        `СѓРІРµРґРѕРјР»РµРЅРёР№=${this.state.metrics.totalNotifications}, ` +
+        `РѕС€РёР±РѕРє=${this.state.metrics.totalErrors}`
+      );
+    }, this.config.metricsLogInterval);
+  }
+
+  /**
+   * РџРѕР»СѓС‡РµРЅРёРµ С‚РµРєСѓС‰РёС… РјРµС‚СЂРёРє
+   * Validates: Requirements 9.6
+   */
+  getMetrics(): typeof this.state.metrics {
+    return { ...this.state.metrics };
+  }
+
+  /**
+   * РќР°СЃС‚СЂРѕР№РєР° РѕР±СЂР°Р±РѕС‚С‡РёРєРѕРІ graceful shutdown
+   * Validates: Requirements 10.1
+   */
+  private setupShutdownHandlers(): void {
+    const shutdownHandler = () => {
+      console.log('[RealtimeWebSocketServer] РџРѕР»СѓС‡РµРЅ СЃРёРіРЅР°Р» Р·Р°РІРµСЂС€РµРЅРёСЏ, РЅР°С‡РёРЅР°РµРј graceful shutdown');
+      this.shutdown();
+    };
+
+    process.on('SIGTERM', shutdownHandler);
+    process.on('SIGINT', shutdownHandler);
+  }
+
+  /**
+   * Graceful shutdown СЃРµСЂРІРµСЂР°
+   * Validates: Requirements 10.1, 10.2, 10.3, 10.4, 10.5, 10.6
+   */
+  async shutdown(): Promise<void> {
+    console.log('[RealtimeWebSocketServer] Graceful shutdown РЅР°С‡Р°С‚');
+    
+    // РЈСЃС‚Р°РЅР°РІР»РёРІР°РµРј С„Р»Р°Рі shutdown РґР»СЏ РїСЂРµРєСЂР°С‰РµРЅРёСЏ РїСЂРёС‘РјР° РЅРѕРІС‹С… РїРѕРґРєР»СЋС‡РµРЅРёР№
+    this.state.isShuttingDown = true;
+
+    // РћСЃС‚Р°РЅР°РІР»РёРІР°РµРј heartbeat Рё РјРµС‚СЂРёРєРё
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+    if (this.metricsInterval) {
+      clearInterval(this.metricsInterval);
+      this.metricsInterval = null;
+    }
+
+    // РћС‚РїСЂР°РІР»СЏРµРј closing СЃРѕРѕР±С‰РµРЅРёРµ РІСЃРµРј РєР»РёРµРЅС‚Р°Рј
+    const closingMessage: ClosingMessage = {
+      type: 'closing',
+      reason: 'Server is shutting down',
+    };
+
+    const clientIds = Array.from(this.state.clients.keys());
+    console.log(
+      `[RealtimeWebSocketServer] РћС‚РїСЂР°РІРєР° closing СЃРѕРѕР±С‰РµРЅРёСЏ ${clientIds.length} РєР»РёРµРЅС‚Р°Рј`
+    );
+
+    for (const clientId of clientIds) {
+      this.sendToClient(clientId, closingMessage);
+    }
+
+    // Р—Р°РєСЂС‹РІР°РµРј РІСЃРµ WebSocket СЃРѕРµРґРёРЅРµРЅРёСЏ СЃ РєРѕРґРѕРј 1001 (going away)
+    for (const [clientId, client] of this.state.clients) {
+      try {
+        client.ws.close(1001, 'Server shutting down');
+      } catch (error) {
+        console.error(
+          `[RealtimeWebSocketServer] РћС€РёР±РєР° Р·Р°РєСЂС‹С‚РёСЏ СЃРѕРµРґРёРЅРµРЅРёСЏ client_id=${clientId}:`,
+          error
+        );
+      }
+    }
+
+    // РћР¶РёРґР°РµРј Р·Р°РєСЂС‹С‚РёСЏ РІСЃРµС… СЃРѕРµРґРёРЅРµРЅРёР№ СЃ timeout
+    const shutdownStart = Date.now();
+    const checkInterval = 100; // РџСЂРѕРІРµСЂСЏРµРј РєР°Р¶РґС‹Рµ 100ms
+    
+    while (this.state.clients.size > 0) {
+      const elapsed = Date.now() - shutdownStart;
+      
+      if (elapsed >= this.config.shutdownTimeout) {
+        console.warn(
+          `[RealtimeWebSocketServer] Shutdown timeout: ${this.state.clients.size} РєР»РёРµРЅС‚РѕРІ РµС‰С‘ РїРѕРґРєР»СЋС‡РµРЅС‹`
+        );
+        break;
+      }
+      
+      // Р–РґС‘Рј РЅРµРјРЅРѕРіРѕ РїРµСЂРµРґ СЃР»РµРґСѓСЋС‰РµР№ РїСЂРѕРІРµСЂРєРѕР№
+      await new Promise((resolve) => setTimeout(resolve, checkInterval));
+    }
+
+    const closedCount = clientIds.length - this.state.clients.size;
+    console.log(
+      `[RealtimeWebSocketServer] Р—Р°РєСЂС‹С‚Рѕ ${closedCount} РёР· ${clientIds.length} РїРѕРґРєР»СЋС‡РµРЅРёР№`
+    );
+
+    // Р—Р°РєСЂС‹РІР°РµРј PostgreSQL LISTEN РїРѕРґРєР»СЋС‡РµРЅРёРµ
+    if (this.pgListenClient) {
+      try {
+        console.log('[RealtimeWebSocketServer] Р’С‹РїРѕР»РЅРµРЅРёРµ UNLISTEN РґР»СЏ РІСЃРµС… РєР°РЅР°Р»РѕРІ');
+        await this.pgListenClient.query('UNLISTEN new_message');
+        await this.pgListenClient.query('UNLISTEN session_status_change');
+        await this.pgListenClient.query('UNLISTEN session_type_change');
+        
+        await this.pgListenClient.end();
+        this.pgListenClient = null;
+        console.log('[RealtimeWebSocketServer] PostgreSQL LISTEN РїРѕРґРєР»СЋС‡РµРЅРёРµ Р·Р°РєСЂС‹С‚Рѕ');
+      } catch (error) {
+        console.error(
+          '[RealtimeWebSocketServer] РћС€РёР±РєР° Р·Р°РєСЂС‹С‚РёСЏ PostgreSQL LISTEN РїРѕРґРєР»СЋС‡РµРЅРёСЏ:',
+          error
+        );
+      }
+    }
+
+    // Р—Р°РєСЂС‹РІР°РµРј WebSocket СЃРµСЂРІРµСЂ
+    this.wss.close(() => {
+      console.log('[RealtimeWebSocketServer] WebSocket СЃРµСЂРІРµСЂ Р·Р°РєСЂС‹С‚');
+    });
+
+    console.log(
+      `[RealtimeWebSocketServer] Graceful shutdown Р·Р°РІРµСЂС€С‘РЅ: ` +
+      `Р·Р°РєСЂС‹С‚Рѕ РїРѕРґРєР»СЋС‡РµРЅРёР№=${closedCount}, ` +
+      `РѕСЃС‚Р°Р»РѕСЃСЊ Р°РєС‚РёРІРЅС‹С…=${this.state.clients.size}`
+    );
+
+    // Р—Р°РІРµСЂС€Р°РµРј РїСЂРѕС†РµСЃСЃ С‚РѕР»СЊРєРѕ РµСЃР»Рё РЅРµ РІ С‚РµСЃС‚РѕРІРѕРј РѕРєСЂСѓР¶РµРЅРёРё
+    if (process.env.NODE_ENV !== 'test') {
+      process.exit(0);
+    }
+  }
+
+  /**
+   * РџРѕР»СѓС‡РµРЅРёРµ WebSocketServer РґР»СЏ РёРЅС‚РµРіСЂР°С†РёРё СЃ HTTP server
+   */
+  getWebSocketServer(): WebSocketServer {
+    return this.wss;
+  }
+}

@@ -7,6 +7,26 @@ import sys
 import os
 from pathlib import Path
 
+# КРИТИЧЕСКИ ВАЖНО: Настроить event loop policy ДО импорта других модулей
+# psycopg не работает с ProactorEventLoop на Windows
+if sys.platform == 'win32':
+    try:
+        if sys.version_info >= (3, 14):
+            # Для Python 3.14+ создаём custom policy для SelectorEventLoop
+            import selectors
+            
+            class SelectorEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
+                def new_event_loop(self):
+                    return asyncio.SelectorEventLoop(selectors.DefaultSelector())
+            
+            asyncio.set_event_loop_policy(SelectorEventLoopPolicy())
+        else:
+            # Для старых версий используем WindowsSelectorEventLoopPolicy
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    except AttributeError:
+        # Fallback для совместимости
+        pass
+
 # Добавляем корневую директорию в путь для импорта модулей
 sys.path.insert(0, str(Path(__file__).parent.parent))
 

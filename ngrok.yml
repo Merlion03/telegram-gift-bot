@@ -1,0 +1,18 @@
+# Конфигурация ngrok для поддержки WebSocket
+# Сохраните этот файл как ngrok.yml и запускайте: ngrok start --config ngrok.yml webapp
+
+version: "2"
+authtoken: ВАШ_NGROK_TOKEN
+
+tunnels:
+  webapp:
+    proto: http
+    addr: 3000
+    # Важно: ngrok автоматически поддерживает WebSocket upgrade
+    # Но нужно убедиться что используется HTTP/1.1
+    bind_tls: true
+    inspect: true
+    # Увеличиваем таймауты для WebSocket
+    # (доступно только в платных планах ngrok)
+    # heartbeat_interval: 60s
+    # heartbeat_tolerance: 5s

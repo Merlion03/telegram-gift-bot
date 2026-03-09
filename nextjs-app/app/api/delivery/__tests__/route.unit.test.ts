@@ -126,7 +126,7 @@ describe('Delivery API Route - Unit Tests (Edge Cases)', () => {
         json: async () => {
           throw new SyntaxError('Unexpected token');
         },
-      } as NextRequest;
+      } as unknown as NextRequest;
 
       const response = await POST(request);
       const data = await response.json();

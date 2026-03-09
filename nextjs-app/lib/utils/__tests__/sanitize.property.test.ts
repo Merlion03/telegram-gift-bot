@@ -160,13 +160,15 @@ describe('Property 28: Серверная валидация пользоват�
         fc.record({
           last_name: fc.string({ minLength: 1, maxLength: 50 }),
           first_name: fc.string({ minLength: 1, maxLength: 50 }),
-          patronymic: fc.option(fc.string({ maxLength: 50 })),
+          patronymic: fc.option(fc.string({ maxLength: 50 }), { nil: undefined }),
+          country: fc.string({ minLength: 1, maxLength: 100 }),
+          postal_code: fc.string({ minLength: 1, maxLength: 20 }),
           city: fc.string({ minLength: 1, maxLength: 100 }),
           street: fc.string({ minLength: 1, maxLength: 200 }),
           house: fc.string({ minLength: 1, maxLength: 20 }),
-          apartment: fc.option(fc.string({ maxLength: 20 })),
+          apartment: fc.option(fc.string({ maxLength: 20 }), { nil: undefined }),
           phone: fc.string({ minLength: 1, maxLength: 50 }),
-          comment: fc.option(fc.string({ maxLength: 500 })),
+          comment: fc.option(fc.string({ maxLength: 500 }), { nil: undefined }),
           telegram_id: fc.integer({ min: 1, max: 999999999 }),
         }),
         (data) => {
@@ -175,6 +177,8 @@ describe('Property 28: Серверная валидация пользоват�
           // Все текстовые поля должны быть санитизированы
           expect(sanitized.last_name).not.toMatch(/<[^>]*>/g);
           expect(sanitized.first_name).not.toMatch(/<[^>]*>/g);
+          expect(sanitized.country).not.toMatch(/<[^>]*>/g);
+          expect(sanitized.postal_code).not.toMatch(/<[^>]*>/g);
           expect(sanitized.city).not.toMatch(/<[^>]*>/g);
           expect(sanitized.street).not.toMatch(/<[^>]*>/g);
           expect(sanitized.house).not.toMatch(/<[^>]*>/g);
@@ -316,6 +320,8 @@ describe('Property 27 & 28: Интеграционные тесты санити
       last_name: '<script>alert("XSS")</script>Иванов',
       first_name: 'Иван<img src=x onerror=alert("XSS")>',
       patronymic: 'Иванович<svg onload=alert("XSS")>',
+      country: 'Россия<iframe src="javascript:alert(\'XSS\')">',
+      postal_code: '123456<script>alert("XSS")</script>',
       city: 'Москва<iframe src="javascript:alert(\'XSS\')">',
       street: 'Ленина<script>alert("XSS")</script>',
       house: '10<img src=x onerror=alert("XSS")>',
@@ -372,6 +378,8 @@ describe('Property 27 & 28: Интеграционные тесты санити
       last_name: 'Иванов',
       first_name: 'Иван',
       patronymic: 'Иванович',
+      country: 'Россия',
+      postal_code: '123456',
       city: 'Москва',
       street: 'Ленина',
       house: '10',
@@ -387,11 +395,14 @@ describe('Property 27 & 28: Интеграционные тесты санити
     expect(sanitized.last_name).toContain('Иванов');
     expect(sanitized.first_name).toContain('Иван');
     expect(sanitized.patronymic).toContain('Иванович');
+    expect(sanitized.country).toContain('Россия');
+    expect(sanitized.postal_code).toContain('123456');
     expect(sanitized.city).toContain('Москва');
     expect(sanitized.street).toContain('Ленина');
     expect(sanitized.house).toContain('10');
     expect(sanitized.apartment).toContain('5');
     expect(sanitized.phone).toContain('+7999');
+
     expect(sanitized.comment).toContain('Позвонить');
   });
 });

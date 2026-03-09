@@ -172,7 +172,7 @@ describe('Property 33: ErrorBoundary - Перехват и отображени�
    */
   it('должен показывать детали ошибки в development режиме', () => {
     const originalEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = 'development';
+    (process.env as any).NODE_ENV = 'development';
     
     fc.assert(
       fc.property(
@@ -198,7 +198,7 @@ describe('Property 33: ErrorBoundary - Перехват и отображени�
       { numRuns: 30 }
     );
     
-    process.env.NODE_ENV = originalEnv;
+    (process.env as any).NODE_ENV = originalEnv;
   });
 
   /**
@@ -207,7 +207,7 @@ describe('Property 33: ErrorBoundary - Перехват и отображени�
    */
   it('не должен показывать детали ошибки в production режиме', () => {
     const originalEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = 'production';
+    (process.env as any).NODE_ENV = 'production';
     
     fc.assert(
       fc.property(
@@ -236,7 +236,7 @@ describe('Property 33: ErrorBoundary - Перехват и отображени�
       { numRuns: 30 }
     );
     
-    process.env.NODE_ENV = originalEnv;
+    (process.env as any).NODE_ENV = originalEnv;
   });
 
   /**

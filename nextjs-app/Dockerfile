@@ -31,6 +31,7 @@ COPY . .
 ARG NEXT_PUBLIC_SUPABASE_URL
 ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
 ARG NEXT_PUBLIC_WEBAPP_URL
+ARG NEXT_PUBLIC_USE_POSTGRES_REALTIME
 
 # Переменные окружения для сборки
 # Next.js собирает статические страницы на этапе build
@@ -39,10 +40,14 @@ ENV NEXT_TELEMETRY_DISABLED=1 \
     NODE_OPTIONS="--max-old-space-size=2048" \
     NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL} \
     NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY} \
-    NEXT_PUBLIC_WEBAPP_URL=${NEXT_PUBLIC_WEBAPP_URL}
+    NEXT_PUBLIC_WEBAPP_URL=${NEXT_PUBLIC_WEBAPP_URL} \
+    NEXT_PUBLIC_USE_POSTGRES_REALTIME=${NEXT_PUBLIC_USE_POSTGRES_REALTIME}
 
 # Сборка приложения
 RUN npm run build
+
+# Компиляция TypeScript для server.ts
+RUN npx tsc --project tsconfig.server.json
 
 
 # Stage 3: Runner - финальный образ для production
@@ -64,12 +69,11 @@ ENV NODE_ENV=production \
     PORT=3000
 
 # Копирование необходимых файлов из builder
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-
-# Установка владельца файлов
-RUN chown -R nextjs:nodejs /app
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
+COPY --from=builder --chown=nextjs:nodejs /app/dist ./dist
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 
 # Переключение на непривилегированного пользователя
 USER nextjs
@@ -82,5 +86,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" || exit 1
 
-# Запуск приложения
-CMD ["node", "server.js"]
+# Запуск приложения через custom server
+CMD ["node", "dist/server.js"]

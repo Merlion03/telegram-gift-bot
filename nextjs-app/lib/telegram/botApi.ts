@@ -82,7 +82,7 @@ export class TelegramBotApi {
         body: JSON.stringify(params),
       });
 
-      const data: TelegramApiResponse = await response.json();
+      const data = await response.json() as TelegramApiResponse;
 
       // Обработка ошибок от Telegram API
       if (!data.ok) {
@@ -119,7 +119,7 @@ export class TelegramBotApi {
   async checkConnection(): Promise<boolean> {
     try {
       const response = await fetch(`${this.baseUrl}/getMe`);
-      const data: TelegramApiResponse = await response.json();
+      const data = await response.json() as TelegramApiResponse;
       return data.ok;
     } catch {
       return false;

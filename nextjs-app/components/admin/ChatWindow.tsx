@@ -9,7 +9,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { getSupabaseClient } from '@/lib/database/supabaseClient';
+import { getRealtimeClient } from '@/lib/database/realtimeClient';
 import type { SupportMessage, SupportSession } from '@/types/support';
 import { ErrorMessage, getReadableErrorMessage } from '@/components/common/ErrorMessage';
 
@@ -35,6 +35,8 @@ export function ChatWindow({ session }: ChatWindowProps) {
   const [totalMessages, setTotalMessages] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const unsubscribeRef = useRef<(() => void) | null>(null);
+  const isMountedRef = useRef(true);
   const MESSAGES_PER_PAGE = 50;
 
   // Загрузка истории сообщений при изменении сессии
@@ -44,32 +46,53 @@ export function ChatWindow({ session }: ChatWindowProps) {
 
   // Подписка на real-time обновления
   useEffect(() => {
-    const supabaseClient = getSupabaseClient();
+    // Синхронная инициализация подписки
+    const realtimeClient = getRealtimeClient();
 
     // Подписываемся на новые сообщения для текущей сессии
-    const unsubscribe = supabaseClient.subscribeToSessionMessages(
-      session.id,
-      (message) => {
-        // Добавляем новое сообщение в список
-        setMessages((prev) => {
-          // Проверяем, не добавлено ли уже это сообщение
-          if (prev.some((m) => m.id === message.id)) {
-            return prev;
-          }
-          return [...prev, message];
-        });
-        
-        // Автоскролл к новому сообщению
-        scrollToBottom();
-      },
-      (error) => {
-        console.error('Real-time subscription error:', error);
-      }
-    );
+    unsubscribeRef.current = realtimeClient.subscribeToSessionMessages(
+        session.id,
+        (serverMessage) => {
+          // Проверяем, что компонент всё ещё смонтирован
+          if (!isMountedRef.current) return;
+          
+          // Обрабатываем только new_message события
+          if (serverMessage.type !== 'new_message') return;
+          
+          // Преобразуем данные сервера в SupportMessage
+          const message: SupportMessage = {
+            id: serverMessage.data.id,
+            session_id: serverMessage.data.session_id,
+            telegram_id: session.telegram_id,
+            message_type: serverMessage.data.sender_type === 'user' ? 'from_user' : 'from_support',
+            message_text: serverMessage.data.message_text,
+            created_at: serverMessage.data.created_at,
+            delivered: serverMessage.data.is_read || false,
+          };
+          
+          // Добавляем новое сообщение в список
+          setMessages((prev) => {
+            // Проверяем, не добавлено ли уже это сообщение
+            if (prev.some((m) => m.id === message.id)) {
+              return prev;
+            }
+            return [...prev, message];
+          });
+          
+          // Автоскролл к новому сообщению
+          scrollToBottom();
+        },
+        (error: Error) => {
+          console.error('Real-time subscription error:', error);
+        }
+      );
 
     // Отписываемся при размонтировании или изменении сессии
     return () => {
-      unsubscribe();
+      isMountedRef.current = false;
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+      }
     };
   }, [session.id]);
 

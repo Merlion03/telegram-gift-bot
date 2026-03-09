@@ -134,6 +134,7 @@ describe('API Routes: /api/support/messages - Edge Cases', () => {
         id: 1,
         telegram_id: 12345,
         status: 'active',
+        session_type: 'support',
         created_at: new Date().toISOString(),
       };
 
@@ -305,6 +306,7 @@ describe('API Routes: /api/support/messages - Edge Cases', () => {
         id: 1,
         telegram_id: 12345,
         status: 'closed',
+        session_type: 'support',
         created_at: new Date().toISOString(),
         closed_at: new Date().toISOString(),
       };
@@ -337,6 +339,7 @@ describe('API Routes: /api/support/messages - Edge Cases', () => {
         id: 1,
         telegram_id: 12345,
         status: 'active',
+        session_type: 'support',
         created_at: new Date().toISOString(),
       };
 
@@ -389,6 +392,7 @@ describe('API Routes: /api/support/messages - Edge Cases', () => {
         id: 1,
         telegram_id: 12345,
         status: 'active',
+        session_type: 'support',
         created_at: new Date().toISOString(),
       };
 
@@ -430,6 +434,7 @@ describe('API Routes: /api/support/messages - Edge Cases', () => {
         id: 1,
         telegram_id: 12345,
         status: 'active',
+        session_type: 'support',
         created_at: new Date().toISOString(),
       };
 
@@ -461,6 +466,7 @@ describe('API Routes: /api/support/messages - Edge Cases', () => {
         id: 1,
         telegram_id: 12345,
         status: 'active',
+        session_type: 'support',
         created_at: new Date().toISOString(),
       };
 
@@ -501,3 +507,4 @@ describe('API Routes: /api/support/messages - Edge Cases', () => {
     });
   });
 });
+

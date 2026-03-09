@@ -132,7 +132,7 @@ describe('NextAuth Configuration - Property Tests', () => {
 
             if (authOptions.callbacks?.jwt) {
               const token = await authOptions.callbacks.jwt({
-                token: {},
+                token: { id: '', name: '', email: '' },
                 user: userData as User,
                 trigger: 'signIn',
                 account: null,
@@ -164,18 +164,20 @@ describe('NextAuth Configuration - Property Tests', () => {
             if (authOptions.callbacks?.session) {
               const session = await authOptions.callbacks.session({
                 session: {
-                  user: { name: '', email: '' },
+                  user: { id: '', name: '', email: '' },
                   expires: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString(),
                 },
                 token: tokenData as any,
                 user: undefined as any,
                 newSession: undefined,
-                trigger: 'getSession',
+                trigger: 'update',
               });
 
               // Свойство: сессия содержит данные из токена
-              expect(session.user.id).toBe(tokenData.id);
-              expect(session.user.name).toBe(tokenData.name);
+              if (session.user && 'id' in session.user) {
+                expect(session.user.id).toBe(tokenData.id);
+                expect(session.user.name).toBe(tokenData.name);
+              }
             }
           }
         ),

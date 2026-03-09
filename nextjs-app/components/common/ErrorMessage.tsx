@@ -149,6 +149,8 @@ export function getReadableErrorMessage(error: unknown): string {
       'Unauthorized': 'Требуется авторизация. Пожалуйста, войдите в систему.',
       'Network request failed': 'Ошибка сети. Проверьте подключение к интернету.',
       'Validation error': 'Проверьте правильность заполнения всех полей.',
+      'Server error': 'Ошибка сервера. Попробуйте ещё раз позже.',
+      'Временная ошибка сервера': 'Ошибка сервера. Попробуйте ещё раз позже.',
     };
 
     const message = error.message || '';

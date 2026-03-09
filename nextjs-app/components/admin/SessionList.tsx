@@ -9,7 +9,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getSupabaseClient } from '@/lib/database/supabaseClient';
+import { getRealtimeClient } from '@/lib/database/realtimeClient';
 import type { SupportSession, SupportSessionStatus, SessionType } from '@/types/support';
 
 interface SessionListProps {
@@ -46,34 +46,50 @@ export function SessionList({ onSelectSession, selectedSessionId }: SessionListP
     return () => clearInterval(updateInterval);
   }, [statusFilter, sessionTypeFilter]); // Перезагружаем при изменении фильтров
 
-  // Подписка на real-time обновления статусов сессий
+  // Подписка на real-time обновления статусов сессий через WebSocket
   useEffect(() => {
-    const supabaseClient = getSupabaseClient();
+    let subscriptionId: string | null = null;
 
-    // Подписываемся на изменения статусов сессий
-    const unsubscribe = supabaseClient.subscribeToSessionStatusChanges(
-      (sessionId, status) => {
-        // Обновляем статус сессии в локальном состоянии
-        setSessions((prevSessions) => {
-          // Если сессия закрыта, удаляем её из списка активных
-          if (status === 'closed') {
-            return prevSessions.filter((s) => s.id !== sessionId);
+    // Асинхронная инициализация подписки
+    const initSubscription = async () => {
+      const client = getRealtimeClient();
+
+      // Подписываемся на канал status (изменения статусов сессий)
+      subscriptionId = client.subscribe({
+        channel: 'status',
+        onMessage: (message: any) => {
+          // Обрабатываем сообщение об изменении статуса
+          if (message.sessionId && message.status) {
+            const sessionId = message.sessionId;
+            const status = message.status;
+            
+            // Обновляем статус сессии в локальном состоянии
+            setSessions((prevSessions) => {
+              // Если сессия закрыта, удаляем её из списка активных
+              if (status === 'closed') {
+                return prevSessions.filter((s) => s.id !== sessionId);
+              }
+
+              // Обновляем статус существующей сессии
+              return prevSessions.map((s) =>
+                s.id === sessionId ? { ...s, status: status as SupportSessionStatus } : s
+              );
+            });
           }
+        },
+        onError: (error: Error) => {
+          console.error('Real-time subscription error:', error);
+        }
+      });
+    };
 
-          // Обновляем статус существующей сессии
-          return prevSessions.map((s) =>
-            s.id === sessionId ? { ...s, status: status as SupportSessionStatus } : s
-          );
-        });
-      },
-      (error) => {
-        console.error('Real-time subscription error:', error);
-      }
-    );
+    initSubscription();
 
     // Отписываемся при размонтировании
     return () => {
-      unsubscribe();
+      if (subscriptionId) {
+        getRealtimeClient().unsubscribe(subscriptionId!);
+      }
     };
   }, []);
 

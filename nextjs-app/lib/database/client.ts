@@ -37,6 +37,11 @@ export interface PaginatedSessions {
 }
 
 /**
+ * Экспорт типа SupportSession для использования в других модулях
+ */
+export type { SupportSession };
+
+/**
  * DatabaseClient - клиент для работы с PostgreSQL
  * Использует connection pooling для оптимальной производительности
  */

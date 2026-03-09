@@ -97,7 +97,7 @@ describe('TelegramBotApi - Property-Based Tests', () => {
           fc.string({ minLength: 1, maxLength: 100 })
             .map(s => s.trim())
             .filter(s => s.length > 0), // текст (не только пробелы)
-          fc.constantFrom('HTML', 'Markdown', 'MarkdownV2'), // parse_mode
+          fc.constantFrom('HTML', 'Markdown', 'MarkdownV2') as fc.Arbitrary<'HTML' | 'Markdown' | 'MarkdownV2'>, // parse_mode
           fc.boolean(), // disable_web_page_preview
           async (chatId, text, parseMode, disablePreview) => {
             const mockFetch = vi.fn().mockResolvedValue({

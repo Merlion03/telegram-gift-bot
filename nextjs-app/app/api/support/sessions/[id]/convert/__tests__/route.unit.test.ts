@@ -10,6 +10,7 @@ import { getServerSession } from 'next-auth';
 import { POST } from '../route';
 import { getDb } from '@/lib/database/client';
 import type { SupportSession } from '@/types/support';
+import { createRouteParams } from '@/app/api/__tests__/test-utils';
 
 // Мокируем зависимости
 vi.mock('next-auth');
@@ -33,7 +34,7 @@ describe('POST /api/support/sessions/[id]/convert', () => {
     const request = new NextRequest('http://localhost/api/support/sessions/1/convert', {
       method: 'POST',
     });
-    const params = { params: { id: '1' } };
+    const params = createRouteParams({ id: '1' });
 
     // Act
     const response = await POST(request, params);
@@ -50,7 +51,7 @@ describe('POST /api/support/sessions/[id]/convert', () => {
     const request = new NextRequest('http://localhost/api/support/sessions/invalid/convert', {
       method: 'POST',
     });
-    const params = { params: { id: 'invalid' } };
+    const params = createRouteParams({ id: 'invalid' });
 
     // Act
     const response = await POST(request, params);
@@ -68,7 +69,7 @@ describe('POST /api/support/sessions/[id]/convert', () => {
     const request = new NextRequest('http://localhost/api/support/sessions/999/convert', {
       method: 'POST',
     });
-    const params = { params: { id: '999' } };
+    const params = createRouteParams({ id: '999' });
 
     // Act
     const response = await POST(request, params);
@@ -95,7 +96,7 @@ describe('POST /api/support/sessions/[id]/convert', () => {
     const request = new NextRequest('http://localhost/api/support/sessions/1/convert', {
       method: 'POST',
     });
-    const params = { params: { id: '1' } };
+    const params = createRouteParams({ id: '1' });
 
     // Act
     const response = await POST(request, params);
@@ -132,7 +133,7 @@ describe('POST /api/support/sessions/[id]/convert', () => {
     const request = new NextRequest('http://localhost/api/support/sessions/1/convert', {
       method: 'POST',
     });
-    const params = { params: { id: '1' } };
+    const params = createRouteParams({ id: '1' });
 
     // Act
     const response = await POST(request, params);
@@ -163,7 +164,7 @@ describe('POST /api/support/sessions/[id]/convert', () => {
     const request = new NextRequest('http://localhost/api/support/sessions/1/convert', {
       method: 'POST',
     });
-    const params = { params: { id: '1' } };
+    const params = createRouteParams({ id: '1' });
 
     // Act
     const response = await POST(request, params);
@@ -200,7 +201,7 @@ describe('POST /api/support/sessions/[id]/convert', () => {
     const request = new NextRequest('http://localhost/api/support/sessions/1/convert', {
       method: 'POST',
     });
-    const params = { params: { id: '1' } };
+    const params = createRouteParams({ id: '1' });
 
     // Act
     await POST(request, params);
@@ -237,7 +238,7 @@ describe('POST /api/support/sessions/[id]/convert', () => {
     const request = new NextRequest('http://localhost/api/support/sessions/1/convert', {
       method: 'POST',
     });
-    const params = { params: { id: '1' } };
+    const params = createRouteParams({ id: '1' });
 
     // Act
     const response = await POST(request, params);

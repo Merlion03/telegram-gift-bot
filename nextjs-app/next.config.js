@@ -1,8 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
-  // Standalone output для Docker - создаёт минимальный self-contained сервер
-  output: 'standalone',
+  reactStrictMode: false, // Временно отключаем для отладки WebSocket
+  // Убираем standalone для использования custom server с WebSocket
+  // output: 'standalone',
 }
 
 module.exports = nextConfig

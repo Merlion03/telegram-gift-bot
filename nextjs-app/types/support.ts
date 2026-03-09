@@ -87,7 +87,7 @@ export interface SendReplyResponse {
   error?: string;
 }
 
-// Real-time событие нового сообщения (для Supabase Realtime)
+// Real-time событие нового сообщения (для PostgreSQL LISTEN/NOTIFY)
 export interface NewMessageEvent {
   type: 'INSERT';
   table: 'support_messages';

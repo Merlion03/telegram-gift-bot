@@ -121,8 +121,16 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
       });
       
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Не удалось отправить данные');
+        let errorMessage = 'Не удалось отправить данные';
+        try {
+          const errorData = await response.json();
+          // Используем error или message из ответа API
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch (jsonError) {
+          // Если не удалось распарсить JSON, используем дефолтное сообщение
+          console.error('Ошибка парсинга JSON ответа:', jsonError);
+        }
+        throw new Error(errorMessage);
       }
       
       // Успех - показываем уведомление и закрываем WebApp

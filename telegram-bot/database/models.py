@@ -52,6 +52,15 @@ class SupportSession(Base):
     )
     closed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     
+    # Время последней активности (для автоматического закрытия неактивных сессий)
+    last_activity: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        index=True
+    )
+    
     # Связь с сообщениями (один ко многим)
     messages: Mapped[List["SupportMessage"]] = relationship(
         "SupportMessage",
@@ -67,6 +76,7 @@ class SupportSession(Base):
         session_type: str = 'chat',
         created_at: Optional[datetime] = None,
         closed_at: Optional[datetime] = None,
+        last_activity: Optional[datetime] = None,
         **kwargs
     ):
         """
@@ -78,6 +88,7 @@ class SupportSession(Base):
             session_type: Тип сессии (по умолчанию 'chat')
             created_at: Время создания (по умолчанию текущее время UTC)
             closed_at: Время закрытия (опционально)
+            last_activity: Время последней активности (по умолчанию текущее время UTC)
         """
         super().__init__(**kwargs)
         self.telegram_id = telegram_id
@@ -85,6 +96,7 @@ class SupportSession(Base):
         self.session_type = session_type
         self.created_at = created_at if created_at is not None else datetime.now(timezone.utc)
         self.closed_at = closed_at
+        self.last_activity = last_activity if last_activity is not None else datetime.now(timezone.utc)
     
     def __repr__(self) -> str:
         return (

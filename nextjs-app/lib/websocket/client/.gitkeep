@@ -1,0 +1,9 @@
+# Директория для клиентских модулей WebSocket
+# Здесь будут размещены:
+# - ConnectionManager.ts
+# - SubscriptionManager.ts
+# - MessageQueue.ts
+# - HeartbeatMonitor.ts
+# - ReconnectionStrategy.ts
+# - StateManager.ts
+# - PostgresRealtimeClient.ts (главный класс)

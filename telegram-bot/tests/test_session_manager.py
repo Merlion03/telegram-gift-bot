@@ -169,7 +169,8 @@ class TestCloseInactiveSessions:
             telegram_id=111111111,
             status='active',
             session_type='chat',
-            created_at=old_time
+            created_at=old_time,
+            last_activity=old_time  # КРИТИЧЕСКИ ВАЖНО: устанавливаем last_activity
         )
         db_session.add(old_session)
         await db_session.flush()

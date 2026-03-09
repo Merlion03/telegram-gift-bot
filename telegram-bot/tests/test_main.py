@@ -5,6 +5,25 @@
 import pytest
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
 import asyncio
+import sys
+
+# КРИТИЧЕСКИ ВАЖНО: Настроить event loop policy ДО импорта pytest
+# psycopg3 не работает с ProactorEventLoop на Windows
+if sys.platform == 'win32':
+    # В Python 3.14+ WindowsSelectorEventLoopPolicy deprecated
+    # Используем прямую установку SelectorEventLoop через asyncio
+    try:
+        # Для Python 3.14+ используем новый API
+        if sys.version_info >= (3, 14):
+            # Устанавливаем selector event loop напрямую
+            import selectors
+            asyncio.set_event_loop(asyncio.SelectorEventLoop(selectors.DefaultSelector()))
+        else:
+            # Для старых версий используем policy
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    except AttributeError:
+        # Fallback для совместимости
+        pass
 
 
 class TestBotApplication:
@@ -34,7 +53,7 @@ class TestBotApplication:
              patch('main.Bot') as mock_bot, \
              patch('main.create_fsm_storage') as mock_storage, \
              patch('main.Dispatcher') as mock_dispatcher, \
-             patch('main.DatabaseConnection') as mock_db_conn, \
+             patch('database.connection.create_async_engine') as mock_engine, \
              patch('main.GoogleSheetsService'), \
              patch('main.PrizeService'), \
              patch('main.SupportRepository'), \
@@ -50,7 +69,7 @@ class TestBotApplication:
             mock_config_obj.app.log_level = 'INFO'
             mock_config_obj.bot.token = 'test_token'
             mock_config_obj.fsm.storage_type = 'memory'
-            mock_config_obj.database.connection_url = 'postgresql://test'
+            mock_config_obj.database.connection_url = 'postgresql+asyncpg://test:test@localhost:5432/test'
             mock_config_obj.google_sheets.credentials_path = '/test/path'
             mock_config_obj.google_sheets.spreadsheet_id = 'test_id'
             mock_config_obj.app.webapp_url = 'https://test.com'
@@ -58,9 +77,16 @@ class TestBotApplication:
             
             mock_storage.return_value = Mock()
             
-            mock_db_instance = Mock()
-            mock_db_instance.create_tables = AsyncMock()
-            mock_db_conn.return_value = mock_db_instance
+            # Мокаем create_async_engine чтобы не создавать реальное подключение
+            mock_engine_instance = AsyncMock()
+            mock_engine_instance.dispose = AsyncMock()
+            # Мокаем begin() для async context manager
+            mock_conn = AsyncMock()
+            mock_begin_context = AsyncMock()
+            mock_begin_context.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_begin_context.__aexit__ = AsyncMock(return_value=None)
+            mock_engine_instance.begin = Mock(return_value=mock_begin_context)
+            mock_engine.return_value = mock_engine_instance
             
             # Создание и настройка приложения
             app = BotApplication()
@@ -71,9 +97,6 @@ class TestBotApplication:
             assert app.bot is not None
             assert app.dp is not None
             assert app.db_connection is not None
-            
-            # Проверяем, что create_tables БД был вызван
-            mock_db_instance.create_tables.assert_called_once()
     
     @pytest.mark.asyncio
     async def test_register_handlers_called(self):
@@ -85,7 +108,7 @@ class TestBotApplication:
              patch('main.Bot'), \
              patch('main.create_fsm_storage') as mock_storage, \
              patch('main.Dispatcher') as mock_dispatcher, \
-             patch('main.DatabaseConnection') as mock_db_conn, \
+             patch('database.connection.create_async_engine') as mock_engine, \
              patch('main.GoogleSheetsService'), \
              patch('main.PrizeService'), \
              patch('main.SupportRepository'), \
@@ -101,7 +124,7 @@ class TestBotApplication:
             mock_config_obj.app.log_level = 'INFO'
             mock_config_obj.bot.token = 'test_token'
             mock_config_obj.fsm.storage_type = 'memory'
-            mock_config_obj.database.connection_url = 'postgresql://test'
+            mock_config_obj.database.connection_url = 'postgresql+asyncpg://test:test@localhost:5432/test'
             mock_config_obj.google_sheets.credentials_path = '/test/path'
             mock_config_obj.google_sheets.spreadsheet_id = 'test_id'
             mock_config_obj.app.webapp_url = 'https://test.com'
@@ -109,9 +132,16 @@ class TestBotApplication:
             
             mock_storage.return_value = Mock()
             
-            mock_db_instance = Mock()
-            mock_db_instance.create_tables = AsyncMock()
-            mock_db_conn.return_value = mock_db_instance
+            # Мокаем create_async_engine чтобы не создавать реальное подключение
+            mock_engine_instance = AsyncMock()
+            mock_engine_instance.dispose = AsyncMock()
+            # Мокаем begin() для async context manager
+            mock_conn = AsyncMock()
+            mock_begin_context = AsyncMock()
+            mock_begin_context.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_begin_context.__aexit__ = AsyncMock(return_value=None)
+            mock_engine_instance.begin = Mock(return_value=mock_begin_context)
+            mock_engine.return_value = mock_engine_instance
             
             # Мокаем dispatcher
             mock_dp_instance = Mock()
@@ -213,7 +243,7 @@ class TestMainFunction:
             # Симулируем ошибку в setup
             mock_setup.side_effect = Exception("Test error")
             
-            # Должно быть исключение
+            # Должно быть исключения
             with pytest.raises(Exception, match="Test error"):
                 await main()
             

@@ -52,21 +52,18 @@ async def test_property_13_auto_close_inactive_sessions(
     # Создаём сессию
     session_id = await session_manager.get_or_create_session(telegram_id)
     
-    # Добавляем сообщение с определённым временем
-    old_time = datetime.now(timezone.utc) - timedelta(hours=hours_since_activity)
+    # Добавляем сообщение
     await session_manager.save_user_message(
         session_id=session_id,
         telegram_id=telegram_id,
         message_text="Тестовое сообщение"
     )
     
-    # Обновляем время создания сообщения вручную (имитация старого сообщения)
+    # Обновляем last_activity сессии вручную (имитация старой активности)
+    old_time = datetime.now(timezone.utc) - timedelta(hours=hours_since_activity)
     session = await support_repository.get_session_by_id(session_id)
-    if session.messages:
-        # Обновляем время последнего сообщения
-        last_message = session.messages[-1]
-        last_message.created_at = old_time
-        await support_repository.session.flush()
+    session.last_activity = old_time
+    await support_repository.session.flush()
     
     # Act - закрываем неактивные сессии
     closed_count = await session_manager.close_inactive_sessions(
@@ -77,17 +74,22 @@ async def test_property_13_auto_close_inactive_sessions(
     session_after = await support_repository.get_session_by_id(session_id)
     
     # Проверяем логику закрытия
-    should_be_closed = hours_since_activity > inactive_hours_threshold
+    # Сессия закрывается если last_activity < cutoff_time
+    # cutoff_time = now - inactive_hours
+    # Значит: last_activity < (now - inactive_hours)
+    # Или: (now - last_activity) > inactive_hours
+    # Или: hours_since_activity >= inactive_hours (с учётом округления)
+    should_be_closed = hours_since_activity >= inactive_hours_threshold
     
     if should_be_closed:
         # Сессия должна быть закрыта
-        assert closed_count >= 1, "Должна быть закрыта хотя бы одна сессия"
-        assert session_after.status == 'closed', "Статус должен быть 'closed'"
+        assert session_after.status == 'closed', f"Статус должен быть 'closed', но получен '{session_after.status}'. Неактивность: {hours_since_activity}ч, порог: {inactive_hours_threshold}ч"
         assert session_after.closed_at is not None, "Должна быть временная метка закрытия"
         assert isinstance(session_after.closed_at, datetime), "closed_at должен быть datetime"
+        assert closed_count >= 1, "Должна быть закрыта хотя бы одна сессия"
     else:
         # Сессия должна остаться активной
-        assert session_after.status == 'active', "Статус должен остаться 'active'"
+        assert session_after.status == 'active', f"Статус должен остаться 'active', но получен '{session_after.status}'. Неактивность: {hours_since_activity}ч, порог: {inactive_hours_threshold}ч"
         assert session_after.closed_at is None, "closed_at должен быть None"
 
 

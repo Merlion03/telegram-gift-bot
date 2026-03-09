@@ -4,4 +4,4 @@
  */
 
 export { DatabaseClient, getDb, type PaginatedSessions } from './client';
-export { SupabaseRealtimeClient, getSupabaseClient, type MessageCallback, type ErrorCallback } from './supabaseClient';
+export { PostgresRealtimeClient, getRealtimeClient, type MessageCallback, type ErrorCallback } from './realtimeClient';

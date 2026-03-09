@@ -14,8 +14,12 @@ export default defineConfig({
       ADMIN_PASSWORD: 'testpassword123',
       NEXTAUTH_SECRET: 'test-secret-key-for-testing',
       BOT_TOKEN: 'test-bot-token',
-      NEXT_PUBLIC_SUPABASE_URL: 'https://test.supabase.co',
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: 'test-anon-key',
+      // PostgreSQL переменные для тестов
+      DB_HOST: 'localhost',
+      DB_PORT: '5433',
+      DB_NAME: 'telegram_bot',
+      DB_USER: 'postgres',
+      DB_PASSWORD: 'postgres',
     },
   },
   resolve: {

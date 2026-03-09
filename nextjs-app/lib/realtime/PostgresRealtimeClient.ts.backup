@@ -1,0 +1,1073 @@
+﻿/**
+ * PostgresRealtimeClient - РєР»РёРµРЅС‚ РґР»СЏ РїРѕРґРєР»СЋС‡РµРЅРёСЏ Рє WebSocket СЃРµСЂРІРµСЂСѓ
+ * РћР±РµСЃРїРµС‡РёРІР°РµС‚ real-time РѕР±РЅРѕРІР»РµРЅРёСЏ С‡РµСЂРµР· РЅР°С‚РёРІРЅС‹Р№ PostgreSQL LISTEN/NOTIFY
+ * РџРѕР»РЅРѕСЃС‚СЊСЋ СЃРѕРІРјРµСЃС‚РёРј СЃ API SupabaseRealtimeClient
+ */
+
+import type { SupportMessage } from '@/types/support';
+
+// ============================================================================
+// Callback Types
+// ============================================================================
+
+/**
+ * РўРёРї callback С„СѓРЅРєС†РёРё РґР»СЏ РѕР±СЂР°Р±РѕС‚РєРё РЅРѕРІС‹С… СЃРѕРѕР±С‰РµРЅРёР№
+ */
+export type MessageCallback = (message: SupportMessage) => void;
+
+/**
+ * РўРёРї callback С„СѓРЅРєС†РёРё РґР»СЏ РѕР±СЂР°Р±РѕС‚РєРё РѕС€РёР±РѕРє
+ */
+export type ErrorCallback = (error: Error) => void;
+
+/**
+ * РўРёРї callback С„СѓРЅРєС†РёРё РґР»СЏ РѕР±СЂР°Р±РѕС‚РєРё РёР·РјРµРЅРµРЅРёР№ СЃС‚Р°С‚СѓСЃР°
+ */
+export type StatusChangeCallback = (sessionId: number, status: string) => void;
+
+// ============================================================================
+// Client Interfaces
+// ============================================================================
+
+/**
+ * РўРёРї РїРѕРґРїРёСЃРєРё
+ */
+export type SubscriptionType = 'session' | 'all' | 'status';
+
+/**
+ * РРЅС„РѕСЂРјР°С†РёСЏ Рѕ РїРѕРґРїРёСЃРєРµ
+ */
+export interface Subscription {
+  /** РЈРЅРёРєР°Р»СЊРЅС‹Р№ ID РїРѕРґРїРёСЃРєРё */
+  id: string;
+  
+  /** РўРёРї РїРѕРґРїРёСЃРєРё */
+  type: SubscriptionType;
+  
+  /** ID СЃРµСЃСЃРёРё (РґР»СЏ РїРѕРґРїРёСЃРѕРє РЅР° РєРѕРЅРєСЂРµС‚РЅСѓСЋ СЃРµСЃСЃРёСЋ) */
+  sessionId?: number;
+  
+  /** Callback РґР»СЏ РЅРѕРІС‹С… СЃРѕРѕР±С‰РµРЅРёР№ */
+  onMessage?: MessageCallback;
+  
+  /** Callback РґР»СЏ РёР·РјРµРЅРµРЅРёР№ СЃС‚Р°С‚СѓСЃР° */
+  onStatusChange?: StatusChangeCallback;
+  
+  /** Callback РґР»СЏ РѕС€РёР±РѕРє */
+  onError?: ErrorCallback;
+  
+  /** Р¤СѓРЅРєС†РёСЏ РѕС‚РїРёСЃРєРё */
+  unsubscribe: () => void;
+}
+
+/**
+ * РЎРѕСЃС‚РѕСЏРЅРёРµ РїРѕРґРєР»СЋС‡РµРЅРёСЏ РєР»РёРµРЅС‚Р°
+ */
+export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
+
+/**
+ * Р’РЅСѓС‚СЂРµРЅРЅРµРµ СЃРѕСЃС‚РѕСЏРЅРёРµ РєР»РёРµРЅС‚Р°
+ */
+export interface ClientState {
+  /** WebSocket СЃРѕРµРґРёРЅРµРЅРёРµ */
+  ws: WebSocket | null;
+  
+  /** РЎС‚Р°С‚СѓСЃ РїРѕРґРєР»СЋС‡РµРЅРёСЏ */
+  connectionState: ConnectionState;
+  
+  /** РђРєС‚РёРІРЅС‹Рµ РїРѕРґРїРёСЃРєРё: subscription_id -> Subscription */
+  subscriptions: Map<string, Subscription>;
+  
+  /** РЎС‡С‘С‚С‡РёРє РїРѕРїС‹С‚РѕРє РїРµСЂРµРїРѕРґРєР»СЋС‡РµРЅРёСЏ */
+  reconnectAttempts: number;
+  
+  /** РўР°Р№РјРµСЂ РїРµСЂРµРїРѕРґРєР»СЋС‡РµРЅРёСЏ */
+  reconnectTimeout: NodeJS.Timeout | null;
+  
+  /** РРЅС‚РµСЂРІР°Р» heartbeat */
+  heartbeatInterval: NodeJS.Timeout | null;
+  
+  /** Timestamp РїРѕСЃР»РµРґРЅРµРіРѕ РїРѕР»СѓС‡РµРЅРЅРѕРіРѕ pong */
+  lastPongAt: number;
+  
+  /** РћС‡РµСЂРµРґСЊ СЃРѕРѕР±С‰РµРЅРёР№ РґР»СЏ РѕС‚РїСЂР°РІРєРё РїРѕСЃР»Рµ РїРµСЂРµРїРѕРґРєР»СЋС‡РµРЅРёСЏ */
+  messageQueue: Array<any>;
+}
+
+/**
+ * РљРѕРЅС„РёРіСѓСЂР°С†РёСЏ РєР»РёРµРЅС‚Р°
+ */
+export interface ClientConfig {
+  /** URL WebSocket СЃРµСЂРІРµСЂР° */
+  wsUrl: string;
+  
+  /** РќР°С‡Р°Р»СЊРЅР°СЏ Р·Р°РґРµСЂР¶РєР° РїРµСЂРµРїРѕРґРєР»СЋС‡РµРЅРёСЏ (РјСЃ) */
+  reconnectDelay: number;
+  
+  /** РњР°РєСЃРёРјР°Р»СЊРЅР°СЏ Р·Р°РґРµСЂР¶РєР° РїРµСЂРµРїРѕРґРєР»СЋС‡РµРЅРёСЏ (РјСЃ) */
+  maxReconnectDelay: number;
+  
+  /** РњРЅРѕР¶РёС‚РµР»СЊ РґР»СЏ СЌРєСЃРїРѕРЅРµРЅС†РёР°Р»СЊРЅРѕР№ Р·Р°РґРµСЂР¶РєРё */
+  reconnectBackoffMultiplier: number;
+  
+  /** РРЅС‚РµСЂРІР°Р» heartbeat (РјСЃ) */
+  heartbeatInterval: number;
+  
+  /** Timeout РґР»СЏ heartbeat (РјСЃ) */
+  heartbeatTimeout: number;
+  
+  /** РњР°РєСЃРёРјР°Р»СЊРЅС‹Р№ СЂР°Р·РјРµСЂ РѕС‡РµСЂРµРґРё СЃРѕРѕР±С‰РµРЅРёР№ */
+  maxMessageQueueSize: number;
+}
+
+/**
+ * РљРѕРЅС„РёРіСѓСЂР°С†РёСЏ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ
+ */
+const DEFAULT_CLIENT_CONFIG: ClientConfig = {
+  wsUrl: typeof window !== 'undefined' 
+    ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/realtime`
+    : 'ws://localhost:3000/api/realtime',
+  reconnectDelay: 1000,              // 1 СЃРµРєСѓРЅРґР°
+  maxReconnectDelay: 30000,          // 30 СЃРµРєСѓРЅРґ
+  reconnectBackoffMultiplier: 2,     // Р­РєСЃРїРѕРЅРµРЅС†РёР°Р»СЊРЅС‹Р№ СЂРѕСЃС‚
+  heartbeatInterval: 30000,          // 30 СЃРµРєСѓРЅРґ
+  heartbeatTimeout: 60000,           // 60 СЃРµРєСѓРЅРґ
+  maxMessageQueueSize: 100,          // РњР°РєСЃРёРјСѓРј 100 СЃРѕРѕР±С‰РµРЅРёР№ РІ РѕС‡РµСЂРµРґРё
+};
+
+// ============================================================================
+// PostgresRealtimeClient Class
+// ============================================================================
+
+/**
+ * PostgresRealtimeClient - РєР»РёРµРЅС‚ РґР»СЏ real-time РїРѕРґРїРёСЃРѕРє С‡РµСЂРµР· PostgreSQL LISTEN/NOTIFY
+ * РСЃРїРѕР»СЊР·СѓРµС‚ WebSocket РґР»СЏ РґРІСѓСЃС‚РѕСЂРѕРЅРЅРµР№ СЃРІСЏР·Рё СЃ СЃРµСЂРІРµСЂРѕРј
+ * Singleton pattern РґР»СЏ РїРµСЂРµРёСЃРїРѕР»СЊР·РѕРІР°РЅРёСЏ СЃРѕРµРґРёРЅРµРЅРёСЏ
+ */
+export class PostgresRealtimeClient {
+  private static instance: PostgresRealtimeClient | null = null;
+  
+  private config: ClientConfig;
+  private state: ClientState;
+  
+  /**
+   * Private constructor РґР»СЏ singleton pattern
+   * @param config - РљРѕРЅС„РёРіСѓСЂР°С†РёСЏ РєР»РёРµРЅС‚Р° (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)
+   */
+  private constructor(config?: Partial<ClientConfig>) {
+    this.config = { ...DEFAULT_CLIENT_CONFIG, ...config };
+    
+    // РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ СЃРѕСЃС‚РѕСЏРЅРёСЏ
+    this.state = {
+      ws: null,
+      connectionState: 'disconnected',
+      subscriptions: new Map(),
+      reconnectAttempts: 0,
+      reconnectTimeout: null,
+      heartbeatInterval: null,
+      lastPongAt: Date.now(),
+      messageQueue: [],
+    };
+  }
+  
+  /**
+   * РџРѕР»СѓС‡Р°РµС‚ singleton instance РєР»РёРµРЅС‚Р°
+   * @param config - РљРѕРЅС„РёРіСѓСЂР°С†РёСЏ РєР»РёРµРЅС‚Р° (РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ С‚РѕР»СЊРєРѕ РїСЂРё РїРµСЂРІРѕРј РІС‹Р·РѕРІРµ)
+   * @returns Singleton instance PostgresRealtimeClient
+   */
+  static getInstance(config?: Partial<ClientConfig>): PostgresRealtimeClient {
+    if (!PostgresRealtimeClient.instance) {
+      PostgresRealtimeClient.instance = new PostgresRealtimeClient(config);
+    }
+    return PostgresRealtimeClient.instance;
+  }
+  
+  /**
+   * РџРѕР»СѓС‡Р°РµС‚ С‚РµРєСѓС‰РµРµ СЃРѕСЃС‚РѕСЏРЅРёРµ РїРѕРґРєР»СЋС‡РµРЅРёСЏ
+   * @returns РЎРѕСЃС‚РѕСЏРЅРёРµ РїРѕРґРєР»СЋС‡РµРЅРёСЏ
+   */
+  getConnectionState(): ConnectionState {
+    return this.state.connectionState;
+  }
+  
+  /**
+   * РџСЂРѕРІРµСЂСЏРµС‚, СѓСЃС‚Р°РЅРѕРІР»РµРЅРѕ Р»Рё РїРѕРґРєР»СЋС‡РµРЅРёРµ
+   * @returns true РµСЃР»Рё РїРѕРґРєР»СЋС‡РµРЅРёРµ СѓСЃС‚Р°РЅРѕРІР»РµРЅРѕ
+   */
+  isConnected(): boolean {
+    return this.state.connectionState === 'connected' && 
+           this.state.ws !== null && 
+           this.state.ws.readyState === WebSocket.OPEN;
+  }
+  
+  /**
+   * Р“РµРЅРµСЂРёСЂСѓРµС‚ СѓРЅРёРєР°Р»СЊРЅС‹Р№ ID РґР»СЏ РїРѕРґРїРёСЃРєРё
+   * @returns РЈРЅРёРєР°Р»СЊРЅС‹Р№ ID
+   */
+  private generateSubscriptionId(): string {
+    return `sub_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+  }
+  
+  // ============================================================================
+  // Connection Management
+  // ============================================================================
+  
+  /**
+   * РџРѕР»СѓС‡Р°РµС‚ session token РёР· cookies РёР»Рё NextAuth
+   * @returns Session token РёР»Рё null
+   */
+  private async getSessionToken(): Promise<string | null> {
+    // РџС‹С‚Р°РµРјСЃСЏ РїРѕР»СѓС‡РёС‚СЊ С‚РѕРєРµРЅ С‡РµСЂРµР· API endpoint
+    try {
+      const response = await fetch('/api/auth/ws-token');
+      console.log('[PostgresRealtimeClient] Token API response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('[PostgresRealtimeClient] Token received:', data.token ? 'yes' : 'no');
+        return data.token || null;
+      }
+      
+      // Р•СЃР»Рё РїРѕР»СѓС‡РёР»Рё 401, РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ Р°РІС‚РѕСЂРёР·РѕРІР°РЅ
+      if (response.status === 401) {
+        console.warn('[PostgresRealtimeClient] Token API returned 401 - user not authenticated');
+        return null;
+      }
+      
+      console.error('[PostgresRealtimeClient] Token API returned unexpected status:', response.status);
+    } catch (error) {
+      console.error('[PostgresRealtimeClient] Failed to fetch WebSocket token:', error);
+    }
+    
+    return null;
+  }
+  
+  /**
+   * РџРѕРґРєР»СЋС‡Р°РµС‚СЃСЏ Рє WebSocket СЃРµСЂРІРµСЂСѓ
+   * @returns Promise, РєРѕС‚РѕСЂС‹Р№ СЂРµР·РѕР»РІРёС‚СЃСЏ РїСЂРё СѓСЃРїРµС€РЅРѕРј РїРѕРґРєР»СЋС‡РµРЅРёРё
+   */
+  private async connect(): Promise<void> {
+    // Р•СЃР»Рё СѓР¶Рµ РїРѕРґРєР»СЋС‡РµРЅС‹ РёР»Рё РїРѕРґРєР»СЋС‡Р°РµРјСЃСЏ, РЅРёС‡РµРіРѕ РЅРµ РґРµР»Р°РµРј
+    if (this.state.connectionState === 'connecting' || this.isConnected()) {
+      return;
+    }
+    
+    this.state.connectionState = 'connecting';
+    console.log('[PostgresRealtimeClient] Connecting to WebSocket server...');
+    
+    try {
+      // РџРѕР»СѓС‡Р°РµРј С‚РѕРєРµРЅ СЃРµСЃСЃРёРё РїРµСЂРµРґ СЃРѕР·РґР°РЅРёРµРј WebSocket СЃРѕРµРґРёРЅРµРЅРёСЏ
+      const token = await this.getSessionToken();
+      
+      // РџСЂРѕРІРµСЂСЏРµРј РЅР°Р»РёС‡РёРµ С‚РѕРєРµРЅР° - РµСЃР»Рё РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ Р°РІС‚РѕСЂРёР·РѕРІР°РЅ, РЅРµ СЃРѕР·РґР°С‘Рј СЃРѕРµРґРёРЅРµРЅРёРµ
+      if (token === null) {
+        console.warn('[PostgresRealtimeClient] No session token available, user not authenticated');
+        this.state.connectionState = 'disconnected';
+        return;
+      }
+      
+      // Р”РѕР±Р°РІР»СЏРµРј С‚РѕРєРµРЅ РІ WebSocket URL РєР°Рє query РїР°СЂР°РјРµС‚СЂ РґР»СЏ Р°СѓС‚РµРЅС‚РёС„РёРєР°С†РёРё
+      const wsUrlWithToken = `${this.config.wsUrl}?token=${encodeURIComponent(token)}`;
+      console.log('[PostgresRealtimeClient] WebSocket URL (token length):', token.length, 'chars');
+      
+      // РЎРѕР·РґР°С‘Рј WebSocket СЃРѕРµРґРёРЅРµРЅРёРµ СЃ С‚РѕРєРµРЅРѕРј РІ URL
+      const ws = new WebSocket(wsUrlWithToken);
+      
+      console.log('[PostgresRealtimeClient] WebSocket СЃРѕР·РґР°РЅ, readyState:', ws.readyState);
+      
+      // РљР РРўРР§РќРћ: РЈСЃС‚Р°РЅР°РІР»РёРІР°РµРј РѕР±СЂР°Р±РѕС‚С‡РёРєРё РЎР РђР—РЈ РїРѕСЃР»Рµ СЃРѕР·РґР°РЅРёСЏ, РґРѕ Р»СЋР±С‹С… РґСЂСѓРіРёС… РѕРїРµСЂР°С†РёР№
+      // Р­С‚Рѕ РіР°СЂР°РЅС‚РёСЂСѓРµС‚, С‡С‚Рѕ РјС‹ РЅРµ РїСЂРѕРїСѓСЃС‚РёРј СЃРѕР±С‹С‚РёСЏ
+      ws.onopen = () => {
+        console.log('[PostgresRealtimeClient] onopen РІС‹Р·РІР°РЅ, readyState:', ws.readyState);
+        this.handleOpen();
+      };
+      
+      ws.onmessage = (event) => {
+        console.log('[PostgresRealtimeClient] onmessage РІС‹Р·РІР°РЅ, data:', event.data);
+        this.handleMessage(event);
+      };
+      
+      ws.onerror = (event) => {
+        console.log('[PostgresRealtimeClient] onerror РІС‹Р·РІР°РЅ:', event);
+        this.handleError(event);
+      };
+      
+      ws.onclose = (event) => {
+        console.log('[PostgresRealtimeClient] onclose РІС‹Р·РІР°РЅ, code:', event.code, 'reason:', event.reason);
+        console.trace('[PostgresRealtimeClient] onclose call stack');
+        this.handleClose(event);
+      };
+      
+      console.log('[PostgresRealtimeClient] РћР±СЂР°Р±РѕС‚С‡РёРєРё СѓСЃС‚Р°РЅРѕРІР»РµРЅС‹, readyState:', ws.readyState);
+      
+      this.state.ws = ws;
+      
+      console.log('[PostgresRealtimeClient] WebSocket СЃРѕС…СЂР°РЅС‘РЅ РІ state, readyState:', ws.readyState);
+      
+    } catch (error) {
+      console.error('[PostgresRealtimeClient] Connection error:', error);
+      this.state.connectionState = 'disconnected';
+      
+      // Р’С‹Р·С‹РІР°РµРј onError РґР»СЏ РІСЃРµС… РїРѕРґРїРёСЃРѕРє
+      const errorObj = error instanceof Error ? error : new Error('Connection failed');
+      this.notifyAllSubscriptionsError(errorObj);
+      
+      // РќР• Р·Р°РїСѓСЃРєР°РµРј РїРµСЂРµРїРѕРґРєР»СЋС‡РµРЅРёРµ РїСЂРё РѕС€РёР±РєРµ РїРѕР»СѓС‡РµРЅРёСЏ С‚РѕРєРµРЅР°
+      // РџРµСЂРµРїРѕРґРєР»СЋС‡РµРЅРёРµ РёРјРµРµС‚ СЃРјС‹СЃР» С‚РѕР»СЊРєРѕ РїСЂРё СЃРµС‚РµРІС‹С… РѕС€РёР±РєР°С… WebSocket
+      // Р•СЃР»Рё С‚РѕРєРµРЅ РЅРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚СЊ, РїРѕРІС‚РѕСЂРЅС‹Рµ РїРѕРїС‹С‚РєРё Р±РµСЃСЃРјС‹СЃР»РµРЅРЅС‹
+    }
+  }
+  
+  /**
+   * РћР±СЂР°Р±РѕС‚С‡РёРє СѓСЃРїРµС€РЅРѕРіРѕ РѕС‚РєСЂС‹С‚РёСЏ СЃРѕРµРґРёРЅРµРЅРёСЏ
+   */
+  private handleOpen(): void {
+    console.log('[PostgresRealtimeClient] WebSocket connection established');
+    // Р’РђР–РќРћ: РќР• СѓСЃС‚Р°РЅР°РІР»РёРІР°РµРј connectionState = 'connected' Р·РґРµСЃСЊ!
+    // РћСЃС‚Р°С‘РјСЃСЏ РІ СЃРѕСЃС‚РѕСЏРЅРёРё 'connecting' РґРѕ РїРѕР»СѓС‡РµРЅРёСЏ СЃРѕРѕР±С‰РµРЅРёСЏ 'connected' РѕС‚ СЃРµСЂРІРµСЂР°
+    // Р­С‚Рѕ РїСЂРµРґРѕС‚РІСЂР°С‰Р°РµС‚ РѕС‚РїСЂР°РІРєСѓ subscribe СЃРѕРѕР±С‰РµРЅРёР№ РґРѕ С‚РѕРіРѕ, РєР°Рє СЃРµСЂРІРµСЂ РіРѕС‚РѕРІ РёС… РїСЂРёРЅРёРјР°С‚СЊ
+    this.state.reconnectAttempts = 0; // РЎР±СЂР°СЃС‹РІР°РµРј СЃС‡С‘С‚С‡РёРє РїРѕРїС‹С‚РѕРє
+    this.state.lastPongAt = Date.now();
+    
+    // РќРћР’РћР•: РљР»РёРµРЅС‚ РёРЅРёС†РёРёСЂСѓРµС‚ handshake (Client speaks first pattern)
+    // Р”РѕР±Р°РІР»СЏРµРј РЅРµР±РѕР»СЊС€СѓСЋ Р·Р°РґРµСЂР¶РєСѓ (50ms) С‡С‚РѕР±С‹ РґР°С‚СЊ РїСЂРѕРєСЃРё РІСЂРµРјСЏ РЅР° РїРµСЂРµСЃС‚СЂРѕР№РєСѓ С€Р»СЋР·РѕРІ РїРѕСЃР»Рµ HTTP Upgrade
+    // Р­С‚Рѕ РєСЂРёС‚РёС‡РµСЃРєРё РІР°Р¶РЅРѕ РґР»СЏ Docker/ngrok РїСЂРѕРєСЃРё, РєРѕС‚РѕСЂС‹Рј РЅСѓР¶РЅРѕ РІСЂРµРјСЏ РЅР° РїРµСЂРµРєР»СЋС‡РµРЅРёРµ РІ TCP-СЂРµР¶РёРј
+    setTimeout(() => {
+      if (this.state.ws && this.state.ws.readyState === WebSocket.OPEN) {
+        console.log('[PostgresRealtimeClient] РћС‚РїСЂР°РІР»СЏРµРј init СЃРѕРѕР±С‰РµРЅРёРµ РґР»СЏ handshake');
+        this.state.ws.send(JSON.stringify({ type: 'init' }));
+      }
+    }, 50); // 50ms Р·Р°РґРµСЂР¶РєР° РґР»СЏ СЃС‚Р°Р±РёР»РёР·Р°С†РёРё РїСЂРѕРєСЃРё
+    
+    // РРЎРџР РђР’Р›Р•РќРР•: РќР• Р·Р°РїСѓСЃРєР°РµРј heartbeat Р·РґРµСЃСЊ!
+    // Heartbeat Р±СѓРґРµС‚ Р·Р°РїСѓС‰РµРЅ РїРѕСЃР»Рµ РїРѕР»СѓС‡РµРЅРёСЏ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ 'connected' РѕС‚ СЃРµСЂРІРµСЂР°
+    // Р­С‚Рѕ РїСЂРµРґРѕС‚РІСЂР°С‰Р°РµС‚ РїСЂРµР¶РґРµРІСЂРµРјРµРЅРЅРѕРµ Р·Р°РєСЂС‹С‚РёРµ СЃРѕРµРґРёРЅРµРЅРёСЏ РёР·-Р·Р° timeout
+    
+    // РќР• РѕС‚РїСЂР°РІР»СЏРµРј subscribe СЃСЂР°Р·Сѓ - Р¶РґС‘Рј РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ РѕС‚ СЃРµСЂРІРµСЂР°
+    // РЎРµСЂРІРµСЂ РѕС‚РїСЂР°РІРёС‚ СЃРѕРѕР±С‰РµРЅРёРµ 'connected' РєРѕРіРґР° Р±СѓРґРµС‚ РіРѕС‚РѕРІ РїСЂРёРЅРёРјР°С‚СЊ СЃРѕРѕР±С‰РµРЅРёСЏ
+    console.log('[PostgresRealtimeClient] РћР¶РёРґР°РµРј РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ РїРѕРґРєР»СЋС‡РµРЅРёСЏ РѕС‚ СЃРµСЂРІРµСЂР°...');
+  }
+  
+  /**
+   * РћР±СЂР°Р±РѕС‚С‡РёРє РѕС€РёР±РєРё WebSocket
+   */
+  private handleError(event: Event): void {
+    console.error('[PostgresRealtimeClient] WebSocket error:', event);
+    
+    const error = new Error('WebSocket connection error');
+    this.notifyAllSubscriptionsError(error);
+  }
+  
+  /**
+   * РћР±СЂР°Р±РѕС‚С‡РёРє Р·Р°РєСЂС‹С‚РёСЏ СЃРѕРµРґРёРЅРµРЅРёСЏ
+   */
+  private handleClose(event: CloseEvent): void {
+    console.log(`[PostgresRealtimeClient] WebSocket closed: code=${event.code}, reason=${event.reason}`);
+    
+    this.state.connectionState = 'disconnected';
+    this.state.ws = null;
+    
+    // РћСЃС‚Р°РЅР°РІР»РёРІР°РµРј heartbeat
+    this.stopHeartbeat();
+    
+    // Р•СЃР»Рё Р·Р°РєСЂС‹С‚РёРµ РЅРµ Р±С‹Р»Рѕ РЅРѕСЂРјР°Р»СЊРЅС‹Рј (РєРѕРґ 1000), Р·Р°РїСѓСЃРєР°РµРј РїРµСЂРµРїРѕРґРєР»СЋС‡РµРЅРёРµ
+    if (event.code !== 1000) {
+      const error = new Error(`WebSocket closed abnormally: ${event.reason || 'Unknown reason'}`);
+      this.notifyAllSubscriptionsError(error);
+      this.reconnect();
+    }
+  }
+  
+  /**
+   * Р’РѕСЃСЃС‚Р°РЅР°РІР»РёРІР°РµС‚ РїРѕРґРїРёСЃРєРё РїРѕСЃР»Рµ РїРµСЂРµРїРѕРґРєР»СЋС‡РµРЅРёСЏ
+   */
+  private restoreSubscriptions(): void {
+    console.log(`[PostgresRealtimeClient] Restoring ${this.state.subscriptions.size} subscriptions...`);
+    
+    for (const [subscriptionId, subscription] of this.state.subscriptions) {
+      // Р¤РѕСЂРјРёСЂСѓРµРј subscribe СЃРѕРѕР±С‰РµРЅРёРµ РІ Р·Р°РІРёСЃРёРјРѕСЃС‚Рё РѕС‚ С‚РёРїР° РїРѕРґРїРёСЃРєРё
+      let message: any;
+      
+      if (subscription.type === 'session' && subscription.sessionId !== undefined) {
+        message = {
+          type: 'subscribe',
+          channel: 'session_messages',
+          sessionId: subscription.sessionId,
+          subscriptionId: subscriptionId,
+        };
+      } else if (subscription.type === 'all') {
+        message = {
+          type: 'subscribe',
+          channel: 'all_messages',
+          subscriptionId: subscriptionId,
+        };
+      } else if (subscription.type === 'status') {
+        message = {
+          type: 'subscribe',
+          channel: 'status_changes',
+          subscriptionId: subscriptionId,
+        };
+      }
+      
+      if (message) {
+        this.sendMessage(message);
+      }
+    }
+  }
+  
+  /**
+   * РћС‚РїСЂР°РІР»СЏРµС‚ СЃРѕРѕР±С‰РµРЅРёСЏ РёР· РѕС‡РµСЂРµРґРё
+   */
+  private flushMessageQueue(): void {
+    if (this.state.messageQueue.length > 0) {
+      console.log(`[PostgresRealtimeClient] Flushing ${this.state.messageQueue.length} queued messages`);
+      
+      for (const message of this.state.messageQueue) {
+        this.sendMessage(message);
+      }
+      
+      this.state.messageQueue = [];
+    }
+  }
+  
+  /**
+   * РћС‚РїСЂР°РІР»СЏРµС‚ СЃРѕРѕР±С‰РµРЅРёРµ РЅР° СЃРµСЂРІРµСЂ
+   * @param message - РЎРѕРѕР±С‰РµРЅРёРµ РґР»СЏ РѕС‚РїСЂР°РІРєРё
+   */
+  private sendMessage(message: any): void {
+    if (this.isConnected() && this.state.ws) {
+      try {
+        this.state.ws.send(JSON.stringify(message));
+      } catch (error) {
+        console.error('[PostgresRealtimeClient] Failed to send message:', error);
+        // Р”РѕР±Р°РІР»СЏРµРј РІ РѕС‡РµСЂРµРґСЊ РґР»СЏ РїРѕРІС‚РѕСЂРЅРѕР№ РѕС‚РїСЂР°РІРєРё (СЃ РѕРіСЂР°РЅРёС‡РµРЅРёРµРј СЂР°Р·РјРµСЂР°)
+        // РќРћ: subscribe/unsubscribe СЃРѕРѕР±С‰РµРЅРёСЏ РќР• РґРѕР±Р°РІР»СЏРµРј - РѕРЅРё РІРѕСЃСЃС‚Р°РЅР°РІР»РёРІР°СЋС‚СЃСЏ С‡РµСЂРµР· restoreSubscriptions()
+        if (message.type !== 'subscribe' && message.type !== 'unsubscribe') {
+          this.enqueueMessage(message);
+        }
+      }
+    } else {
+      // Р”РѕР±Р°РІР»СЏРµРј РІ РѕС‡РµСЂРµРґСЊ, РµСЃР»Рё РЅРµ РїРѕРґРєР»СЋС‡РµРЅС‹ (СЃ РѕРіСЂР°РЅРёС‡РµРЅРёРµРј СЂР°Р·РјРµСЂР°)
+      // РќРћ: subscribe/unsubscribe СЃРѕРѕР±С‰РµРЅРёСЏ РќР• РґРѕР±Р°РІР»СЏРµРј - РѕРЅРё РІРѕСЃСЃС‚Р°РЅР°РІР»РёРІР°СЋС‚СЃСЏ С‡РµСЂРµР· restoreSubscriptions()
+      if (message.type !== 'subscribe' && message.type !== 'unsubscribe') {
+        this.enqueueMessage(message);
+      }
+    }
+  }
+  
+  /**
+   * Р”РѕР±Р°РІР»СЏРµС‚ СЃРѕРѕР±С‰РµРЅРёРµ РІ РѕС‡РµСЂРµРґСЊ СЃ РѕРіСЂР°РЅРёС‡РµРЅРёРµРј СЂР°Р·РјРµСЂР°
+   * @param message - РЎРѕРѕР±С‰РµРЅРёРµ РґР»СЏ РґРѕР±Р°РІР»РµРЅРёСЏ
+   */
+  private enqueueMessage(message: any): void {
+    // РџСЂРѕРІРµСЂСЏРµРј СЂР°Р·РјРµСЂ РѕС‡РµСЂРµРґРё
+    if (this.state.messageQueue.length >= this.config.maxMessageQueueSize) {
+      console.warn(
+        `[PostgresRealtimeClient] Message queue is full (${this.state.messageQueue.length}/${this.config.maxMessageQueueSize}), dropping oldest message`
+      );
+      // РЈРґР°Р»СЏРµРј СЃР°РјРѕРµ СЃС‚Р°СЂРѕРµ СЃРѕРѕР±С‰РµРЅРёРµ
+      this.state.messageQueue.shift();
+    }
+    
+    // Р”РѕР±Р°РІР»СЏРµРј РЅРѕРІРѕРµ СЃРѕРѕР±С‰РµРЅРёРµ
+    this.state.messageQueue.push(message);
+  }
+  
+  /**
+   * РЈРІРµРґРѕРјР»СЏРµС‚ РІСЃРµ РїРѕРґРїРёСЃРєРё РѕР± РѕС€РёР±РєРµ
+   * @param error - РћС€РёР±РєР° РґР»СЏ РїРµСЂРµРґР°С‡Рё
+   */
+  private notifyAllSubscriptionsError(error: Error): void {
+    for (const subscription of this.state.subscriptions.values()) {
+      if (subscription.onError) {
+        try {
+          subscription.onError(error);
+        } catch (callbackError) {
+          console.error('[PostgresRealtimeClient] Error in onError callback:', callbackError);
+        }
+      }
+    }
+  }
+  
+  // ============================================================================
+  // Subscription Methods
+  // ============================================================================
+  
+  /**
+   * РџРѕРґРїРёСЃС‹РІР°РµС‚СЃСЏ РЅР° СЃРѕРѕР±С‰РµРЅРёСЏ РєРѕРЅРєСЂРµС‚РЅРѕР№ СЃРµСЃСЃРёРё
+   * @param sessionId - ID СЃРµСЃСЃРёРё РїРѕРґРґРµСЂР¶РєРё
+   * @param onMessage - Callback РґР»СЏ РѕР±СЂР°Р±РѕС‚РєРё РЅРѕРІС‹С… СЃРѕРѕР±С‰РµРЅРёР№
+   * @param onError - Callback РґР»СЏ РѕР±СЂР°Р±РѕС‚РєРё РѕС€РёР±РѕРє (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)
+   * @returns Р¤СѓРЅРєС†РёСЏ РґР»СЏ РѕС‚РїРёСЃРєРё
+   */
+  subscribeToSessionMessages(
+    sessionId: number,
+    onMessage: MessageCallback,
+    onError?: ErrorCallback
+  ): () => void {
+    const subscriptionId = this.generateSubscriptionId();
+    
+    console.log(`[PostgresRealtimeClient] Subscribing to session ${sessionId} (${subscriptionId})`);
+    
+    // РЎРѕР·РґР°С‘Рј РѕР±СЉРµРєС‚ РїРѕРґРїРёСЃРєРё
+    const subscription: Subscription = {
+      id: subscriptionId,
+      type: 'session',
+      sessionId: sessionId,
+      onMessage: onMessage,
+      onError: onError,
+      unsubscribe: () => this.unsubscribe(subscriptionId),
+    };
+    
+    // РЎРѕС…СЂР°РЅСЏРµРј РїРѕРґРїРёСЃРєСѓ
+    this.state.subscriptions.set(subscriptionId, subscription);
+    
+    // РџРѕРґРєР»СЋС‡Р°РµРјСЃСЏ, РµСЃР»Рё РµС‰С‘ РЅРµ РїРѕРґРєР»СЋС‡РµРЅС‹
+    if (!this.isConnected()) {
+      this.connect().catch((error) => {
+        console.error('[PostgresRealtimeClient] Failed to connect:', error);
+        if (onError) {
+          onError(error instanceof Error ? error : new Error('Connection failed'));
+        }
+      });
+    }
+    
+    // РћС‚РїСЂР°РІР»СЏРµРј subscribe СЃРѕРѕР±С‰РµРЅРёРµ
+    const message = {
+      type: 'subscribe',
+      channel: 'session_messages',
+      sessionId: sessionId,
+      subscriptionId: subscriptionId,
+    };
+    
+    this.sendMessage(message);
+    
+    // Р’РѕР·РІСЂР°С‰Р°РµРј С„СѓРЅРєС†РёСЋ РѕС‚РїРёСЃРєРё
+    return () => this.unsubscribe(subscriptionId);
+  }
+  
+  /**
+   * РџРѕРґРїРёСЃС‹РІР°РµС‚СЃСЏ РЅР° РІСЃРµ РЅРѕРІС‹Рµ СЃРѕРѕР±С‰РµРЅРёСЏ (РґР»СЏ Р°РґРјРёРЅРєРё)
+   * @param onMessage - Callback РґР»СЏ РѕР±СЂР°Р±РѕС‚РєРё РЅРѕРІС‹С… СЃРѕРѕР±С‰РµРЅРёР№
+   * @param onError - Callback РґР»СЏ РѕР±СЂР°Р±РѕС‚РєРё РѕС€РёР±РѕРє (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)
+   * @returns Р¤СѓРЅРєС†РёСЏ РґР»СЏ РѕС‚РїРёСЃРєРё
+   */
+  subscribeToAllMessages(
+    onMessage: MessageCallback,
+    onError?: ErrorCallback
+  ): () => void {
+    const subscriptionId = this.generateSubscriptionId();
+    
+    console.log(`[PostgresRealtimeClient] Subscribing to all messages (${subscriptionId})`);
+    
+    // РЎРѕР·РґР°С‘Рј РѕР±СЉРµРєС‚ РїРѕРґРїРёСЃРєРё
+    const subscription: Subscription = {
+      id: subscriptionId,
+      type: 'all',
+      onMessage: onMessage,
+      onError: onError,
+      unsubscribe: () => this.unsubscribe(subscriptionId),
+    };
+    
+    // РЎРѕС…СЂР°РЅСЏРµРј РїРѕРґРїРёСЃРєСѓ
+    this.state.subscriptions.set(subscriptionId, subscription);
+    
+    // РџРѕРґРєР»СЋС‡Р°РµРјСЃСЏ, РµСЃР»Рё РµС‰С‘ РЅРµ РїРѕРґРєР»СЋС‡РµРЅС‹
+    if (!this.isConnected()) {
+      this.connect().catch((error) => {
+        console.error('[PostgresRealtimeClient] Failed to connect:', error);
+        if (onError) {
+          onError(error instanceof Error ? error : new Error('Connection failed'));
+        }
+      });
+    }
+    
+    // РћС‚РїСЂР°РІР»СЏРµРј subscribe СЃРѕРѕР±С‰РµРЅРёРµ
+    const message = {
+      type: 'subscribe',
+      channel: 'all_messages',
+      subscriptionId: subscriptionId,
+    };
+    
+    this.sendMessage(message);
+    
+    // Р’РѕР·РІСЂР°С‰Р°РµРј С„СѓРЅРєС†РёСЋ РѕС‚РїРёСЃРєРё
+    return () => this.unsubscribe(subscriptionId);
+  }
+  
+  /**
+   * РџРѕРґРїРёСЃС‹РІР°РµС‚СЃСЏ РЅР° РёР·РјРµРЅРµРЅРёСЏ СЃС‚Р°С‚СѓСЃРѕРІ СЃРµСЃСЃРёР№
+   * @param onStatusChange - Callback РґР»СЏ РѕР±СЂР°Р±РѕС‚РєРё РёР·РјРµРЅРµРЅРёР№ СЃС‚Р°С‚СѓСЃР°
+   * @param onError - Callback РґР»СЏ РѕР±СЂР°Р±РѕС‚РєРё РѕС€РёР±РѕРє (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)
+   * @returns Р¤СѓРЅРєС†РёСЏ РґР»СЏ РѕС‚РїРёСЃРєРё
+   */
+  subscribeToSessionStatusChanges(
+    onStatusChange: StatusChangeCallback,
+    onError?: ErrorCallback
+  ): () => void {
+    const subscriptionId = this.generateSubscriptionId();
+    
+    console.log(`[PostgresRealtimeClient] Subscribing to status changes (${subscriptionId})`);
+    
+    // РЎРѕР·РґР°С‘Рј РѕР±СЉРµРєС‚ РїРѕРґРїРёСЃРєРё
+    const subscription: Subscription = {
+      id: subscriptionId,
+      type: 'status',
+      onStatusChange: onStatusChange,
+      onError: onError,
+      unsubscribe: () => this.unsubscribe(subscriptionId),
+    };
+    
+    // РЎРѕС…СЂР°РЅСЏРµРј РїРѕРґРїРёСЃРєСѓ
+    this.state.subscriptions.set(subscriptionId, subscription);
+    
+    // РџРѕРґРєР»СЋС‡Р°РµРјСЃСЏ, РµСЃР»Рё РµС‰С‘ РЅРµ РїРѕРґРєР»СЋС‡РµРЅС‹
+    if (!this.isConnected()) {
+      this.connect().catch((error) => {
+        console.error('[PostgresRealtimeClient] Failed to connect:', error);
+        if (onError) {
+          onError(error instanceof Error ? error : new Error('Connection failed'));
+        }
+      });
+    }
+    
+    // РћС‚РїСЂР°РІР»СЏРµРј subscribe СЃРѕРѕР±С‰РµРЅРёРµ
+    const message = {
+      type: 'subscribe',
+      channel: 'status_changes',
+      subscriptionId: subscriptionId,
+    };
+    
+    this.sendMessage(message);
+    
+    // Р’РѕР·РІСЂР°С‰Р°РµРј С„СѓРЅРєС†РёСЋ РѕС‚РїРёСЃРєРё
+    return () => this.unsubscribe(subscriptionId);
+  }
+  
+  /**
+   * РћС‚РїРёСЃС‹РІР°РµС‚СЃСЏ РѕС‚ РїРѕРґРїРёСЃРєРё
+   * @param subscriptionId - ID РїРѕРґРїРёСЃРєРё
+   */
+  private unsubscribe(subscriptionId: string): void {
+    const subscription = this.state.subscriptions.get(subscriptionId);
+    
+    if (!subscription) {
+      console.warn(`[PostgresRealtimeClient] Subscription ${subscriptionId} not found`);
+      return;
+    }
+    
+    console.log(`[PostgresRealtimeClient] Unsubscribing from ${subscriptionId}`);
+    console.trace('[PostgresRealtimeClient] Unsubscribe call stack');
+    
+    // РћС‚РїСЂР°РІР»СЏРµРј unsubscribe СЃРѕРѕР±С‰РµРЅРёРµ РЅР° СЃРµСЂРІРµСЂ
+    const message = {
+      type: 'unsubscribe',
+      subscriptionId: subscriptionId,
+    };
+    
+    this.sendMessage(message);
+    
+    // РЈРґР°Р»СЏРµРј РїРѕРґРїРёСЃРєСѓ РёР· Map
+    this.state.subscriptions.delete(subscriptionId);
+  }
+  
+  // ============================================================================
+  // Message Handling
+  // ============================================================================
+  
+  /**
+   * РћР±СЂР°Р±Р°С‚С‹РІР°РµС‚ РІС…РѕРґСЏС‰РёРµ СЃРѕРѕР±С‰РµРЅРёСЏ РѕС‚ СЃРµСЂРІРµСЂР°
+   * @param event - MessageEvent РѕС‚ WebSocket
+   */
+  private handleMessage(event: MessageEvent): void {
+    try {
+      console.log('[PostgresRealtimeClient] handleMessage РІС‹Р·РІР°РЅ, raw data:', event.data);
+      
+      // РћР±РЅРѕРІР»СЏРµРј timestamp РїРѕСЃР»РµРґРЅРµРіРѕ РїРѕР»СѓС‡РµРЅРЅРѕРіРѕ СЃРѕРѕР±С‰РµРЅРёСЏ (РґР»СЏ heartbeat)
+      this.state.lastPongAt = Date.now();
+      
+      // РџР°СЂСЃРёРј JSON СЃРѕРѕР±С‰РµРЅРёРµ
+      const message = JSON.parse(event.data);
+      console.log('[PostgresRealtimeClient] РЎРѕРѕР±С‰РµРЅРёРµ СЂР°СЃРїР°СЂСЃРµРЅРѕ, type:', message.type);
+      
+      // РћР±СЂР°Р±Р°С‚С‹РІР°РµРј СЂР°Р·РЅС‹Рµ С‚РёРїС‹ СЃРѕРѕР±С‰РµРЅРёР№
+      switch (message.type) {
+        case 'handshake':
+          // РЎРµСЂРІРµСЂ РѕС‚РїСЂР°РІРёР» handshake РїРµСЂРµРґ Р°СѓС‚РµРЅС‚РёС„РёРєР°С†РёРµР№
+          console.log('[PostgresRealtimeClient] РџРѕР»СѓС‡РµРЅ handshake РѕС‚ СЃРµСЂРІРµСЂР°, РѕР¶РёРґР°РµРј Р°СѓС‚РµРЅС‚РёС„РёРєР°С†РёСЋ...');
+          // РќРµ РјРµРЅСЏРµРј СЃРѕСЃС‚РѕСЏРЅРёРµ, РѕСЃС‚Р°С‘РјСЃСЏ РІ 'connecting'
+          break;
+          
+        case 'connected':
+          // РЎРµСЂРІРµСЂ РїРѕРґС‚РІРµСЂРґРёР» РїРѕРґРєР»СЋС‡РµРЅРёРµ Рё РіРѕС‚РѕРІ РїСЂРёРЅРёРјР°С‚СЊ СЃРѕРѕР±С‰РµРЅРёСЏ
+          console.log('[PostgresRealtimeClient] РџРѕР»СѓС‡РµРЅРѕ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёРµ РїРѕРґРєР»СЋС‡РµРЅРёСЏ РѕС‚ СЃРµСЂРІРµСЂР°');
+          // Р’РђР–РќРћ: РўРѕР»СЊРєРѕ РЎР•Р™Р§РђРЎ РїРµСЂРµС…РѕРґРёРј РІ СЃРѕСЃС‚РѕСЏРЅРёРµ 'connected'
+          this.state.connectionState = 'connected';
+          
+          // РРЎРџР РђР’Р›Р•РќРР•: Р—Р°РїСѓСЃРєР°РµРј heartbeat РјРµС…Р°РЅРёР·Рј РџРћРЎР›Р• РїРѕР»СѓС‡РµРЅРёСЏ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ РѕС‚ СЃРµСЂРІРµСЂР°
+          // Р­С‚Рѕ РїСЂРµРґРѕС‚РІСЂР°С‰Р°РµС‚ РїСЂРµР¶РґРµРІСЂРµРјРµРЅРЅРѕРµ Р·Р°РєСЂС‹С‚РёРµ СЃРѕРµРґРёРЅРµРЅРёСЏ РёР·-Р·Р° timeout
+          // РџСЂРѕРІРµСЂСЏРµРј, С‡С‚Рѕ heartbeat РµС‰С‘ РЅРµ Р·Р°РїСѓС‰РµРЅ (Р·Р°С‰РёС‚Р° РѕС‚ РїРѕРІС‚РѕСЂРЅРѕРіРѕ Р·Р°РїСѓСЃРєР°)
+          if (this.state.heartbeatInterval === null) {
+            console.log('[PostgresRealtimeClient] Р—Р°РїСѓСЃРєР°РµРј heartbeat РјРµС…Р°РЅРёР·Рј РїРѕСЃР»Рµ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ РїРѕРґРєР»СЋС‡РµРЅРёСЏ');
+            this.startHeartbeat();
+          }
+          
+          // Р’РѕСЃСЃС‚Р°РЅР°РІР»РёРІР°РµРј РїРѕРґРїРёСЃРєРё
+          this.restoreSubscriptions();
+          // РћС‚РїСЂР°РІР»СЏРµРј СЃРѕРѕР±С‰РµРЅРёСЏ РёР· РѕС‡РµСЂРµРґРё
+          this.flushMessageQueue();
+          break;
+          
+        case 'subscription_confirmed':
+          this.handleSubscriptionConfirmed(message);
+          break;
+          
+        case 'new_message':
+          this.handleNewMessage(message);
+          break;
+          
+        case 'status_change':
+          this.handleStatusChange(message);
+          break;
+          
+        case 'type_change':
+          this.handleTypeChange(message);
+          break;
+          
+        case 'error':
+          this.handleErrorMessage(message);
+          break;
+          
+        case 'ping':
+          this.handlePing(message);
+          break;
+          
+        case 'closing':
+          this.handleClosing(message);
+          break;
+          
+        default:
+          console.warn('[PostgresRealtimeClient] Unknown message type:', message.type);
+      }
+      
+    } catch (error) {
+      console.error('[PostgresRealtimeClient] Failed to parse message:', error);
+      console.error('[PostgresRealtimeClient] Raw message:', event.data);
+    }
+  }
+  
+  /**
+   * РћР±СЂР°Р±Р°С‚С‹РІР°РµС‚ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёРµ РїРѕРґРїРёСЃРєРё
+   */
+  private handleSubscriptionConfirmed(message: any): void {
+    console.log(`[PostgresRealtimeClient] Subscription confirmed: ${message.subscriptionId} (${message.channel})`);
+  }
+  
+  /**
+   * РћР±СЂР°Р±Р°С‚С‹РІР°РµС‚ РЅРѕРІРѕРµ СЃРѕРѕР±С‰РµРЅРёРµ
+   */
+  private handleNewMessage(message: any): void {
+    try {
+      // РџСЂРµРѕР±СЂР°Р·СѓРµРј РґР°РЅРЅС‹Рµ РІ SupportMessage
+      const supportMessage = this.transformToSupportMessage(message.data);
+      
+      // РќР°С…РѕРґРёРј РІСЃРµ РїРѕРґРїРёСЃРєРё, РєРѕС‚РѕСЂС‹Рµ РґРѕР»Р¶РЅС‹ РїРѕР»СѓС‡РёС‚СЊ СЌС‚Рѕ СЃРѕРѕР±С‰РµРЅРёРµ
+      for (const subscription of this.state.subscriptions.values()) {
+        // РџРѕРґРїРёСЃРєРё РЅР° РєРѕРЅРєСЂРµС‚РЅСѓСЋ СЃРµСЃСЃРёСЋ
+        if (subscription.type === 'session' && 
+            subscription.sessionId === supportMessage.session_id &&
+            subscription.onMessage) {
+          try {
+            subscription.onMessage(supportMessage);
+          } catch (error) {
+            console.error('[PostgresRealtimeClient] Error in onMessage callback:', error);
+          }
+        }
+        
+        // РџРѕРґРїРёСЃРєРё РЅР° РІСЃРµ СЃРѕРѕР±С‰РµРЅРёСЏ
+        if (subscription.type === 'all' && subscription.onMessage) {
+          try {
+            subscription.onMessage(supportMessage);
+          } catch (error) {
+            console.error('[PostgresRealtimeClient] Error in onMessage callback:', error);
+          }
+        }
+      }
+      
+    } catch (error) {
+      console.error('[PostgresRealtimeClient] Failed to handle new message:', error);
+    }
+  }
+  
+  /**
+   * РћР±СЂР°Р±Р°С‚С‹РІР°РµС‚ РёР·РјРµРЅРµРЅРёРµ СЃС‚Р°С‚СѓСЃР° СЃРµСЃСЃРёРё
+   */
+  private handleStatusChange(message: any): void {
+    try {
+      const sessionId = message.sessionId;
+      const newStatus = message.newStatus;
+      
+      // РќР°С…РѕРґРёРј РІСЃРµ РїРѕРґРїРёСЃРєРё РЅР° РёР·РјРµРЅРµРЅРёСЏ СЃС‚Р°С‚СѓСЃРѕРІ
+      for (const subscription of this.state.subscriptions.values()) {
+        if (subscription.type === 'status' && subscription.onStatusChange) {
+          try {
+            subscription.onStatusChange(sessionId, newStatus);
+          } catch (error) {
+            console.error('[PostgresRealtimeClient] Error in onStatusChange callback:', error);
+          }
+        }
+      }
+      
+    } catch (error) {
+      console.error('[PostgresRealtimeClient] Failed to handle status change:', error);
+    }
+  }
+  
+  /**
+   * РћР±СЂР°Р±Р°С‚С‹РІР°РµС‚ РёР·РјРµРЅРµРЅРёРµ С‚РёРїР° СЃРµСЃСЃРёРё
+   */
+  private handleTypeChange(message: any): void {
+    try {
+      const sessionId = message.sessionId;
+      const newType = message.newType;
+      
+      // РћР±СЂР°Р±Р°С‚С‹РІР°РµРј РєР°Рє РёР·РјРµРЅРµРЅРёРµ СЃС‚Р°С‚СѓСЃР° (РґР»СЏ СЃРѕРІРјРµСЃС‚РёРјРѕСЃС‚Рё)
+      for (const subscription of this.state.subscriptions.values()) {
+        if (subscription.type === 'status' && subscription.onStatusChange) {
+          try {
+            subscription.onStatusChange(sessionId, newType);
+          } catch (error) {
+            console.error('[PostgresRealtimeClient] Error in onStatusChange callback:', error);
+          }
+        }
+      }
+      
+    } catch (error) {
+      console.error('[PostgresRealtimeClient] Failed to handle type change:', error);
+    }
+  }
+  
+  /**
+   * РћР±СЂР°Р±Р°С‚С‹РІР°РµС‚ СЃРѕРѕР±С‰РµРЅРёРµ РѕР± РѕС€РёР±РєРµ РѕС‚ СЃРµСЂРІРµСЂР°
+   */
+  private handleErrorMessage(message: any): void {
+    console.error(`[PostgresRealtimeClient] Server error: ${message.code} - ${message.message}`);
+    
+    const error = new Error(`Server error: ${message.message}`);
+    
+    // Р•СЃР»Рё РѕС€РёР±РєР° СЃРІСЏР·Р°РЅР° СЃ РєРѕРЅРєСЂРµС‚РЅРѕР№ РїРѕРґРїРёСЃРєРѕР№
+    if (message.subscriptionId) {
+      const subscription = this.state.subscriptions.get(message.subscriptionId);
+      if (subscription && subscription.onError) {
+        try {
+          subscription.onError(error);
+        } catch (callbackError) {
+          console.error('[PostgresRealtimeClient] Error in onError callback:', callbackError);
+        }
+      }
+    } else {
+      // РћР±С‰Р°СЏ РѕС€РёР±РєР° - СѓРІРµРґРѕРјР»СЏРµРј РІСЃРµ РїРѕРґРїРёСЃРєРё
+      this.notifyAllSubscriptionsError(error);
+    }
+  }
+  
+  /**
+   * РћР±СЂР°Р±Р°С‚С‹РІР°РµС‚ ping РѕС‚ СЃРµСЂРІРµСЂР°
+   */
+  private handlePing(message: any): void {
+    // РћС‚РїСЂР°РІР»СЏРµРј pong РѕС‚РІРµС‚
+    const pongMessage = {
+      type: 'pong',
+      timestamp: Date.now(),
+    };
+    
+    this.sendMessage(pongMessage);
+    // lastPongAt РѕР±РЅРѕРІР»СЏРµС‚СЃСЏ РІ handleMessage РїСЂРё РїРѕР»СѓС‡РµРЅРёРё Р»СЋР±РѕРіРѕ СЃРѕРѕР±С‰РµРЅРёСЏ
+  }
+  
+  /**
+   * РћР±СЂР°Р±Р°С‚С‹РІР°РµС‚ СѓРІРµРґРѕРјР»РµРЅРёРµ Рѕ Р·Р°РєСЂС‹С‚РёРё РѕС‚ СЃРµСЂРІРµСЂР°
+   */
+  private handleClosing(message: any): void {
+    console.log(`[PostgresRealtimeClient] Server is closing: ${message.reason}`);
+    
+    // РЎРµСЂРІРµСЂ РєРѕСЂСЂРµРєС‚РЅРѕ Р·Р°РєСЂС‹РІР°РµС‚СЃСЏ, РЅРµ РїС‹С‚Р°РµРјСЃСЏ РїРµСЂРµРїРѕРґРєР»СЋС‡РёС‚СЊСЃСЏ
+    if (this.state.ws) {
+      this.state.ws.close(1000, 'Server closing');
+    }
+  }
+  
+  /**
+   * РџСЂРµРѕР±СЂР°Р·СѓРµС‚ РґР°РЅРЅС‹Рµ РѕС‚ СЃРµСЂРІРµСЂР° РІ SupportMessage
+   * @param data - Р”Р°РЅРЅС‹Рµ РѕС‚ СЃРµСЂРІРµСЂР°
+   * @returns SupportMessage РѕР±СЉРµРєС‚
+   */
+  private transformToSupportMessage(data: any): SupportMessage {
+    // Р’Р°Р»РёРґР°С†РёСЏ РѕР±СЏР·Р°С‚РµР»СЊРЅС‹С… РїРѕР»РµР№
+    if (!data.id || !data.session_id || !data.telegram_id || 
+        !data.message_type || !data.message_text || !data.created_at) {
+      throw new Error('Invalid message data: missing required fields');
+    }
+    
+    return {
+      id: data.id,
+      session_id: data.session_id,
+      telegram_id: data.telegram_id,
+      message_type: data.message_type,
+      message_text: data.message_text,
+      file_id: data.file_id || undefined,
+      created_at: data.created_at,
+      delivered: data.delivered ?? false,
+    };
+  }
+  
+  // ============================================================================
+  // Reconnection Logic
+  // ============================================================================
+  
+  /**
+   * РџРµСЂРµРїРѕРґРєР»СЋС‡Р°РµС‚СЃСЏ Рє СЃРµСЂРІРµСЂСѓ СЃ СЌРєСЃРїРѕРЅРµРЅС†РёР°Р»СЊРЅРѕР№ Р·Р°РґРµСЂР¶РєРѕР№
+   */
+  private reconnect(): void {
+    // Р•СЃР»Рё СѓР¶Рµ Р·Р°РїР»Р°РЅРёСЂРѕРІР°РЅРѕ РїРµСЂРµРїРѕРґРєР»СЋС‡РµРЅРёРµ, РЅРёС‡РµРіРѕ РЅРµ РґРµР»Р°РµРј
+    if (this.state.reconnectTimeout !== null) {
+      return;
+    }
+    
+    // Р•СЃР»Рё СѓР¶Рµ РїРѕРґРєР»СЋС‡РµРЅС‹, РЅРёС‡РµРіРѕ РЅРµ РґРµР»Р°РµРј
+    if (this.isConnected()) {
+      return;
+    }
+    
+    this.state.connectionState = 'reconnecting';
+    
+    // Р’С‹С‡РёСЃР»СЏРµРј Р·Р°РґРµСЂР¶РєСѓ СЃ СЌРєСЃРїРѕРЅРµРЅС†РёР°Р»СЊРЅС‹Рј СЂРѕСЃС‚РѕРј
+    // delay = min(initialDelay * (backoffMultiplier ^ attempts), maxDelay)
+    const delay = Math.min(
+      this.config.reconnectDelay * Math.pow(this.config.reconnectBackoffMultiplier, this.state.reconnectAttempts),
+      this.config.maxReconnectDelay
+    );
+    
+    console.log(`[PostgresRealtimeClient] Reconnecting in ${delay}ms (attempt ${this.state.reconnectAttempts + 1})`);
+    
+    // РЈРІРµР»РёС‡РёРІР°РµРј СЃС‡С‘С‚С‡РёРє РїРѕРїС‹С‚РѕРє
+    this.state.reconnectAttempts++;
+    
+    // Р—Р°РїСѓСЃРєР°РµРј С‚Р°Р№РјРµСЂ РїРµСЂРµРїРѕРґРєР»СЋС‡РµРЅРёСЏ
+    this.state.reconnectTimeout = setTimeout(() => {
+      this.state.reconnectTimeout = null;
+      
+      this.connect().catch((error) => {
+        console.error('[PostgresRealtimeClient] Reconnection failed:', error);
+        // РџРѕРїС‹С‚РєР° РЅРµ СѓРґР°Р»Р°СЃСЊ, Р·Р°РїСѓСЃРєР°РµРј СЃР»РµРґСѓСЋС‰СѓСЋ РїРѕРїС‹С‚РєСѓ
+        this.reconnect();
+      });
+    }, delay);
+  }
+  
+  // ============================================================================
+  // Heartbeat Mechanism
+  // ============================================================================
+  
+  /**
+   * Р—Р°РїСѓСЃРєР°РµС‚ heartbeat РјРµС…Р°РЅРёР·Рј
+   */
+  private startHeartbeat(): void {
+    // РћСЃС‚Р°РЅР°РІР»РёРІР°РµРј РїСЂРµРґС‹РґСѓС‰РёР№ heartbeat, РµСЃР»Рё Р±С‹Р»
+    this.stopHeartbeat();
+    
+    console.log('[PostgresRealtimeClient] Starting heartbeat mechanism');
+    
+    // Р—Р°РїСѓСЃРєР°РµРј РїРµСЂРёРѕРґРёС‡РµСЃРєСѓСЋ РїСЂРѕРІРµСЂРєСѓ
+    this.state.heartbeatInterval = setInterval(() => {
+      this.checkHeartbeat();
+    }, this.config.heartbeatInterval);
+  }
+  
+  /**
+   * РћСЃС‚Р°РЅР°РІР»РёРІР°РµС‚ heartbeat РјРµС…Р°РЅРёР·Рј
+   */
+  private stopHeartbeat(): void {
+    if (this.state.heartbeatInterval !== null) {
+      clearInterval(this.state.heartbeatInterval);
+      this.state.heartbeatInterval = null;
+      console.log('[PostgresRealtimeClient] Heartbeat mechanism stopped');
+    }
+  }
+  
+  /**
+   * РџСЂРѕРІРµСЂСЏРµС‚ heartbeat Рё РїРµСЂРµРїРѕРґРєР»СЋС‡Р°РµС‚СЃСЏ РїСЂРё timeout
+   * РџСЂРѕРІРµСЂСЏРµС‚, РїРѕР»СѓС‡Р°РµС‚ Р»Рё РєР»РёРµРЅС‚ Р›Р®Р‘Р«Р• СЃРѕРѕР±С‰РµРЅРёСЏ РѕС‚ СЃРµСЂРІРµСЂР°
+   */
+  private checkHeartbeat(): void {
+    const now = Date.now();
+    const timeSinceLastMessage = now - this.state.lastPongAt;
+    
+    // Р•СЃР»Рё РїСЂРѕС€Р»Рѕ Р±РѕР»СЊС€Рµ heartbeatTimeout СЃ РїРѕСЃР»РµРґРЅРµРіРѕ СЃРѕРѕР±С‰РµРЅРёСЏ, РїРµСЂРµРїРѕРґРєР»СЋС‡Р°РµРјСЃСЏ
+    // Р­С‚Рѕ РѕР·РЅР°С‡Р°РµС‚, С‡С‚Рѕ СЃРѕРµРґРёРЅРµРЅРёРµ "Р·Р°РІРёСЃР»Рѕ" Рё СЃРµСЂРІРµСЂ РЅРµ РѕС‚РїСЂР°РІР»СЏРµС‚ РґР°Р¶Рµ ping
+    if (timeSinceLastMessage > this.config.heartbeatTimeout) {
+      console.warn(`[PostgresRealtimeClient] Heartbeat timeout (${timeSinceLastMessage}ms since last message from server)`);
+      
+      // Р—Р°РєСЂС‹РІР°РµРј СЃРѕРµРґРёРЅРµРЅРёРµ
+      if (this.state.ws) {
+        this.state.ws.close(1000, 'Heartbeat timeout');
+      }
+      
+      // Р—Р°РїСѓСЃРєР°РµРј РїРµСЂРµРїРѕРґРєР»СЋС‡РµРЅРёРµ
+      this.reconnect();
+    }
+  }
+  
+  // ============================================================================
+  // Public Utility Methods
+  // ============================================================================
+  
+  /**
+   * РћС‚РїРёСЃС‹РІР°РµС‚СЃСЏ РѕС‚ РІСЃРµС… РїРѕРґРїРёСЃРѕРє Рё Р·Р°РєСЂС‹РІР°РµС‚ СЃРѕРµРґРёРЅРµРЅРёРµ
+   */
+  async unsubscribeAll(): Promise<void> {
+    console.log(`[PostgresRealtimeClient] Unsubscribing from all ${this.state.subscriptions.size} subscriptions`);
+    
+    // РћС‚РїСЂР°РІР»СЏРµРј unsubscribe РґР»СЏ РІСЃРµС… РїРѕРґРїРёСЃРѕРє
+    const subscriptionIds = Array.from(this.state.subscriptions.keys());
+    for (const subscriptionId of subscriptionIds) {
+      this.unsubscribe(subscriptionId);
+    }
+    
+    // РћС‡РёС‰Р°РµРј Map РїРѕРґРїРёСЃРѕРє
+    this.state.subscriptions.clear();
+    
+    // РћСЃС‚Р°РЅР°РІР»РёРІР°РµРј heartbeat
+    this.stopHeartbeat();
+    
+    // РћС‚РјРµРЅСЏРµРј С‚Р°Р№РјРµСЂ РїРµСЂРµРїРѕРґРєР»СЋС‡РµРЅРёСЏ, РµСЃР»Рё РµСЃС‚СЊ
+    if (this.state.reconnectTimeout !== null) {
+      clearTimeout(this.state.reconnectTimeout);
+      this.state.reconnectTimeout = null;
+    }
+    
+    // Р—Р°РєСЂС‹РІР°РµРј WebSocket СЃРѕРµРґРёРЅРµРЅРёРµ
+    if (this.state.ws) {
+      this.state.ws.close(1000, 'Client unsubscribed from all');
+      this.state.ws = null;
+    }
+    
+    this.state.connectionState = 'disconnected';
+  }
+  
+  /**
+   * РџРѕР»СѓС‡Р°РµС‚ Р±Р°Р·РѕРІС‹Р№ РєР»РёРµРЅС‚ РґР»СЏ СЃРѕРІРјРµСЃС‚РёРјРѕСЃС‚Рё СЃ SupabaseRealtimeClient API
+   * (РЅРµ РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РІ PostgreSQL СЂРµР°Р»РёР·Р°С†РёРё)
+   */
+  getClient(): null {
+    return null;
+  }
+  
+  /**
+   * РџСЂРѕРІРµСЂСЏРµС‚ РїРѕРґРєР»СЋС‡РµРЅРёРµ Рє СЃРµСЂРІРµСЂСѓ
+   * @returns true РµСЃР»Рё РїРѕРґРєР»СЋС‡РµРЅРёРµ СѓСЃРїРµС€РЅРѕ
+   */
+  async testConnection(): Promise<boolean> {
+    return this.isConnected();
+  }
+}

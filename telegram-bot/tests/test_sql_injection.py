@@ -68,8 +68,8 @@ class TestSQLInjectionProtection:
         но тест проверяет корректность обработки
         """
         # Попытка передать строку вместо числа должна вызвать ошибку типа или DataError
-        from sqlalchemy.exc import DataError
-        with pytest.raises((TypeError, ValueError, DataError)):
+        from sqlalchemy.exc import DataError, DBAPIError
+        with pytest.raises((TypeError, ValueError, DataError, DBAPIError)):
             await support_repository.create_session("'; DROP TABLE support_sessions; --")
     
     @pytest.mark.asyncio

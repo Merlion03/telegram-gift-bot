@@ -59,11 +59,18 @@ async def test_property_15_filter_sessions_by_status(
     # Arrange
     repository = SupportRepository(db_session)
     
-    # Создаём сессии с разными статусами
+    # Генерируем уникальный базовый telegram_id для этого примера
+    # Используем хеш от данных для уникальности
+    import hashlib
+    data_hash = hashlib.md5(str(sessions_data).encode()).hexdigest()
+    base_telegram_id = int(data_hash[:8], 16) % 900000000 + 100000000  # От 100M до 1B
+    
+    # Создаём сессии с разными статусами и уникальными telegram_id
     created_sessions = []
-    for data in sessions_data:
+    created_session_ids = []
+    for i, data in enumerate(sessions_data):
         session = SupportSession(
-            telegram_id=data['telegram_id'],
+            telegram_id=base_telegram_id + i,  # Уникальный ID для каждой сессии
             status=data['status'],
             session_type=data['session_type']
         )
@@ -72,18 +79,25 @@ async def test_property_15_filter_sessions_by_status(
     
     await db_session.flush()
     
+    # Сохраняем ID созданных сессий
+    for session in created_sessions:
+        created_session_ids.append(session.id)
+    
     # Act
     # Используем большой лимит для получения всех сессий (не дефолтный 50)
-    filtered_sessions = await repository.get_all_sessions(
+    all_filtered_sessions = await repository.get_all_sessions(
         status=filter_status,
         session_type=None,
         limit=10000,  # Достаточно большой лимит для получения всех сессий
         offset=0
     )
     
+    # Фильтруем только сессии, созданные в этом примере
+    filtered_sessions = [s for s in all_filtered_sessions if s.id in created_session_ids]
+    
     # Assert
     if filter_status is None:
-        # Если фильтр не указан, должны вернуться все сессии
+        # Если фильтр не указан, должны вернуться все созданные сессии
         assert len(filtered_sessions) == len(created_sessions)
     else:
         # Если фильтр указан, все возвращённые сессии должны иметь указанный статус
@@ -123,11 +137,17 @@ async def test_property_15_filter_sessions_by_type(
     # Arrange
     repository = SupportRepository(db_session)
     
-    # Создаём сессии с разными типами
+    # Генерируем уникальный базовый telegram_id для этого примера
+    import hashlib
+    data_hash = hashlib.md5(str(sessions_data).encode()).hexdigest()
+    base_telegram_id = int(data_hash[:8], 16) % 900000000 + 100000000
+    
+    # Создаём сессии с разными типами и уникальными telegram_id
     created_sessions = []
-    for data in sessions_data:
+    created_session_ids = []
+    for i, data in enumerate(sessions_data):
         session = SupportSession(
-            telegram_id=data['telegram_id'],
+            telegram_id=base_telegram_id + i,  # Уникальный ID для каждой сессии
             status=data['status'],
             session_type=data['session_type']
         )
@@ -136,18 +156,25 @@ async def test_property_15_filter_sessions_by_type(
     
     await db_session.flush()
     
+    # Сохраняем ID созданных сессий
+    for session in created_sessions:
+        created_session_ids.append(session.id)
+    
     # Act
     # Используем большой лимит для получения всех сессий (не дефолтный 50)
-    filtered_sessions = await repository.get_all_sessions(
+    all_filtered_sessions = await repository.get_all_sessions(
         status=None,
         session_type=filter_session_type,
         limit=10000,  # Достаточно большой лимит для получения всех сессий
         offset=0
     )
     
+    # Фильтруем только сессии, созданные в этом примере
+    filtered_sessions = [s for s in all_filtered_sessions if s.id in created_session_ids]
+    
     # Assert
     if filter_session_type is None:
-        # Если фильтр не указан, должны вернуться все сессии
+        # Если фильтр не указан, должны вернуться все созданные сессии
         assert len(filtered_sessions) == len(created_sessions)
     else:
         # Если фильтр указан, все возвращённые сессии должны иметь указанный тип
@@ -194,6 +221,7 @@ async def test_property_15_filter_sessions_combined(
     
     # Создаём сессии с разными комбинациями статусов и типов
     created_sessions = []
+    created_session_ids = []
     for data in sessions_data:
         session = SupportSession(
             telegram_id=data['telegram_id'],
@@ -205,18 +233,25 @@ async def test_property_15_filter_sessions_combined(
     
     await db_session.flush()
     
+    # Сохраняем ID созданных сессий для фильтрации
+    for session in created_sessions:
+        created_session_ids.append(session.id)
+    
     # Act
     # Используем большой лимит для получения всех сессий (не дефолтный 50)
-    filtered_sessions = await repository.get_all_sessions(
+    all_filtered_sessions = await repository.get_all_sessions(
         status=filter_status,
         session_type=filter_session_type,
         limit=10000,  # Достаточно большой лимит для получения всех сессий
         offset=0
     )
     
+    # Фильтруем только сессии, созданные в этом тесте
+    filtered_sessions = [s for s in all_filtered_sessions if s.id in created_session_ids]
+    
     # Assert
     if filter_status is None and filter_session_type is None:
-        # Если оба фильтра не указаны, должны вернуться все сессии
+        # Если оба фильтра не указаны, должны вернуться все созданные сессии
         assert len(filtered_sessions) == len(created_sessions)
     else:
         # Проверяем, что все возвращённые сессии соответствуют фильтрам
@@ -396,10 +431,17 @@ async def test_property_17_default_limit_is_50(
     # Arrange
     repository = SupportRepository(db_session)
     
-    # Создаём сессии
+    # Генерируем уникальный базовый telegram_id для этого примера
+    import hashlib
+    import time
+    data_hash = hashlib.md5(f"{total_sessions}{time.time()}".encode()).hexdigest()
+    base_telegram_id = int(data_hash[:8], 16) % 900000000 + 100000000
+    
+    # Создаём сессии с уникальными telegram_id
+    created_session_ids = []
     for i in range(total_sessions):
         session = SupportSession(
-            telegram_id=300000 + i,
+            telegram_id=base_telegram_id + i,  # Уникальный ID
             status='active',
             session_type='chat'
         )
@@ -407,17 +449,30 @@ async def test_property_17_default_limit_is_50(
     
     await db_session.flush()
     
+    # Получаем ID созданных сессий
+    from sqlalchemy import select
+    result = await db_session.execute(
+        select(SupportSession.id).where(
+            SupportSession.telegram_id >= base_telegram_id,
+            SupportSession.telegram_id < base_telegram_id + total_sessions
+        )
+    )
+    created_session_ids = [row[0] for row in result.fetchall()]
+    
     # Act - запрос без limit
-    sessions = await repository.get_all_sessions(
+    all_sessions = await repository.get_all_sessions(
         status=None,
         session_type=None,
         limit=None,
         offset=0
     )
     
-    # Assert - должно вернуться не более 50 сессий
-    assert len(sessions) <= 50
+    # Фильтруем только созданные в этом тесте сессии
+    test_sessions = [s for s in all_sessions if s.id in created_session_ids]
     
-    # Assert - если сессий меньше 50, должны вернуться все
+    # Assert - должно вернуться не более 50 сессий всего
+    assert len(all_sessions) <= 50
+    
+    # Assert - если созданных сессий меньше 50, должны вернуться все созданные
     if total_sessions <= 50:
-        assert len(sessions) == total_sessions
+        assert len(test_sessions) == total_sessions

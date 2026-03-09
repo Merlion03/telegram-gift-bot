@@ -198,13 +198,17 @@ cd nextjs-app
 # Установка зависимостей
 npm install
 
-# Запуск в режиме разработки
+# Запуск в режиме разработки (с custom server и WebSocket)
 npm run dev
 
 # Сборка для продакшена
 npm run build
+
+# Запуск production сервера (с custom server и WebSocket)
 npm start
 ```
+
+**Примечание:** Приложение использует custom Next.js server для поддержки WebSocket соединений. WebSocket endpoint доступен по адресу `ws://localhost:3000/api/realtime`.
 
 ## 🔐 Переменные окружения
 
@@ -501,6 +505,291 @@ console.error('[ERROR]', 'Error description', error);
 - Секреты не логируются
 - Отдельные наборы секретов для dev/prod
 
+## 🔄 PostgreSQL Realtime Migration
+
+Система поддерживает два варианта real-time обновлений в админ-панели:
+1. **Supabase Realtime** (устаревший) - внешний WebSocket сервер
+2. **PostgreSQL LISTEN/NOTIFY** (рекомендуется) - нативный механизм PostgreSQL
+
+### Преимущества PostgreSQL LISTEN/NOTIFY
+
+- ✅ Устранение CSP (Content Security Policy) ошибок в браузере
+- ✅ Отсутствие зависимости от внешнего сервиса Supabase
+- ✅ Полный контроль над real-time коммуникацией
+- ✅ Меньшая задержка доставки уведомлений (< 500ms)
+- ✅ Встроенный WebSocket сервер в Next.js приложении
+
+### Применение миграции
+
+#### Шаг 1: Применение SQL миграции
+
+Миграция создаёт три PostgreSQL триггера для автоматической отправки уведомлений:
+- `trigger_notify_new_message` - при вставке нового сообщения
+- `trigger_notify_session_status_change` - при изменении статуса сессии
+- `trigger_notify_session_type_change` - при изменении типа сессии
+
+```bash
+cd telegram-bot
+
+# Активация виртуального окружения
+# Windows:
+venv\Scripts\activate
+# Linux/Mac:
+source venv/bin/activate
+
+# Применение миграции
+python scripts/apply_migration_005.py
+```
+
+Миграция применяется идемпотентно (можно запускать повторно без ошибок).
+
+#### Шаг 2: Проверка работы триггеров
+
+После применения миграции рекомендуется проверить корректность работы триггеров:
+
+```bash
+cd telegram-bot
+
+# Активация виртуального окружения
+venv\Scripts\activate  # или source venv/bin/activate
+
+# Запуск тестов триггеров
+python scripts/test_realtime_triggers.py
+```
+
+Скрипт выполнит следующие проверки:
+- Создаст тестовые записи в БД
+- Подпишется на LISTEN каналы
+- Проверит получение уведомлений
+- Проверит корректность JSON payload
+- Очистит тестовые данные
+
+Ожидаемый вывод:
+```
+✓ Тест trigger_notify_new_message ПРОЙДЕН
+✓ Тест trigger_notify_session_status_change ПРОЙДЕН
+✓ Тест trigger_notify_session_type_change ПРОЙДЕН
+✓ ВСЕ ТЕСТЫ ПРОЙДЕНЫ УСПЕШНО
+```
+
+#### Шаг 3: Включение feature flag
+
+Добавьте переменную окружения в `.env` файл Next.js приложения:
+
+```env
+# Включить PostgreSQL LISTEN/NOTIFY вместо Supabase Realtime
+NEXT_PUBLIC_USE_POSTGRES_REALTIME=true
+```
+
+Эта переменная переключает клиентский код между двумя реализациями:
+- `true` - использовать PostgreSQL LISTEN/NOTIFY (рекомендуется)
+- `false` или не установлена - использовать Supabase Realtime (устаревший)
+
+#### Шаг 4: Перезапуск Next.js приложения
+
+```bash
+cd nextjs-app
+
+# Остановка текущего процесса (Ctrl+C)
+
+# Запуск с custom server и WebSocket поддержкой
+npm run dev
+
+# Или для production:
+npm run build
+npm start
+```
+
+**Важно:** Приложение должно запускаться через custom server (`npm run dev` или `npm start`), а не через стандартный `next dev`, так как WebSocket требует custom server.
+
+#### Шаг 5: Проверка работы в браузере
+
+1. Откройте админ-панель: http://localhost:3000/admin
+2. Войдите с учётными данными администратора
+3. Откройте консоль браузера (F12)
+4. Проверьте наличие сообщений о подключении к WebSocket:
+   ```
+   [PostgresRealtimeClient] Connecting to WebSocket server
+   [PostgresRealtimeClient] Connected to WebSocket server
+   ```
+5. Отправьте тестовое сообщение через Telegram бота
+6. Убедитесь, что сообщение появилось в админ-панели без перезагрузки страницы
+
+### Откат миграции (Rollback)
+
+Если возникли проблемы с новой реализацией, можно откатить изменения:
+
+#### Шаг 1: Выполнение rollback скрипта
+
+```bash
+cd telegram-bot
+
+# Активация виртуального окружения
+venv\Scripts\activate  # или source venv/bin/activate
+
+# Запуск rollback скрипта
+python scripts/rollback_realtime_triggers.py
+```
+
+Скрипт запросит подтверждение и выполнит следующие действия:
+- Удалит все три триггера из таблиц
+- Удалит все три функции из базы данных
+- Выведет инструкции по дальнейшим действиям
+
+#### Шаг 2: Отключение feature flag
+
+Удалите или установите в `false` переменную окружения:
+
+```env
+# Вернуться к Supabase Realtime
+NEXT_PUBLIC_USE_POSTGRES_REALTIME=false
+```
+
+#### Шаг 3: Перезапуск Next.js приложения
+
+```bash
+cd nextjs-app
+
+# Остановка текущего процесса (Ctrl+C)
+
+# Запуск приложения
+npm run dev
+```
+
+### Запуск тестов
+
+Система включает полный набор тестов для проверки корректности работы:
+
+#### Unit тесты
+
+```bash
+cd nextjs-app
+
+# Тесты PostgresRealtimeClient
+npm test -- PostgresRealtimeClient
+
+# Тесты RealtimeWebSocketServer
+npm test -- RealtimeWebSocketServer
+```
+
+#### Integration тесты
+
+```bash
+cd nextjs-app
+
+# End-to-end тест с реальной БД
+npm test -- e2e-realtime
+
+# Property-based тест round-trip
+npm test -- e2e-realtime-roundtrip.property
+```
+
+#### Performance тесты
+
+```bash
+cd nextjs-app
+
+# Тест latency (95 перцентиль < 500ms)
+npm test -- performance-latency
+
+# Тест concurrent connections (100 одновременных подключений)
+npm test -- load-concurrent-connections
+
+# Тест throughput (1000 уведомлений/сек)
+npm test -- load-throughput
+```
+
+#### Database trigger тесты
+
+```bash
+cd telegram-bot
+
+# Активация виртуального окружения
+venv\Scripts\activate  # или source venv/bin/activate
+
+# Property-based тесты триггеров
+pytest tests/test_realtime_triggers_property.py -v
+
+# Unit тесты триггеров
+pytest tests/test_realtime_triggers.py -v
+```
+
+### Мониторинг и отладка
+
+#### Логи WebSocket сервера
+
+WebSocket сервер логирует все важные события:
+
+```bash
+# Просмотр логов Next.js приложения
+cd nextjs-app
+npm run dev
+
+# В логах вы увидите:
+# - Подключения клиентов с client_id и user_id
+# - Подписки на каналы
+# - Получение уведомлений от PostgreSQL
+# - Отправку уведомлений клиентам
+# - Ошибки и переподключения
+```
+
+#### Логи PostgreSQL LISTEN
+
+Для отладки PostgreSQL LISTEN можно использовать:
+
+```sql
+-- Проверка активных LISTEN подключений
+SELECT * FROM pg_stat_activity 
+WHERE query LIKE '%LISTEN%';
+
+-- Ручная отправка тестового уведомления
+SELECT pg_notify('new_message', '{"test": "data"}');
+```
+
+#### Метрики WebSocket сервера
+
+WebSocket сервер предоставляет метрики:
+- Количество активных подключений
+- Общее количество подключений
+- Количество отправленных уведомлений
+- Количество ошибок
+
+Метрики логируются каждые 60 секунд.
+
+### Troubleshooting
+
+#### Проблема: WebSocket не подключается
+
+**Решение:**
+1. Убедитесь, что Next.js запущен через custom server (`npm run dev` или `npm start`)
+2. Проверьте, что порт 3000 не занят другим процессом
+3. Проверьте консоль браузера на наличие ошибок CORS или CSP
+4. Убедитесь, что feature flag установлен: `NEXT_PUBLIC_USE_POSTGRES_REALTIME=true`
+
+#### Проблема: Уведомления не приходят
+
+**Решение:**
+1. Проверьте, что миграция применена: `python scripts/test_realtime_triggers.py`
+2. Проверьте логи WebSocket сервера на наличие ошибок подключения к PostgreSQL
+3. Убедитесь, что PostgreSQL LISTEN подключение активно
+4. Проверьте, что клиент подписан на нужный канал (см. логи в консоли браузера)
+
+#### Проблема: Высокая задержка уведомлений
+
+**Решение:**
+1. Запустите performance тест: `npm test -- performance-latency`
+2. Проверьте нагрузку на PostgreSQL
+3. Проверьте сетевую задержку между компонентами
+4. Убедитесь, что PostgreSQL LISTEN подключение не разрывается часто
+
+#### Проблема: Ошибки аутентификации WebSocket
+
+**Решение:**
+1. Убедитесь, что пользователь авторизован в NextAuth
+2. Проверьте, что пользователь имеет роль администратора
+3. Проверьте cookies в браузере (должен быть session token)
+4. Проверьте логи сервера на наличие ошибок валидации токена
+
 ## 📝 Лицензия
 
 [Укажите вашу лицензию]
@@ -513,6 +802,7 @@ console.error('[ERROR]', 'Error description', error);
 2. Убедитесь, что все переменные окружения установлены
 3. Проверьте доступ к Google Sheets API
 4. Проверьте подключение к базе данных
+5. Для проблем с real-time обновлениями см. раздел [PostgreSQL Realtime Migration](#-postgresql-realtime-migration)
 
 ## 👥 Авторы
 

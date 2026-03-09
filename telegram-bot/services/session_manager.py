@@ -176,7 +176,7 @@ class SessionManager:
         
         Логика:
         1. Получает все активные сессии
-        2. Для каждой проверяет время последней активности
+        2. Для каждой проверяет время последней активности (поле last_activity)
         3. Закрывает сессии с активностью старше inactive_hours
         
         Args:
@@ -196,13 +196,9 @@ class SessionManager:
             cutoff_time = datetime.now(timezone.utc) - timedelta(hours=inactive_hours)
             
             for session in active_sessions:
-                # Определяем время последней активности
-                # Если есть сообщения - берём время последнего сообщения
-                # Если нет - берём время создания сессии
-                if session.messages:
-                    last_activity = max(msg.created_at for msg in session.messages)
-                else:
-                    last_activity = session.created_at
+                # Используем поле last_activity из модели SupportSession
+                # Если last_activity не установлен, используем created_at
+                last_activity = session.last_activity if hasattr(session, 'last_activity') and session.last_activity else session.created_at
                 
                 # Проверяем, неактивна ли сессия
                 if last_activity < cutoff_time:
