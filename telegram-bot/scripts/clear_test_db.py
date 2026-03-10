@@ -1,7 +1,7 @@
 """
 Скрипт для очистки тестовой базы данных
 
-Удаляет все данные из таблиц support_messages и support_sessions
+Удаляет все данные из всех таблиц (users, chat_sessions, chat_messages, support_sessions, support_messages)
 """
 import asyncio
 import sys
@@ -35,15 +35,26 @@ async def clear_test_database():
     
     try:
         async with db.session() as session:
-            # Удаляем все сообщения
-            await session.execute(text("DELETE FROM support_messages"))
+            # Удаляем все данные в правильном порядке (учитываем foreign keys)
+            await session.execute(text("TRUNCATE TABLE support_messages CASCADE"))
             print("✓ Таблица support_messages очищена")
             
-            # Удаляем все сессии
-            await session.execute(text("DELETE FROM support_sessions"))
+            await session.execute(text("TRUNCATE TABLE support_sessions CASCADE"))
             print("✓ Таблица support_sessions очищена")
             
+            await session.execute(text("TRUNCATE TABLE chat_messages CASCADE"))
+            print("✓ Таблица chat_messages очищена")
+            
+            await session.execute(text("TRUNCATE TABLE chat_sessions CASCADE"))
+            print("✓ Таблица chat_sessions очищена")
+            
+            await session.execute(text("TRUNCATE TABLE users CASCADE"))
+            print("✓ Таблица users очищена")
+            
             # Сбрасываем счётчики автоинкремента
+            await session.execute(text("ALTER SEQUENCE users_id_seq RESTART WITH 1"))
+            await session.execute(text("ALTER SEQUENCE chat_sessions_id_seq RESTART WITH 1"))
+            await session.execute(text("ALTER SEQUENCE chat_messages_id_seq RESTART WITH 1"))
             await session.execute(text("ALTER SEQUENCE support_sessions_id_seq RESTART WITH 1"))
             await session.execute(text("ALTER SEQUENCE support_messages_id_seq RESTART WITH 1"))
             print("✓ Счётчики ID сброшены")

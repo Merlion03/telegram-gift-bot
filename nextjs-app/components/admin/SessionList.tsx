@@ -54,6 +54,14 @@ export function SessionList({ onSelectSession, selectedSessionId }: SessionListP
     const initSubscription = async () => {
       const client = getRealtimeClient();
 
+      // ИСПРАВЛЕНИЕ: Явно подключаемся перед подпиской
+      // Это гарантирует, что после обновления страницы клиент переподключится
+      try {
+        await client.connect();
+      } catch (error) {
+        console.error('[SessionList] Ошибка подключения к WebSocket:', error);
+      }
+
       // Подписываемся на канал status (изменения статусов сессий)
       subscriptionId = client.subscribe({
         channel: 'status',

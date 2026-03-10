@@ -1,7 +1,7 @@
 """
 Скрипт для очистки production базы данных
 
-ВНИМАНИЕ: Удаляет ВСЕ данные из таблиц support_messages и support_sessions
+ВНИМАНИЕ: Удаляет ВСЕ данные из всех таблиц (users, chat_sessions, chat_messages, support_sessions, support_messages)
 Используйте с осторожностью!
 """
 import asyncio
@@ -33,14 +33,15 @@ async def clear_production_database():
     print("⚠️  ВНИМАНИЕ: Вы собираетесь очистить PRODUCTION базу данных!")
     print(f"   База: {db_host}:{db_port}/{db_name}")
     print("\nЭто действие удалит:")
-    print("  - Все сессии поддержки")
-    print("  - Все сообщения")
+    print("  - Всех пользователей")
+    print("  - Все чат-сессии и сообщения")
+    print("  - Все сессии поддержки и сообщения")
     print("  - Сбросит счётчики ID\n")
     
-    confirmation = input("Введите 'YES' для подтверждения: ")
+    confirmation = input("Введите 'YES' для подтверждения: ").strip()
     
     if confirmation != 'YES':
-        print("\n❌ Операция отменена")
+        print(f"\n❌ Операция отменена (получено: '{confirmation}')")
         return
     
     # Инициализируем подключение к БД
@@ -49,17 +50,26 @@ async def clear_production_database():
     
     try:
         async with db.session() as session:
-            # Удаляем все сообщения
-            result = await session.execute(text("DELETE FROM support_messages"))
-            messages_count = result.rowcount
-            print(f"✓ Удалено сообщений: {messages_count}")
+            # Удаляем все данные в правильном порядке (учитываем foreign keys)
+            result = await session.execute(text("TRUNCATE TABLE support_messages CASCADE"))
+            print(f"✓ Таблица support_messages очищена")
             
-            # Удаляем все сессии
-            result = await session.execute(text("DELETE FROM support_sessions"))
-            sessions_count = result.rowcount
-            print(f"✓ Удалено сессий: {sessions_count}")
+            result = await session.execute(text("TRUNCATE TABLE support_sessions CASCADE"))
+            print(f"✓ Таблица support_sessions очищена")
+            
+            result = await session.execute(text("TRUNCATE TABLE chat_messages CASCADE"))
+            print(f"✓ Таблица chat_messages очищена")
+            
+            result = await session.execute(text("TRUNCATE TABLE chat_sessions CASCADE"))
+            print(f"✓ Таблица chat_sessions очищена")
+            
+            result = await session.execute(text("TRUNCATE TABLE users CASCADE"))
+            print(f"✓ Таблица users очищена")
             
             # Сбрасываем счётчики автоинкремента
+            await session.execute(text("ALTER SEQUENCE users_id_seq RESTART WITH 1"))
+            await session.execute(text("ALTER SEQUENCE chat_sessions_id_seq RESTART WITH 1"))
+            await session.execute(text("ALTER SEQUENCE chat_messages_id_seq RESTART WITH 1"))
             await session.execute(text("ALTER SEQUENCE support_sessions_id_seq RESTART WITH 1"))
             await session.execute(text("ALTER SEQUENCE support_messages_id_seq RESTART WITH 1"))
             print("✓ Счётчики ID сброшены")

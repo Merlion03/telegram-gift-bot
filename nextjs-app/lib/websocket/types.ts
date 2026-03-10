@@ -75,7 +75,7 @@ export interface NewMessageMessage {
   data: {
     id: number;
     session_id: number;
-    sender_type: 'user' | 'admin';
+    sender_type: 'user' | 'admin' | 'bot';
     message_text: string;
     created_at: string;
     is_read: boolean;

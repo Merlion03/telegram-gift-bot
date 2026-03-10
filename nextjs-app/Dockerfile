@@ -59,6 +59,9 @@ WORKDIR /app
 LABEL maintainer="telegram-bot-webapp-team"
 LABEL description="Next.js WebApp для системы розыгрышей и админки поддержки"
 
+# Установка PostgreSQL клиента для применения миграций
+RUN apk add --no-cache postgresql-client
+
 # Создание непривилегированного пользователя
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
@@ -75,6 +78,13 @@ COPY --from=builder --chown=nextjs:nodejs /app/dist ./dist
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 
+# Копирование миграций и entrypoint скрипта (временно от root для создания директории)
+USER root
+COPY migrations/005_realtime_triggers.sql /app/migrations/
+COPY scripts/docker-entrypoint.sh /app/
+RUN chmod +x /app/docker-entrypoint.sh && \
+    chown -R nextjs:nodejs /app/migrations
+
 # Переключение на непривилегированного пользователя
 USER nextjs
 
@@ -85,6 +95,9 @@ EXPOSE 3000
 # Проверяем, что Next.js сервер отвечает на запросы
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" || exit 1
+
+# Entrypoint для применения миграций перед запуском
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 # Запуск приложения через custom server
 CMD ["node", "dist/server.js"]

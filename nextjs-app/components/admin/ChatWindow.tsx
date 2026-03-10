@@ -46,11 +46,20 @@ export function ChatWindow({ session }: ChatWindowProps) {
 
   // Подписка на real-time обновления
   useEffect(() => {
-    // Синхронная инициализация подписки
-    const realtimeClient = getRealtimeClient();
+    // Асинхронная инициализация подписки
+    const initSubscription = async () => {
+      const realtimeClient = getRealtimeClient();
 
-    // Подписываемся на новые сообщения для текущей сессии
-    unsubscribeRef.current = realtimeClient.subscribeToSessionMessages(
+      // ИСПРАВЛЕНИЕ: Явно подключаемся перед подпиской
+      // Это гарантирует, что после обновления страницы клиент переподключится
+      try {
+        await realtimeClient.connect();
+      } catch (error) {
+        console.error('[ChatWindow] Ошибка подключения к WebSocket:', error);
+      }
+
+      // Подписываемся на новые сообщения для текущей сессии
+      unsubscribeRef.current = realtimeClient.subscribeToSessionMessages(
         session.id,
         (serverMessage) => {
           // Проверяем, что компонент всё ещё смонтирован
@@ -60,11 +69,19 @@ export function ChatWindow({ session }: ChatWindowProps) {
           if (serverMessage.type !== 'new_message') return;
           
           // Преобразуем данные сервера в SupportMessage
+          // Явное преобразование всех типов отправителей:
+          // - 'user' -> 'from_user' (сообщения от пользователя, отображаются слева)
+          // - 'bot' -> 'from_bot' (автоматические сообщения бота, фиолетовый фон)
+          // - 'admin' -> 'from_support' (сообщения от администратора, отображаются справа)
+          // - неизвестные типы -> 'from_support' (fallback для безопасности)
           const message: SupportMessage = {
             id: serverMessage.data.id,
             session_id: serverMessage.data.session_id,
             telegram_id: session.telegram_id,
-            message_type: serverMessage.data.sender_type === 'user' ? 'from_user' : 'from_support',
+            message_type: 
+              serverMessage.data.sender_type === 'user' ? 'from_user' :
+              serverMessage.data.sender_type === 'bot' ? 'from_bot' :
+              'from_support',
             message_text: serverMessage.data.message_text,
             created_at: serverMessage.data.created_at,
             delivered: serverMessage.data.is_read || false,
@@ -86,6 +103,9 @@ export function ChatWindow({ session }: ChatWindowProps) {
           console.error('Real-time subscription error:', error);
         }
       );
+    };
+
+    initSubscription();
 
     // Отписываемся при размонтировании или изменении сессии
     return () => {
@@ -275,11 +295,10 @@ export function ChatWindow({ session }: ChatWindowProps) {
         setCurrentSessionType(data.session.session_type);
       }
 
-      // Добавляем отправленное сообщение в список
-      if (data.message) {
-        setMessages((prev) => [...prev, data.message]);
-        scrollToBottom();
-      }
+      // НЕ добавляем сообщение вручную - оно придёт через WebSocket!
+      // Триггер PostgreSQL автоматически отправит уведомление через new_message канал
+      // и WebSocket подписка добавит сообщение в список
+      // Это предотвращает дублирование и гарантирует консистентность
 
       // Очищаем поле ввода
       setNewMessage('');
@@ -326,26 +345,40 @@ export function ChatWindow({ session }: ChatWindowProps) {
 
   /**
    * Группирует сообщения по датам
+   * 
+   * ИСПРАВЛЕНИЕ: Используем Map для отслеживания уже созданных групп по датам.
+   * Это предотвращает дублирование разделителей дат после перезагрузки страницы.
+   * 
+   * Проблема старой реализации: последовательное сравнение с currentDate создавало
+   * новую группу каждый раз, когда дата менялась, даже если группа для этой даты
+   * уже существовала ранее в массиве. При перезагрузке или асинхронной загрузке
+   * сообщений это приводило к дублированию разделителей "Сегодня", "Вчера" и т.д.
+   * 
+   * Новая реализация: Map гарантирует, что для каждой уникальной даты (toDateString)
+   * существует только одна группа, и все сообщения этой даты попадают в неё.
    */
   const groupMessagesByDate = (messages: SupportMessage[]) => {
-    const groups: { date: string; messages: SupportMessage[] }[] = [];
-    let currentDate = '';
-
+    // Map для отслеживания групп по датам (ключ - toDateString, значение - группа)
+    const groupsMap = new Map<string, { date: string; messages: SupportMessage[] }>();
+    
     messages.forEach((message) => {
+      // Получаем строковое представление даты (например, "Wed Mar 06 2024")
       const messageDate = new Date(message.created_at).toDateString();
-
-      if (messageDate !== currentDate) {
-        currentDate = messageDate;
-        groups.push({
-          date: formatDate(message.created_at),
-          messages: [message],
+      
+      // Если группа для этой даты ещё не создана, создаём её
+      if (!groupsMap.has(messageDate)) {
+        groupsMap.set(messageDate, {
+          date: formatDate(message.created_at), // Форматированная дата ("Сегодня", "Вчера", "ДД.ММ.ГГГГ")
+          messages: [],
         });
-      } else {
-        groups[groups.length - 1].messages.push(message);
       }
+      
+      // Добавляем сообщение в существующую группу для этой даты
+      groupsMap.get(messageDate)!.messages.push(message);
     });
-
-    return groups;
+    
+    // Преобразуем Map в массив групп, сохраняя порядок добавления
+    return Array.from(groupsMap.values());
   };
 
   // Состояние загрузки

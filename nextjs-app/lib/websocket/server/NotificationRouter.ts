@@ -22,7 +22,7 @@ import { ERROR_CODES } from '../constants';
 interface PostgresNewMessagePayload {
   id: number;
   session_id: number;
-  sender_type: 'user' | 'admin';
+  sender_type: 'user' | 'admin' | 'bot';
   message_text: string;
   created_at: string;
   is_read: boolean;
@@ -105,8 +105,13 @@ export class NotificationRouter {
         return;
       }
       
-      // Отправляем уведомление подписчикам
-      await this.broadcastToSubscribers(channel, message);
+      // Определяем целевые каналы для маршрутизации
+      const targetChannels = this.getTargetChannels(channel, parsedPayload);
+      
+      // Отправляем уведомление всем целевым каналам
+      for (const targetChannel of targetChannels) {
+        await this.broadcastToSubscribers(targetChannel, message);
+      }
       
     } catch (error) {
       console.error(`[NotificationRouter] ❌ Ошибка обработки уведомления:`, {
@@ -224,28 +229,35 @@ export class NotificationRouter {
    */
   private createMessageFromPayload(channel: string, payload: any): ServerMessage | null {
     // Определяем тип уведомления по названию канала
+    // ВАЖНО: Проверяем специфичные каналы ПЕРЕД общими паттернами (session_*)
     
-    // 1. Канал all_messages - новое сообщение для всех админов
+    // 1. Канал new_message - уведомление от триггера PostgreSQL
+    if (channel === 'new_message') {
+      return this.createNewMessageFromTrigger(payload);
+    }
+    
+    // 2. Канал status_changes или session_status_change - изменение статуса сессии
+    if (channel === 'status_changes' || channel === 'session_status_change') {
+      return this.createStatusChangeMessage(payload);
+    }
+    
+    // 3. Канал type_changes или session_type_change - изменение типа сессии
+    if (channel === 'type_changes' || channel === 'session_type_change') {
+      return this.createTypeChangeMessage(payload);
+    }
+    
+    // 4. Канал all_messages - новое сообщение для всех админов
     if (channel === 'all_messages') {
       return this.createNewMessageMessage(payload);
     }
     
-    // 2. Канал session_* - новое сообщение в конкретной сессии
+    // 5. Канал session_* - новое сообщение в конкретной сессии
+    // ВАЖНО: Эта проверка должна быть ПОСЛЕ специфичных каналов session_status_change и session_type_change
     if (channel.startsWith('session_')) {
       return this.createNewMessageMessage(payload);
     }
     
-    // 3. Канал status_changes - изменение статуса сессии
-    if (channel === 'status_changes') {
-      return this.createStatusChangeMessage(payload);
-    }
-    
-    // 4. Канал type_changes - изменение типа сессии
-    if (channel === 'type_changes') {
-      return this.createTypeChangeMessage(payload);
-    }
-    
-    // 5. Проверяем кастомные обработчики
+    // 6. Проверяем кастомные обработчики
     const handler = this.handlers.get(channel);
     if (handler) {
       // Кастомные обработчики должны сами создавать сообщения
@@ -290,6 +302,112 @@ export class NotificationRouter {
       console.error(`[NotificationRouter] ❌ Ошибка создания new_message:`, error);
       return null;
     }
+  }
+  
+  /**
+   * Создание сообщения о новом сообщении от триггера PostgreSQL
+   * Обрабатывает специфическую структуру payload от триггера notify_new_message()
+   * 
+   * @param payload - Payload от триггера с вложенной структурой data
+   * @returns NewMessageMessage или null при ошибке
+   */
+  private createNewMessageFromTrigger(payload: any): NewMessageMessage | null {
+    try {
+      // Валидация структуры payload от триггера
+      if (!payload.session_id || !payload.message_id || !payload.data) {
+        console.error(`[NotificationRouter] ❌ Невалидный payload от триггера new_message:`, payload);
+        return null;
+      }
+      
+      const data = payload.data;
+      
+      // Валидация обязательных полей в data
+      if (!data.id || !data.session_id || !data.message_text || !data.created_at) {
+        console.error(`[NotificationRouter] ❌ Невалидные данные в payload.data:`, data);
+        return null;
+      }
+      
+      // Определяем sender_type на основе наличия telegram_id
+      const senderType = this.determineSenderType(data);
+      
+      return {
+        type: 'new_message',
+        data: {
+          id: data.id,
+          session_id: data.session_id,
+          sender_type: senderType,
+          message_text: data.message_text,
+          created_at: data.created_at,
+          is_read: false, // Новые сообщения всегда непрочитанные
+        },
+      };
+      
+    } catch (error) {
+      console.error(`[NotificationRouter] ❌ Ошибка обработки триггера new_message:`, error);
+      return null;
+    }
+  }
+  
+  /**
+   * Определение типа отправителя на основе данных сообщения
+   * 
+   * ИСПРАВЛЕНИЕ: Используем поле message_type из базы данных вместо определения по telegram_id.
+   * Это корректно обрабатывает все три типа сообщений:
+   * - 'from_user' → 'user' (сообщения от пользователя)
+   * - 'from_bot' → 'bot' (автоматические сообщения бота)
+   * - 'from_support' → 'admin' (сообщения от администратора)
+   * 
+   * @param data - Данные сообщения из триггера (содержит message_type из БД)
+   * @returns Тип отправителя ('user', 'bot' или 'admin')
+   */
+  private determineSenderType(data: any): 'user' | 'admin' | 'bot' {
+    // Преобразуем message_type из БД в sender_type для WebSocket
+    if (data.message_type === 'from_user') {
+      return 'user';
+    } else if (data.message_type === 'from_bot') {
+      return 'bot';
+    } else if (data.message_type === 'from_support') {
+      return 'admin';
+    }
+    
+    // Fallback: если message_type отсутствует или неизвестен, определяем по telegram_id
+    // (для обратной совместимости со старыми данными)
+    return data.telegram_id ? 'user' : 'admin';
+  }
+  
+  /**
+   * Определение целевых каналов для маршрутизации уведомления
+   * 
+   * Логика маршрутизации:
+   * - Для канала new_message: маршрутизируем к session_<session_id> и all_messages
+   *   (уведомление должно получить и конкретная сессия, и все админы)
+   * - Для всех остальных каналов: маршрутизация 1:1 (отправляем в исходный канал)
+   * 
+   * @param channel - Исходный канал PostgreSQL
+   * @param payload - Payload уведомления
+   * @returns Массив целевых каналов для отправки
+   */
+  private getTargetChannels(channel: string, payload: any): string[] {
+    // Для канала new_message маршрутизируем к нескольким подписчикам
+    if (channel === 'new_message' && payload.session_id) {
+      return [
+        `session_${payload.session_id}`,
+        'all_messages'
+      ];
+    }
+    
+    // Для канала session_status_change маршрутизируем к status_changes
+    if (channel === 'session_status_change') {
+      return ['status_changes'];
+    }
+    
+    // Для канала session_type_change маршрутизируем к type_changes
+    if (channel === 'session_type_change') {
+      return ['type_changes'];
+    }
+    
+    // Для всех остальных каналов - маршрутизация 1:1 (сохраняем существующее поведение)
+    return [channel];
   }
   
   /**
