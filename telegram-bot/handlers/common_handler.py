@@ -7,9 +7,10 @@ from typing import Optional
 from aiogram import Router
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import Command
-import structlog
 
-logger = structlog.get_logger(__name__)
+from utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # Создаём router для общих обработчиков
 router = Router()

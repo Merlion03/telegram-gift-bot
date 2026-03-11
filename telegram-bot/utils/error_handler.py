@@ -9,9 +9,10 @@ from typing import Any
 from aiogram import Router
 from aiogram.types import Update, ErrorEvent
 from aiogram.filters import ExceptionTypeFilter
-import structlog
 
-logger = structlog.get_logger(__name__)
+from utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # Создаём router для обработчиков ошибок
 error_router = Router()

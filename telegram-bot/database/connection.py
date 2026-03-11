@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
     async_sessionmaker
 )
+from sqlalchemy import text
 
 from database.models import Base
 
@@ -33,7 +34,7 @@ class DatabaseConnection:
         database_url: str,
         echo: bool = False,
         pool_size: int = 5,
-        max_overflow: int = 10,
+        max_overflow: int = 15,
         pool_timeout: int = 30,
         pool_recycle: int = 3600,
         pool_pre_ping: bool = True
@@ -44,25 +45,31 @@ class DatabaseConnection:
         Args:
             database_url: URL подключения к PostgreSQL (формат: postgresql+psycopg://user:pass@host:port/db)
             echo: Логировать ли SQL запросы (для отладки)
-            pool_size: Размер connection pool
-            max_overflow: Максимальное количество дополнительных соединений
-            pool_timeout: Таймаут ожидания свободного соединения (секунды)
-            pool_recycle: Время жизни соединения перед переподключением (секунды)
-            pool_pre_ping: Проверять соединение перед использованием
+            pool_size: Размер connection pool (по умолчанию 5)
+            max_overflow: Максимальное количество дополнительных соединений (по умолчанию 15, итого max 20)
+            pool_timeout: Таймаут ожидания свободного соединения в секундах (по умолчанию 30)
+            pool_recycle: Время жизни соединения перед переподключением в секундах (по умолчанию 3600)
+            pool_pre_ping: Проверять соединение перед использованием для автоматического переподключения (по умолчанию True)
         """
         self.database_url = database_url
         self.echo = echo
         
         # Создание асинхронного engine с connection pooling
         # asyncpg используется для асинхронных операций
+        # 
+        # Connection pooling обеспечивает:
+        # - Переиспользование соединений для производительности
+        # - Ограничение максимального количества соединений
+        # - Автоматическое переподключение при сбоях (pool_pre_ping)
+        # - Управление жизненным циклом соединений (pool_recycle)
         self.engine: AsyncEngine = create_async_engine(
             database_url,
             echo=echo,
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-            pool_timeout=pool_timeout,
-            pool_recycle=pool_recycle,
-            pool_pre_ping=pool_pre_ping
+            pool_size=pool_size,  # Минимальное количество соединений в пуле
+            max_overflow=max_overflow,  # Дополнительные соединения сверх pool_size
+            pool_timeout=pool_timeout,  # Таймаут ожидания свободного соединения
+            pool_recycle=pool_recycle,  # Переподключение после указанного времени
+            pool_pre_ping=pool_pre_ping  # Проверка соединения перед использованием
         )
         
         # Создание session factory
@@ -76,7 +83,8 @@ class DatabaseConnection:
         
         logger.info(
             f"Database connection initialized: pool_size={pool_size}, "
-            f"max_overflow={max_overflow}"
+            f"max_overflow={max_overflow}, total_max_connections={pool_size + max_overflow}, "
+            f"pool_pre_ping={pool_pre_ping}"
         )
     
     async def create_tables(self) -> None:
@@ -152,7 +160,7 @@ class DatabaseConnection:
         """
         try:
             async with self.session() as session:
-                await session.execute("SELECT 1")
+                await session.execute(text("SELECT 1"))
             return True
         except Exception as e:
             logger.error(f"Database health check failed: {e}")

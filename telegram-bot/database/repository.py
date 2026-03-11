@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from database.models import SupportSession, SupportMessage
-from database.connection import get_database
+from database.base_repository import BaseRepository
 
 
 logger = structlog.get_logger(__name__)
@@ -20,21 +20,18 @@ def sanitize_text(text: str) -> str:
     """
     Удаляет NUL bytes из текста для совместимости с PostgreSQL
     
-    PostgreSQL text fields не могут содержать NUL (0x00) bytes.
-    Эта функция удаляет их из входного текста.
-    
     Args:
         text: Исходный текст
     
     Returns:
-        str: Текст без NUL bytes
+        str: Очищенный текст без NUL bytes
     """
-    if not text:
-        return text
+    if text is None:
+        return None
     return text.replace('\x00', '')
 
 
-class SupportRepository:
+class SupportRepository(BaseRepository):
     """
     Repository для работы с сессиями и сообщениями поддержки
     
@@ -43,16 +40,6 @@ class SupportRepository:
     - Сохранения и получения сообщений
     - Получения активных сессий
     """
-    
-    def __init__(self, session: Optional[AsyncSession] = None):
-        """
-        Инициализирует repository
-        
-        Args:
-            session: Опциональная сессия БД. Если не указана,
-                    будет использоваться глобальное подключение
-        """
-        self.session = session
     
     async def create_session(self, telegram_id: int) -> int:
         """
@@ -73,16 +60,11 @@ class SupportRepository:
                 status='active'
             )
             
-            if self.session:
-                self.session.add(new_session)
-                await self.session.flush()
+            async with self._get_session_context() as session:
+                session.add(new_session)
+                await session.flush()
                 session_id = new_session.id
-            else:
-                db = get_database()
-                async with db.session() as session:
-                    session.add(new_session)
-                    await session.flush()
-                    session_id = new_session.id
+                # Commit выполняется автоматически в контексте менеджере
             
             logger.info(
                 "support_session_created",
@@ -144,16 +126,11 @@ class SupportRepository:
                 file_id=sanitized_file_id
             )
             
-            if self.session:
-                self.session.add(new_message)
-                await self.session.flush()
+            async with self._get_session_context() as session:
+                session.add(new_message)
+                await session.flush()
                 message_id = new_message.id
-            else:
-                db = get_database()
-                async with db.session() as session:
-                    session.add(new_message)
-                    await session.flush()
-                    message_id = new_message.id
+                # Commit выполняется автоматически в контексте менеджере
             
             logger.info(
                 "message_saved",
@@ -202,14 +179,9 @@ class SupportRepository:
             if limit is not None:
                 query = query.limit(limit)
             
-            if self.session:
-                result = await self.session.execute(query)
-            else:
-                db = get_database()
-                async with db.session() as session:
-                    result = await session.execute(query)
-            
-            messages = result.scalars().all()
+            async with self._get_session_context() as session:
+                result = await session.execute(query)
+                messages = result.scalars().all()
             
             logger.debug(
                 "messages_retrieved",
@@ -243,21 +215,13 @@ class SupportRepository:
         try:
             query = select(SupportSession).where(SupportSession.id == session_id)
             
-            if self.session:
-                result = await self.session.execute(query)
+            async with self._get_session_context() as session:
+                result = await session.execute(query)
                 support_session = result.scalar_one_or_none()
                 
                 if support_session:
                     support_session.close()
-                    await self.session.flush()
-            else:
-                db = get_database()
-                async with db.session() as session:
-                    result = await session.execute(query)
-                    support_session = result.scalar_one_or_none()
-                    
-                    if support_session:
-                        support_session.close()
+                    # Commit выполняется автоматически в контексте менеджере
             
             if support_session:
                 logger.info("support_session_closed", session_id=session_id)
@@ -301,14 +265,9 @@ class SupportRepository:
             if limit is not None:
                 query = query.limit(limit)
             
-            if self.session:
-                result = await self.session.execute(query)
-            else:
-                db = get_database()
-                async with db.session() as session:
-                    result = await session.execute(query)
-            
-            sessions = result.scalars().all()
+            async with self._get_session_context() as session:
+                result = await session.execute(query)
+                sessions = result.scalars().all()
             
             logger.debug("active_sessions_retrieved", count=len(sessions))
             return list(sessions)
@@ -338,14 +297,9 @@ class SupportRepository:
                 .options(selectinload(SupportSession.messages))
             )
             
-            if self.session:
-                result = await self.session.execute(query)
-            else:
-                db = get_database()
-                async with db.session() as session:
-                    result = await session.execute(query)
-            
-            support_session = result.scalar_one_or_none()
+            async with self._get_session_context() as session:
+                result = await session.execute(query)
+                support_session = result.scalar_one_or_none()
             
             if support_session:
                 logger.debug("session_retrieved", session_id=session_id)
@@ -389,14 +343,9 @@ class SupportRepository:
                 .limit(1)
             )
             
-            if self.session:
-                result = await self.session.execute(query)
-            else:
-                db = get_database()
-                async with db.session() as session:
-                    result = await session.execute(query)
-            
-            support_session = result.scalar_one_or_none()
+            async with self._get_session_context() as session:
+                result = await session.execute(query)
+                support_session = result.scalar_one_or_none()
             
             if support_session:
                 logger.debug(
@@ -431,21 +380,13 @@ class SupportRepository:
         try:
             query = select(SupportMessage).where(SupportMessage.id == message_id)
             
-            if self.session:
-                result = await self.session.execute(query)
+            async with self._get_session_context() as session:
+                result = await session.execute(query)
                 message = result.scalar_one_or_none()
                 
                 if message:
                     message.mark_delivered()
-                    await self.session.flush()
-            else:
-                db = get_database()
-                async with db.session() as session:
-                    result = await session.execute(query)
-                    message = result.scalar_one_or_none()
-                    
-                    if message:
-                        message.mark_delivered()
+                    # Commit выполняется автоматически в контексте менеджере
             
             if message:
                 logger.debug("message_marked_delivered", message_id=message_id)
@@ -491,21 +432,13 @@ class SupportRepository:
         try:
             query = select(SupportSession).where(SupportSession.id == session_id)
             
-            if self.session:
-                result = await self.session.execute(query)
+            async with self._get_session_context() as session:
+                result = await session.execute(query)
                 support_session = result.scalar_one_or_none()
                 
                 if support_session:
                     support_session.session_type = session_type
-                    await self.session.flush()
-            else:
-                db = get_database()
-                async with db.session() as session:
-                    result = await session.execute(query)
-                    support_session = result.scalar_one_or_none()
-                    
-                    if support_session:
-                        support_session.session_type = session_type
+                    # Commit выполняется автоматически в контексте менеджере
             
             if support_session:
                 logger.info(
@@ -589,23 +522,35 @@ class SupportRepository:
             # Пагинация
             query = query.offset(offset).limit(effective_limit)
             
-            if self.session:
-                result = await self.session.execute(query)
-            else:
-                db = get_database()
-                async with db.session() as session:
-                    result = await session.execute(query)
-            
-            sessions = result.scalars().all()
+            async with self._get_session_context() as session:
+                result = await session.execute(query)
+                sessions = result.scalars().all()
             
             # Сортируем по времени последнего сообщения
             sessions_list = list(sessions)
-            sessions_list.sort(
-                key=lambda s: (
-                    max((m.created_at for m in s.messages), default=s.created_at)
-                ),
-                reverse=True
-            )
+            
+            def get_sort_key(session):
+                """Получает ключ для сортировки, приводя все datetime к UTC"""
+                from datetime import timezone
+                
+                # Получаем время создания сессии
+                session_time = session.created_at
+                if session_time.tzinfo is None:
+                    session_time = session_time.replace(tzinfo=timezone.utc)
+                
+                # Получаем время последнего сообщения
+                if session.messages:
+                    message_times = []
+                    for msg in session.messages:
+                        msg_time = msg.created_at
+                        if msg_time.tzinfo is None:
+                            msg_time = msg_time.replace(tzinfo=timezone.utc)
+                        message_times.append(msg_time)
+                    return max(message_times)
+                else:
+                    return session_time
+            
+            sessions_list.sort(key=get_sort_key, reverse=True)
             
             logger.debug(
                 "all_sessions_retrieved",
@@ -661,32 +606,19 @@ class SupportRepository:
                 .options(selectinload(SupportSession.messages))
             )
             
-            if self.session:
-                result = await self.session.execute(query)
-                sessions = result.scalars().all()
+            async with self._get_session_context() as session:
+                result = await session.execute(query)
+                sessions_list = result.scalars().all()
                 
                 closed_count = 0
-                for session in sessions:
-                    last_activity = await self._get_last_activity_time(session)
+                for support_session in sessions_list:
+                    last_activity = self._get_last_activity_time_sync(support_session)
                     
                     if last_activity < threshold_time:
-                        session.close()
+                        support_session.close()
                         closed_count += 1
                 
-                await self.session.flush()
-            else:
-                db = get_database()
-                async with db.session() as session:
-                    result = await session.execute(query)
-                    sessions_list = result.scalars().all()
-                    
-                    closed_count = 0
-                    for support_session in sessions_list:
-                        last_activity = await self._get_last_activity_time(support_session)
-                        
-                        if last_activity < threshold_time:
-                            support_session.close()
-                            closed_count += 1
+                # Commit выполняется автоматически в контексте менеджере
             
             logger.info(
                 "inactive_sessions_closed",
@@ -703,6 +635,23 @@ class SupportRepository:
                 exc_info=True
             )
             raise
+    
+    def _get_last_activity_time_sync(
+        self,
+        session: SupportSession
+    ) -> datetime:
+        """
+        Синхронный вспомогательный метод для получения времени последней активности
+        
+        Args:
+            session: Объект сессии с загруженными сообщениями
+        
+        Returns:
+            datetime: Время последнего сообщения или время создания сессии
+        """
+        if session.messages:
+            return max(message.created_at for message in session.messages)
+        return session.created_at
     
     async def get_session_last_activity(
         self,
@@ -728,20 +677,15 @@ class SupportRepository:
                 .options(selectinload(SupportSession.messages))
             )
             
-            if self.session:
-                result = await self.session.execute(query)
-            else:
-                db = get_database()
-                async with db.session() as session:
-                    result = await session.execute(query)
-            
-            support_session = result.scalar_one_or_none()
+            async with self._get_session_context() as session:
+                result = await session.execute(query)
+                support_session = result.scalar_one_or_none()
             
             if not support_session:
                 logger.debug("session_not_found", session_id=session_id)
                 return None
             
-            last_activity = await self._get_last_activity_time(support_session)
+            last_activity = self._get_last_activity_time_sync(support_session)
             
             logger.debug(
                 "session_last_activity_retrieved",
@@ -775,4 +719,3 @@ class SupportRepository:
         if session.messages:
             return max(message.created_at for message in session.messages)
         return session.created_at
-

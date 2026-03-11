@@ -7,11 +7,11 @@ import asyncio
 from typing import Optional, Dict
 import gspread
 from google.oauth2.service_account import Credentials
-import structlog
 
 from utils.retry import retry_with_backoff
+from utils.logging_config import get_logger
 
-logger = structlog.get_logger(__name__)
+logger = get_logger(__name__)
 
 
 class GoogleSheetsService:
@@ -307,47 +307,66 @@ class GoogleSheetsService:
             # K (индекс 10): apartment
             # L (индекс 11): phone
             # M (индекс 12): comment
-            updates = [
-                {
+            # N (индекс 13): claimed_at
+            updates = []
+            
+            # Данные доставки
+            if 'last_name' in delivery_data:
+                updates.append({
                     'range': f'E{row_id}',
                     'values': [[delivery_data.get('last_name', '')]]
-                },
-                {
+                })
+            if 'first_name' in delivery_data:
+                updates.append({
                     'range': f'F{row_id}',
                     'values': [[delivery_data.get('first_name', '')]]
-                },
-                {
+                })
+            if 'patronymic' in delivery_data:
+                updates.append({
                     'range': f'G{row_id}',
                     'values': [[delivery_data.get('patronymic', '')]]
-                },
-                {
+                })
+            if 'city' in delivery_data:
+                updates.append({
                     'range': f'H{row_id}',
                     'values': [[delivery_data.get('city', '')]]
-                },
-                {
+                })
+            if 'street' in delivery_data:
+                updates.append({
                     'range': f'I{row_id}',
                     'values': [[delivery_data.get('street', '')]]
-                },
-                {
+                })
+            if 'house' in delivery_data:
+                updates.append({
                     'range': f'J{row_id}',
                     'values': [[delivery_data.get('house', '')]]
-                },
-                {
+                })
+            if 'apartment' in delivery_data:
+                updates.append({
                     'range': f'K{row_id}',
                     'values': [[delivery_data.get('apartment', '')]]
-                },
-                {
+                })
+            if 'phone' in delivery_data:
+                updates.append({
                     'range': f'L{row_id}',
                     'values': [[delivery_data.get('phone', '')]]
-                },
-                {
+                })
+            if 'comment' in delivery_data:
+                updates.append({
                     'range': f'M{row_id}',
                     'values': [[delivery_data.get('comment', '')]]
-                }
-            ]
+                })
             
-            # Выполняем batch update для эффективности
-            worksheet.batch_update(updates)
+            # Время получения приза
+            if 'claimed_at' in delivery_data:
+                updates.append({
+                    'range': f'N{row_id}',
+                    'values': [[delivery_data.get('claimed_at', '')]]
+                })
+            
+            # Выполняем batch update для эффективности (только если есть что обновлять)
+            if updates:
+                worksheet.batch_update(updates)
             
             logger.info(
                 "delivery_data_saved",

@@ -6,25 +6,31 @@
 import asyncio
 import signal
 import sys
+
+# Исправление для Windows: принудительно используем SelectorEventLoop
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 from aiogram import Bot, Dispatcher
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import default_state
 from aiogram.types import Message
-import structlog
 
 from config import get_config
 from fsm.storage import create_fsm_storage
 from fsm.states import SupportStates
+from utils.logging_config import get_logger, configure_logging
 
 # Импорт handlers
 from handlers.common_handler import CommonHandler
 from handlers.prize_handler import PrizeHandler
 from handlers.support_handler import SupportHandler
+from handlers.delivery_handler import DeliveryHandler
 
 # Импорт services
 from services.google_sheets_service import GoogleSheetsService
 from services.prize_service import PrizeService
+from services.update_queue_service import UpdateQueueService
 from services.support_service import SupportService
 from services.session_manager import SessionManager
 
@@ -39,8 +45,6 @@ from database.repository import SupportRepository
 from utils.logger import configure_logging
 from utils.error_handler import setup_error_handlers
 
-logger = structlog.get_logger(__name__)
-
 
 class BotApplication:
     """Класс приложения бота для управления жизненным циклом"""
@@ -51,20 +55,26 @@ class BotApplication:
         self.bot = None
         self.dp = None
         self.db_connection = None
+        self.update_queue_service = None
         self.shutdown_event = asyncio.Event()
+        self.logger = None
     
     async def setup(self):
         """Настраивает все компоненты бота"""
         # Загрузка конфигурации
         self.config = get_config()
         
-        # Настройка логирования
-        configure_logging(
+        # Настройка логирования через старый модуль (для совместимости)
+        from utils.logger import configure_logging as old_configure_logging
+        old_configure_logging(
             log_level=self.config.app.log_level,
             json_format=True
         )
         
-        logger.info(
+        # Получаем logger после настройки
+        self.logger = get_logger(__name__)
+        
+        self.logger.info(
             "bot_initialization_started",
             log_level=self.config.app.log_level
         )
@@ -74,7 +84,7 @@ class BotApplication:
         
         # Создание FSM storage
         storage = create_fsm_storage(self.config.fsm)
-        logger.info(
+        self.logger.info(
             "fsm_storage_created",
             storage_type=self.config.fsm.storage_type
         )
@@ -82,9 +92,14 @@ class BotApplication:
         # Инициализация диспетчера
         self.dp = Dispatcher(storage=storage)
         
-        # Инициализация глобального подключения к БД
+        # Инициализация глобального подключения к БД с connection pooling
         from database.connection import init_database
-        init_database(self.config.database.connection_url)
+        init_database(
+            database_url=self.config.database.connection_url,
+            pool_size=self.config.database.pool_size,
+            max_overflow=self.config.database.max_overflow,
+            pool_pre_ping=self.config.database.pool_pre_ping
+        )
         
         # Получаем глобальное подключение для создания таблиц
         from database.connection import get_database
@@ -92,7 +107,7 @@ class BotApplication:
         
         # Создание таблиц если их нет (идемпотентная операция)
         await self.db_connection.create_tables()
-        logger.info("database_connection_initialized")
+        self.logger.info("database_connection_initialized")
         
         # Создание сервисов
         google_sheets_service = GoogleSheetsService(
@@ -100,7 +115,17 @@ class BotApplication:
             spreadsheet_id=self.config.google_sheets.spreadsheet_id
         )
         
-        prize_service = PrizeService(google_sheets_service)
+        # Создание сервиса очереди обновлений
+        update_queue_service = UpdateQueueService(google_sheets_service)
+        self.update_queue_service = update_queue_service
+        
+        # Запуск воркера очереди
+        await update_queue_service.start()
+        
+        prize_service = PrizeService(
+            sheets_service=google_sheets_service,
+            update_queue_service=update_queue_service
+        )
         
         # SupportRepository работает с глобальным подключением через get_database()
         # Передаём None, чтобы использовать глобальное подключение
@@ -119,16 +144,25 @@ class BotApplication:
         )
         support_handler = SupportHandler(support_service, session_manager)
         
+        # Создание DeliveryHandler для обработки данных доставки из WebApp
+        from database.repositories.prize_repository import PrizeRepository
+        prize_repository = PrizeRepository(None)  # Использует глобальное подключение
+        delivery_handler = DeliveryHandler(
+            sheets_service=google_sheets_service,
+            prize_repository=prize_repository,
+            session_manager=session_manager
+        )
+        
         # Регистрация middleware (должна быть ДО регистрации handlers)
         self._register_middleware(session_manager)
         
         # Регистрация handlers
-        self._register_handlers(common_handler, prize_handler, support_handler)
+        self._register_handlers(common_handler, prize_handler, support_handler, delivery_handler)
         
         # Настройка обработчиков ошибок
         setup_error_handlers(self.dp)
         
-        logger.info("bot_setup_completed")
+        self.logger.info("bot_setup_completed")
     
     def _register_middleware(self, session_manager: SessionManager):
         """
@@ -147,13 +181,14 @@ class BotApplication:
         # Middleware выполняется ДО всех handlers
         self.dp.message.middleware(message_interceptor)
         
-        logger.info("middleware_registered")
+        self.logger.info("middleware_registered")
     
     def _register_handlers(
         self,
         common_handler: CommonHandler,
         prize_handler: PrizeHandler,
-        support_handler: SupportHandler
+        support_handler: SupportHandler,
+        delivery_handler: DeliveryHandler
     ):
         """
         Регистрирует все handlers в диспетчере
@@ -162,6 +197,7 @@ class BotApplication:
             common_handler: Обработчик общих команд
             prize_handler: Обработчик призов
             support_handler: Обработчик поддержки
+            delivery_handler: Обработчик данных доставки из WebApp
         """
         # Регистрация обработчиков общих команд
         # Обёртки для передачи session_id из middleware context
@@ -220,29 +256,42 @@ class BotApplication:
             StateFilter(default_state)
         )
         
-        logger.info("handlers_registered")
+        # Регистрация обработчика данных доставки из WebApp
+        # Срабатывает когда пользователь отправляет данные из WebApp
+        async def handle_delivery_data_wrapper(message: Message, **kwargs):
+            """Обёртка для обработки данных доставки из WebApp"""
+            session_id = kwargs.get('session_id')
+            await delivery_handler.handle_delivery_data(message, session_id)
+        
+        self.dp.message.register(
+            handle_delivery_data_wrapper,
+            lambda message: message.web_app_data is not None,
+            StateFilter(default_state)
+        )
+        
+        self.logger.info("handlers_registered")
     
     async def start(self):
         """Запускает бота"""
-        logger.info("bot_starting")
+        self.logger.info("bot_starting")
         
         try:
             # Удаление webhook (если был установлен)
             await self.bot.delete_webhook(drop_pending_updates=True)
-            logger.info("webhook_deleted")
+            self.logger.info("webhook_deleted")
             
             # Запуск polling
-            logger.info("polling_started")
+            self.logger.info("polling_started")
             await self.dp.start_polling(
                 self.bot,
                 allowed_updates=self.dp.resolve_used_update_types()
             )
         
         except asyncio.CancelledError:
-            logger.info("polling_cancelled")
+            self.logger.info("polling_cancelled")
         
         except Exception as e:
-            logger.error(
+            self.logger.error(
                 "bot_runtime_error",
                 error=str(e),
                 exc_info=True
@@ -251,40 +300,57 @@ class BotApplication:
     
     async def shutdown(self):
         """Выполняет graceful shutdown бота"""
-        logger.info("bot_shutdown_started")
+        self.logger.info("bot_shutdown_started")
         
         try:
+            # Остановка сервиса очереди обновлений
+            if self.update_queue_service:
+                await self.update_queue_service.stop()
+                self.logger.info("update_queue_service_stopped")
+            
             # Остановка polling
             await self.dp.stop_polling()
-            logger.info("polling_stopped")
+            self.logger.info("polling_stopped")
             
             # Закрытие FSM storage
             await self.dp.storage.close()
-            logger.info("fsm_storage_closed")
+            self.logger.info("fsm_storage_closed")
             
             # Закрытие подключения к БД
             if self.db_connection:
                 await self.db_connection.close()
-                logger.info("database_connection_closed")
+                self.logger.info("database_connection_closed")
             
             # Закрытие сессии бота
             if self.bot:
                 await self.bot.session.close()
-                logger.info("bot_session_closed")
+                self.logger.info("bot_session_closed")
         
         except Exception as e:
-            logger.error(
+            self.logger.error(
                 "shutdown_error",
                 error=str(e),
                 exc_info=True
             )
         
         finally:
-            logger.info("bot_shutdown_completed")
+            self.logger.info("bot_shutdown_completed")
 
 
 async def main():
     """Главная функция запуска бота"""
+    # Настраиваем логирование через новую конфигурацию
+    import os
+    log_level = os.getenv('LOG_LEVEL', 'INFO')
+    json_logs = os.getenv('JSON_LOGS', 'false').lower() == 'true'
+    
+    # Используем новую конфигурацию логирования
+    from utils.logging_config import configure_logging as new_configure_logging
+    new_configure_logging(log_level=log_level, json_logs=json_logs)
+    
+    logger = get_logger(__name__)
+    logger.info("bot_starting")
+    
     app = BotApplication()
     
     # Настройка обработчиков сигналов для graceful shutdown

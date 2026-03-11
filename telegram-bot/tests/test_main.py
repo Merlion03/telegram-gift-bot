@@ -70,6 +70,9 @@ class TestBotApplication:
             mock_config_obj.bot.token = 'test_token'
             mock_config_obj.fsm.storage_type = 'memory'
             mock_config_obj.database.connection_url = 'postgresql+asyncpg://test:test@localhost:5432/test'
+            mock_config_obj.database.pool_size = 5  # Числовое значение вместо Mock
+            mock_config_obj.database.max_overflow = 15  # Числовое значение вместо Mock
+            mock_config_obj.database.pool_pre_ping = True
             mock_config_obj.google_sheets.credentials_path = '/test/path'
             mock_config_obj.google_sheets.spreadsheet_id = 'test_id'
             mock_config_obj.app.webapp_url = 'https://test.com'
@@ -125,6 +128,9 @@ class TestBotApplication:
             mock_config_obj.bot.token = 'test_token'
             mock_config_obj.fsm.storage_type = 'memory'
             mock_config_obj.database.connection_url = 'postgresql+asyncpg://test:test@localhost:5432/test'
+            mock_config_obj.database.pool_size = 5  # Числовое значение вместо Mock
+            mock_config_obj.database.max_overflow = 15  # Числовое значение вместо Mock
+            mock_config_obj.database.pool_pre_ping = True
             mock_config_obj.google_sheets.credentials_path = '/test/path'
             mock_config_obj.google_sheets.spreadsheet_id = 'test_id'
             mock_config_obj.app.webapp_url = 'https://test.com'
@@ -177,6 +183,11 @@ class TestBotApplication:
         app.bot = Mock()
         app.bot.session = Mock()
         app.bot.session.close = AsyncMock()
+        
+        # Создаём mock logger
+        app.logger = Mock()
+        app.logger.info = Mock()
+        app.logger.error = Mock()
         
         # Вызываем shutdown
         await app.shutdown()

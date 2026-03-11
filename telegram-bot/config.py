@@ -57,6 +57,9 @@ class DatabaseConfig:
     name: str
     user: str
     password: str
+    pool_size: int
+    max_overflow: int
+    pool_pre_ping: bool
     
     @property
     def connection_url(self) -> str:
@@ -71,6 +74,9 @@ class DatabaseConfig:
         name = os.getenv('DB_NAME')
         user = os.getenv('DB_USER')
         password = os.getenv('DB_PASSWORD')
+        pool_size = int(os.getenv('DATABASE_POOL_SIZE', '5'))
+        max_overflow = int(os.getenv('DATABASE_MAX_OVERFLOW', '15'))
+        pool_pre_ping = os.getenv('DATABASE_POOL_PRE_PING', 'true').lower() == 'true'
         
         if not name:
             raise ValueError('DB_NAME не установлен в переменных окружения')
@@ -84,7 +90,10 @@ class DatabaseConfig:
             port=port,
             name=name,
             user=user,
-            password=password
+            password=password,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            pool_pre_ping=pool_pre_ping
         )
 
 
@@ -106,6 +115,30 @@ class FSMConfig:
         return cls(
             storage_type=storage_type,
             redis_url=redis_url
+        )
+
+
+@dataclass
+class SyncConfig:
+    """Конфигурация сервиса синхронизации с Google Sheets"""
+    sync_interval_seconds: int
+    use_postgres: bool
+    batch_size: int
+    max_retries: int
+    
+    @classmethod
+    def from_env(cls) -> 'SyncConfig':
+        """Создаёт конфигурацию из переменных окружения"""
+        sync_interval_seconds = int(os.getenv('SYNC_INTERVAL_SECONDS', '60'))
+        use_postgres = os.getenv('USE_POSTGRES', 'true').lower() == 'true'
+        batch_size = int(os.getenv('SYNC_BATCH_SIZE', '100'))
+        max_retries = int(os.getenv('SYNC_MAX_RETRIES', '3'))
+        
+        return cls(
+            sync_interval_seconds=sync_interval_seconds,
+            use_postgres=use_postgres,
+            batch_size=batch_size,
+            max_retries=max_retries
         )
 
 
@@ -138,6 +171,7 @@ class Config:
     database: DatabaseConfig
     app: AppConfig
     fsm: FSMConfig
+    sync: SyncConfig
     
     @classmethod
     def load(cls) -> 'Config':
@@ -147,7 +181,8 @@ class Config:
             google_sheets=GoogleSheetsConfig.from_env(),
             database=DatabaseConfig.from_env(),
             app=AppConfig.from_env(),
-            fsm=FSMConfig.from_env()
+            fsm=FSMConfig.from_env(),
+            sync=SyncConfig.from_env()
         )
 
 

@@ -7,12 +7,12 @@ from typing import Optional
 from aiogram import Router
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from aiogram.filters import Command
-import structlog
 
 from services.prize_service import PrizeService, PrizeStatus, MissingPromoCodeError
 from config import get_config
+from utils.logging_config import get_logger
 
-logger = structlog.get_logger(__name__)
+logger = get_logger(__name__)
 
 # Создаём router для обработчиков призов
 router = Router()

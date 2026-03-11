@@ -1,23 +1,16 @@
 """
-Модели SQLAlchemy для базы данных поддержки
+Модели для системы поддержки
 
-DEPRECATED: Этот файл сохранён для обратной совместимости.
-Используйте импорты из database.models вместо database.models
+Содержит модели для сессий поддержки и сообщений
 """
-# Реэкспорт всех моделей из новой модульной структуры
+from datetime import datetime, timezone
+from typing import List, Optional
+from sqlalchemy import BigInteger, Boolean, String, Text, Integer, DateTime, ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from database.models.base import Base
-from database.models.support import SupportSession, SupportMessage
-from database.models.prize import Prize
 
-__all__ = [
-    'Base',
-    'SupportSession',
-    'SupportMessage',
-    'Prize',
-]
 
-# Старый код ниже закомментирован для справки
-"""
 class SupportSession(Base):
     """
     Модель сессии поддержки

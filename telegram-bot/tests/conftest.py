@@ -9,6 +9,9 @@ import asyncio
 import os
 from pathlib import Path
 
+# Добавляем путь к telegram-bot модулям
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 # Загружаем .env.test перед всеми импортами
 from dotenv import load_dotenv
 
@@ -153,6 +156,7 @@ async def db_session():
         # Это критически важно для изоляции примеров Hypothesis
         await session.execute(text("TRUNCATE TABLE support_messages RESTART IDENTITY CASCADE"))
         await session.execute(text("TRUNCATE TABLE support_sessions RESTART IDENTITY CASCADE"))
+        await session.execute(text("TRUNCATE TABLE prizes RESTART IDENTITY CASCADE"))
         await session.commit()
         
         yield session
@@ -162,6 +166,7 @@ async def db_session():
         try:
             await session.execute(text("TRUNCATE TABLE support_messages RESTART IDENTITY CASCADE"))
             await session.execute(text("TRUNCATE TABLE support_sessions RESTART IDENTITY CASCADE"))
+            await session.execute(text("TRUNCATE TABLE prizes RESTART IDENTITY CASCADE"))
             await session.commit()
         except Exception:
             # Игнорируем ошибки при очистке после теста
