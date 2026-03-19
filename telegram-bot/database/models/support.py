@@ -60,6 +60,11 @@ class SupportSession(Base):
         index=True
     )
     
+    # Информация о пользователе из Telegram
+    first_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    last_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    username: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    
     # Связь с сообщениями (один ко многим)
     messages: Mapped[List["SupportMessage"]] = relationship(
         "SupportMessage",
@@ -76,6 +81,9 @@ class SupportSession(Base):
         created_at: Optional[datetime] = None,
         closed_at: Optional[datetime] = None,
         last_activity: Optional[datetime] = None,
+        first_name: Optional[str] = None,
+        last_name: Optional[str] = None,
+        username: Optional[str] = None,
         **kwargs
     ):
         """
@@ -88,6 +96,9 @@ class SupportSession(Base):
             created_at: Время создания (по умолчанию текущее время UTC)
             closed_at: Время закрытия (опционально)
             last_activity: Время последней активности (по умолчанию текущее время UTC)
+            first_name: Имя пользователя из Telegram (опционально)
+            last_name: Фамилия пользователя из Telegram (опционально)
+            username: Username пользователя из Telegram (опционально)
         """
         super().__init__(**kwargs)
         self.telegram_id = telegram_id
@@ -96,6 +107,9 @@ class SupportSession(Base):
         self.created_at = created_at if created_at is not None else datetime.now(timezone.utc)
         self.closed_at = closed_at
         self.last_activity = last_activity if last_activity is not None else datetime.now(timezone.utc)
+        self.first_name = first_name
+        self.last_name = last_name
+        self.username = username
     
     def __repr__(self) -> str:
         return (
@@ -132,6 +146,25 @@ class SupportSession(Base):
         """Закрывает сессию"""
         self.status = 'closed'
         self.closed_at = datetime.now(timezone.utc)
+    
+    def get_user_display_name(self) -> str:
+        """
+        Возвращает отображаемое имя пользователя
+        
+        Приоритет:
+        1. Имя + Фамилия (если есть оба)
+        2. Только имя (если есть)
+        3. Username (если есть)
+        4. "Пользователь {telegram_id}" (fallback)
+        """
+        if self.first_name and self.last_name:
+            return f"{self.first_name} {self.last_name}"
+        elif self.first_name:
+            return self.first_name
+        elif self.username:
+            return f"@{self.username}"
+        else:
+            return f"Пользователь {self.telegram_id}"
 
 
 class SupportMessage(Base):

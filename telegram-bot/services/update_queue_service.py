@@ -30,10 +30,12 @@ class UpdateTask:
     update_type: UpdateType
     telegram_id: int
     code_word: str
+    sheet_name: str
     data: Dict[str, Any]
     created_at: datetime
     attempts: int = 0
     max_attempts: int = 3
+
 
 
 class UpdateQueueService:
@@ -99,15 +101,17 @@ class UpdateQueueService:
         self,
         telegram_id: int,
         code_word: str,
+        sheet_name: str,
         row_id: int,
         claimed_at: str
     ) -> None:
         """
         Добавляет задачу обновления статуса приза в очередь
-        
+
         Args:
             telegram_id: Telegram ID пользователя
             code_word: Кодовое слово
+            sheet_name: Имя листа Google Sheets
             row_id: Номер строки в Google Sheets
             claimed_at: Время получения приза
         """
@@ -116,22 +120,25 @@ class UpdateQueueService:
             update_type=UpdateType.PRIZE_CLAIMED,
             telegram_id=telegram_id,
             code_word=code_word,
+            sheet_name=sheet_name,
             data={
                 "row_id": row_id,
                 "claimed_at": claimed_at
             },
             created_at=datetime.now(timezone.utc)
         )
-        
+
         await self.queue.put(task)
-        
+
         logger.info(
             "prize_claimed_update_queued",
             telegram_id=telegram_id,
             code_word=code_word,
+            sheet_name=sheet_name,
             row_id=row_id,
             task_id=task.id
         )
+
     
     async def add_delivery_data_update(
         self,
@@ -142,10 +149,10 @@ class UpdateQueueService:
     ) -> None:
         """
         Добавляет задачу обновления данных доставки в очередь
-        
+
         Args:
             telegram_id: Telegram ID пользователя
-            code_word: Кодовое слово
+            code_word: Кодовое слово (используется как sheet_name для обратной совместимости)
             row_id: Номер строки в Google Sheets
             delivery_data: Данные доставки
         """
@@ -154,15 +161,16 @@ class UpdateQueueService:
             update_type=UpdateType.DELIVERY_DATA,
             telegram_id=telegram_id,
             code_word=code_word,
+            sheet_name=code_word,  # Для DELIVERY_DATA используем code_word как sheet_name
             data={
                 "row_id": row_id,
                 "delivery_data": delivery_data
             },
             created_at=datetime.now(timezone.utc)
         )
-        
+
         await self.queue.put(task)
-        
+
         logger.info(
             "delivery_data_update_queued",
             telegram_id=telegram_id,
@@ -170,6 +178,7 @@ class UpdateQueueService:
             row_id=row_id,
             task_id=task.id
         )
+
     
     async def _worker(self) -> None:
         """
@@ -290,42 +299,44 @@ class UpdateQueueService:
     async def _process_prize_claimed(self, task: UpdateTask) -> None:
         """
         Обрабатывает обновление статуса приза
-        
+
         Args:
             task: Задача обновления
         """
         row_id = task.data["row_id"]
         claimed_at = task.data["claimed_at"]
-        
+
         # Обновляем Google Sheets
         success = await self.google_sheets_service.save_delivery_data(
             row_id=row_id,
             delivery_data={"claimed_at": claimed_at},
-            worksheet_name=task.code_word
+            worksheet_name=task.sheet_name
         )
-        
+
         if not success:
             raise RuntimeError(f"Failed to update Google Sheets for row {row_id}")
+
     
     async def _process_delivery_data(self, task: UpdateTask) -> None:
         """
         Обрабатывает обновление данных доставки
-        
+
         Args:
             task: Задача обновления
         """
         row_id = task.data["row_id"]
         delivery_data = task.data["delivery_data"]
-        
+
         # Обновляем Google Sheets
         success = await self.google_sheets_service.save_delivery_data(
             row_id=row_id,
             delivery_data=delivery_data,
-            worksheet_name=task.code_word
+            worksheet_name=task.sheet_name
         )
-        
+
         if not success:
             raise RuntimeError(f"Failed to update delivery data for row {row_id}")
+
     
     async def get_queue_size(self) -> int:
         """Возвращает размер очереди"""

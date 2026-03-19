@@ -46,23 +46,13 @@ class CommonHandler:
             username=username
         )
         
-        # Создаём клавиатуру с кнопкой "Позвать человека"
-        keyboard = ReplyKeyboardMarkup(
-            keyboard=[
-                [KeyboardButton(text="Позвать человека")]
-            ],
-            resize_keyboard=True
-        )
-        
         welcome_text = (
             f"Привет, {username}! 👋\n\n"
             "Я бот для проверки призов в розыгрыше.\n\n"
-            "Отправьте мне кодовое слово, чтобы проверить, выиграли ли вы приз.\n\n"
-            "Если у вас возникли вопросы, нажмите кнопку \"Позвать человека\" "
-            "для связи со службой поддержки."
+            "Отправьте мне кодовое слово, чтобы проверить, выиграли ли вы приз."
         )
         
-        await message.answer(welcome_text, reply_markup=keyboard)
+        await message.answer(welcome_text)
         
         # Сохраняем ответ бота, если есть session_manager и session_id
         if self.session_manager and session_id:
@@ -105,8 +95,6 @@ class CommonHandler:
             "3️⃣ Если вы победитель:\n"
             "   • Цифровой приз - получите промокод сразу\n"
             "   • Физический приз - укажите данные для доставки\n\n"
-            "❓ Нужна помощь?\n"
-            "Нажмите кнопку \"Позвать человека\" для связи с поддержкой.\n\n"
             "Команды:\n"
             "/start - Начать работу с ботом\n"
             "/help - Показать эту справку"

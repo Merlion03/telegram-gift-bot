@@ -91,10 +91,13 @@ class MessageInterceptor:
         
         # Пытаемся создать/получить сессию и сохранить сообщение
         try:
-            # Получаем или создаём активную сессию
+            # Получаем или создаём активную сессию с информацией о пользователе
             session_id = await self.session_manager.get_or_create_session(
                 telegram_id=telegram_id,
-                session_type='chat'
+                session_type='chat',
+                first_name=event.from_user.first_name,
+                last_name=event.from_user.last_name,
+                username=event.from_user.username
             )
             
             # Сохраняем session_id в контексте для использования в handlers

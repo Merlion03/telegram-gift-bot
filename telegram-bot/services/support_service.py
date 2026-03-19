@@ -25,12 +25,21 @@ class SupportService:
         self.repository = repository
         logger.info("support_service_initialized")
     
-    async def create_session(self, telegram_id: int) -> int:
+    async def create_session(
+        self, 
+        telegram_id: int,
+        first_name: Optional[str] = None,
+        last_name: Optional[str] = None,
+        username: Optional[str] = None
+    ) -> int:
         """
-        Создаёт новую сессию поддержки
+        Создаёт новую сессию поддержки с информацией о пользователе
         
         Args:
             telegram_id: Telegram ID пользователя
+            first_name: Имя пользователя из Telegram (опционально)
+            last_name: Фамилия пользователя из Telegram (опционально)
+            username: Username пользователя из Telegram (опционально)
         
         Returns:
             ID созданной сессии
@@ -40,16 +49,23 @@ class SupportService:
         """
         logger.info(
             "creating_support_session",
-            telegram_id=telegram_id
+            telegram_id=telegram_id,
+            user_name=f"{first_name or ''} {last_name or ''}".strip() or None
         )
         
         try:
-            session_id = await self.repository.create_session(telegram_id)
+            session_id = await self.repository.create_session(
+                telegram_id=telegram_id,
+                first_name=first_name,
+                last_name=last_name,
+                username=username
+            )
             
             logger.info(
                 "support_session_created",
                 session_id=session_id,
-                telegram_id=telegram_id
+                telegram_id=telegram_id,
+                user_name=f"{first_name or ''} {last_name or ''}".strip() or None
             )
             
             return session_id

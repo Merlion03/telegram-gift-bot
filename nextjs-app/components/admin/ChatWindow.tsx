@@ -3,7 +3,7 @@
  * Отображает историю сообщений с real-time обновлениями
  * Позволяет отправлять ответы пользователю
  * Поддерживает работу с Chat_Session и Support_Session
- * Requirements: 4.1, 4.2, 4.3, 7.2, 7.3, 7.5, 8.1
+ * Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 4.1, 4.2, 4.3, 7.2, 7.3, 7.5, 8.1
  */
 
 'use client';
@@ -12,6 +12,13 @@ import { useEffect, useState, useRef } from 'react';
 import { getRealtimeClient } from '@/lib/database/realtimeClient';
 import type { SupportMessage, SupportSession } from '@/types/support';
 import { ErrorMessage, getReadableErrorMessage } from '@/components/common/ErrorMessage';
+import {
+  formatTime,
+  formatChatDate,
+  generateAvatarLetter,
+  createTelegramGradient,
+  getMessageAnimationClass,
+} from '@/lib/telegram-utils';
 
 interface ChatWindowProps {
   session: SupportSession;
@@ -35,9 +42,15 @@ export function ChatWindow({ session }: ChatWindowProps) {
   const [totalMessages, setTotalMessages] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const unsubscribeRef = useRef<(() => void) | null>(null);
   const isMountedRef = useRef(true);
   const MESSAGES_PER_PAGE = 50;
+
+  // Обработка размонтирования компонента
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Загрузка истории сообщений при изменении сессии
   useEffect(() => {
@@ -46,75 +59,83 @@ export function ChatWindow({ session }: ChatWindowProps) {
 
   // Подписка на real-time обновления
   useEffect(() => {
+    // Устанавливаем флаг монтирования в true при каждом запуске эффекта
+    isMountedRef.current = true;
+    
+    let unsubscribe: (() => void) | null = null;
+
     // Асинхронная инициализация подписки
     const initSubscription = async () => {
       const realtimeClient = getRealtimeClient();
 
-      // ИСПРАВЛЕНИЕ: Явно подключаемся перед подпиской
-      // Это гарантирует, что после обновления страницы клиент переподключится
       try {
+        // Подключаемся к WebSocket
         await realtimeClient.connect();
+        
+        // Подписываемся на новые сообщения для текущей сессии
+        unsubscribe = realtimeClient.subscribeToSessionMessages(
+          session.id,
+          (serverMessage) => {
+            // Проверяем, что компонент всё ещё смонтирован
+            if (!isMountedRef.current) {
+              console.log('[ChatWindow] Сообщение проигнорировано: компонент размонтирован');
+              return;
+            }
+            
+            console.log('[ChatWindow] Получено сообщение через WebSocket:', serverMessage);
+            
+            // Обрабатываем только new_message события
+            if (serverMessage.type !== 'new_message') return;
+            
+            // Преобразуем данные сервера в SupportMessage
+            const message: SupportMessage = {
+              id: serverMessage.data.id,
+              session_id: serverMessage.data.session_id,
+              telegram_id: session.telegram_id,
+              message_type: 
+                serverMessage.data.sender_type === 'user' ? 'from_user' :
+                serverMessage.data.sender_type === 'bot' ? 'from_bot' :
+                'from_support',
+              message_text: serverMessage.data.message_text,
+              created_at: serverMessage.data.created_at,
+              delivered: serverMessage.data.is_read || false,
+            };
+            
+            // Добавляем новое сообщение в список
+            setMessages((prev) => {
+              // Проверяем, не добавлено ли уже это сообщение
+              if (prev.some((m) => m.id === message.id)) {
+                return prev;
+              }
+              return [...prev, message];
+            });
+            
+            // Автоскролл к новому сообщению
+            setTimeout(scrollToBottom, 100);
+          },
+          (error: Error) => {
+            console.error('[ChatWindow] Ошибка WebSocket подписки:', error);
+          }
+        );
+        
+        console.log(`[ChatWindow] Подписка на сессию ${session.id} создана`);
       } catch (error) {
         console.error('[ChatWindow] Ошибка подключения к WebSocket:', error);
       }
-
-      // Подписываемся на новые сообщения для текущей сессии
-      unsubscribeRef.current = realtimeClient.subscribeToSessionMessages(
-        session.id,
-        (serverMessage) => {
-          // Проверяем, что компонент всё ещё смонтирован
-          if (!isMountedRef.current) return;
-          
-          // Обрабатываем только new_message события
-          if (serverMessage.type !== 'new_message') return;
-          
-          // Преобразуем данные сервера в SupportMessage
-          // Явное преобразование всех типов отправителей:
-          // - 'user' -> 'from_user' (сообщения от пользователя, отображаются слева)
-          // - 'bot' -> 'from_bot' (автоматические сообщения бота, фиолетовый фон)
-          // - 'admin' -> 'from_support' (сообщения от администратора, отображаются справа)
-          // - неизвестные типы -> 'from_support' (fallback для безопасности)
-          const message: SupportMessage = {
-            id: serverMessage.data.id,
-            session_id: serverMessage.data.session_id,
-            telegram_id: session.telegram_id,
-            message_type: 
-              serverMessage.data.sender_type === 'user' ? 'from_user' :
-              serverMessage.data.sender_type === 'bot' ? 'from_bot' :
-              'from_support',
-            message_text: serverMessage.data.message_text,
-            created_at: serverMessage.data.created_at,
-            delivered: serverMessage.data.is_read || false,
-          };
-          
-          // Добавляем новое сообщение в список
-          setMessages((prev) => {
-            // Проверяем, не добавлено ли уже это сообщение
-            if (prev.some((m) => m.id === message.id)) {
-              return prev;
-            }
-            return [...prev, message];
-          });
-          
-          // Автоскролл к новому сообщению
-          scrollToBottom();
-        },
-        (error: Error) => {
-          console.error('Real-time subscription error:', error);
-        }
-      );
     };
 
     initSubscription();
 
     // Отписываемся при размонтировании или изменении сессии
     return () => {
-      isMountedRef.current = false;
-      if (unsubscribeRef.current) {
-        unsubscribeRef.current();
+      if (unsubscribe) {
+        unsubscribe();
+        console.log(`[ChatWindow] Отписка от сессии ${session.id}`);
       }
+      // НЕ устанавливаем isMountedRef.current = false здесь,
+      // так как это cleanup функция, которая вызывается и при изменении зависимостей
     };
-  }, [session.id]);
+  }, [session.id, session.telegram_id]);
 
   /**
    * Загружает историю сообщений с сервера
@@ -310,38 +331,7 @@ export function ChatWindow({ session }: ChatWindowProps) {
     }
   };
 
-  /**
-   * Форматирует время сообщения
-   */
-  const formatTime = (dateString: string): string => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('ru-RU', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
 
-  /**
-   * Форматирует дату сообщения
-   */
-  const formatDate = (dateString: string): string => {
-    const date = new Date(dateString);
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    if (date.toDateString() === today.toDateString()) {
-      return 'Сегодня';
-    } else if (date.toDateString() === yesterday.toDateString()) {
-      return 'Вчера';
-    } else {
-      return date.toLocaleDateString('ru-RU', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-      });
-    }
-  };
 
   /**
    * Группирует сообщения по датам
@@ -368,7 +358,7 @@ export function ChatWindow({ session }: ChatWindowProps) {
       // Если группа для этой даты ещё не создана, создаём её
       if (!groupsMap.has(messageDate)) {
         groupsMap.set(messageDate, {
-          date: formatDate(message.created_at), // Форматированная дата ("Сегодня", "Вчера", "ДД.ММ.ГГГГ")
+          date: formatChatDate(message.created_at), // Форматированная дата ("Сегодня", "Вчера", "ДД.ММ.ГГГГ")
           messages: [],
         });
       }
@@ -474,64 +464,97 @@ export function ChatWindow({ session }: ChatWindowProps) {
             <div key={groupIndex}>
               {/* Разделитель с датой */}
               <div className="flex items-center justify-center my-4">
-                <div className="bg-gray-200 text-gray-600 text-xs px-3 py-1 rounded-full">
+                <div className="bg-telegram-border text-telegram-secondary text-xs px-3 py-1 rounded-full telegram-shadow-sm">
                   {group.date}
                 </div>
               </div>
 
               {/* Сообщения группы */}
-              {group.messages.map((message) => {
-                // Определяем стиль в зависимости от типа сообщения (Requirements 4.1)
+              {group.messages.map((message, messageIndex) => {
+                // Определяем стиль в зависимости от типа сообщения (Requirements 3.1, 3.2, 3.3)
                 const isFromSupport = message.message_type === 'from_support';
                 const isFromBot = message.message_type === 'from_bot';
                 const isFromUser = message.message_type === 'from_user';
+                
+                // Проверяем, нужно ли показывать аватар (показываем для первого сообщения или если отправитель изменился)
+                const previousMessage = messageIndex > 0 ? group.messages[messageIndex - 1] : null;
+                const shouldShowAvatar = !previousMessage || previousMessage.message_type !== message.message_type;
+                
+                // Получаем класс анимации (Requirements 3.4)
+                const animationClass = getMessageAnimationClass(isFromSupport);
 
                 return (
                   <div
                     key={message.id}
-                    className={`flex mb-3 ${
-                      isFromSupport ? 'justify-end' : 'justify-start'
-                    }`}
+                    className={`flex mb-2 ${isFromSupport ? 'justify-end' : 'justify-start'} ${animationClass}`}
                   >
-                    <div
-                      className={`max-w-[70%] rounded-lg px-4 py-2 ${
-                        isFromSupport
-                          ? 'bg-blue-600 text-white'
-                          : isFromBot
-                          ? 'bg-purple-100 text-purple-900 border border-purple-200'
-                          : 'bg-white text-gray-900 shadow-sm'
-                      }`}
-                    >
-                      {/* Метка отправителя для сообщений бота */}
-                      {isFromBot && (
-                        <div className="flex items-center gap-1 mb-1">
-                          <span className="text-xs font-semibold text-purple-700">🤖 Бот</span>
+                    <div className={`flex gap-2 max-w-[70%] ${isFromSupport ? 'flex-row-reverse' : 'flex-row'}`}>
+                      {/* Аватар отправителя (Requirements 3.2) */}
+                      {shouldShowAvatar && (
+                        <div className="flex-shrink-0">
+                          <div
+                            className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold telegram-shadow-sm"
+                            style={{
+                              background: isFromSupport
+                                ? '#2481cc'
+                                : isFromBot
+                                ? '#9013fe'
+                                : createTelegramGradient(message.telegram_id.toString()),
+                            }}
+                            title={
+                              isFromSupport
+                                ? 'Администратор'
+                                : isFromBot
+                                ? 'Бот'
+                                : `Пользователь #${message.telegram_id}`
+                            }
+                          >
+                            {isFromSupport ? '👤' : isFromBot ? '🤖' : generateAvatarLetter(message.telegram_id.toString())}
+                          </div>
                         </div>
                       )}
 
-                      {/* Текст сообщения */}
-                      <p className="text-sm whitespace-pre-wrap break-words">
-                        {message.message_text}
-                      </p>
-
-                      {/* Метаданные сообщения */}
+                      {/* Пузырь сообщения с улучшенным дизайном (Requirements 3.1) */}
                       <div
-                        className={`flex items-center justify-end gap-2 mt-1 text-xs ${
+                        className={`rounded-2xl px-4 py-2 telegram-shadow-sm transition-all duration-200 hover:telegram-shadow-lg ${
                           isFromSupport
-                            ? 'text-blue-100'
+                            ? 'bg-telegram-blue text-white rounded-tr-sm'
                             : isFromBot
-                            ? 'text-purple-600'
-                            : 'text-gray-500'
+                            ? 'bg-purple-100 text-purple-900 border border-purple-200 rounded-tl-sm'
+                            : 'bg-white text-telegram-text border border-telegram-border rounded-tl-sm'
                         }`}
                       >
-                        <span>{formatTime(message.created_at)}</span>
-                        
-                        {/* Индикатор доставки для сообщений от поддержки */}
-                        {isFromSupport && (
-                          <span className="ml-1">
-                            {message.delivered ? '✓✓' : '✓'}
-                          </span>
+                        {/* Метка отправителя для сообщений бота */}
+                        {isFromBot && (
+                          <div className="flex items-center gap-1 mb-1">
+                            <span className="text-xs font-semibold text-purple-700">🤖 Бот</span>
+                          </div>
                         )}
+
+                        {/* Текст сообщения */}
+                        <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">
+                          {message.message_text}
+                        </p>
+
+                        {/* Метаданные сообщения */}
+                        <div
+                          className={`flex items-center justify-end gap-2 mt-1 text-xs ${
+                            isFromSupport
+                              ? 'text-blue-100'
+                              : isFromBot
+                              ? 'text-purple-600'
+                              : 'text-telegram-secondary'
+                          }`}
+                        >
+                          <span>{formatTime(message.created_at)}</span>
+
+                          {/* Индикатор доставки для сообщений от поддержки */}
+                          {isFromSupport && (
+                            <span className="ml-1">
+                              {message.delivered ? '✓✓' : '✓'}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>

@@ -40,6 +40,7 @@ async def init_db():
     config = get_config()
     
     # Инициализируем БД (синхронная функция)
+    # Исправление для Windows (SelectorEventLoop) уже в connection.py
     init_database(
         database_url=config.database.connection_url,
         pool_size=config.database.pool_size,
@@ -105,12 +106,12 @@ def create_test_worksheet(
     worksheet = spreadsheet.add_worksheet(
         title=worksheet_name,
         rows=len(test_data) + 10,
-        cols=13  # A-M столбцы
+        cols=14  # A-N столбцы (добавлен столбец code_word)
     )
     
     # Заполняем данные
     if test_data:
-        worksheet.update(values=test_data, range_name=f'A1:M{len(test_data)}')
+        worksheet.update(values=test_data, range_name=f'A1:N{len(test_data)}')
     
     return worksheet
 
@@ -157,11 +158,11 @@ async def test_full_sync_cycle_digital_prizes(
     # Подготовка тестовых данных
     test_data = [
         # Заголовки
-        ['telegram_id', 'prize_type', 'promo_code', 'instructions', 'last_name', 'first_name', 'patronymic', 'city', 'street', 'house', 'apartment', 'phone', 'comment'],
+        ['telegram_id', 'code_word', 'prize_type', 'promo_code', 'instructions', 'last_name', 'first_name', 'patronymic', 'city', 'street', 'house', 'apartment', 'phone', 'comment'],
         # Цифровые призы
-        ['123456789', 'digital', 'PROMO123', 'Используйте промокод на сайте example.com', '', '', '', '', '', '', '', '', ''],
-        ['987654321', 'digital', 'PROMO456', 'Активируйте код в приложении', '', '', '', '', '', '', '', '', ''],
-        ['555555555', 'digital', 'PROMO789', 'Введите код при оформлении заказа', '', '', '', '', '', '', '', '', ''],
+        ['123456789', test_worksheet_name, 'digital', 'PROMO123', 'Используйте промокод на сайте example.com', '', '', '', '', '', '', '', '', ''],
+        ['987654321', test_worksheet_name, 'digital', 'PROMO456', 'Активируйте код в приложении', '', '', '', '', '', '', '', '', ''],
+        ['555555555', test_worksheet_name, 'digital', 'PROMO789', 'Введите код при оформлении заказа', '', '', '', '', '', '', '', '', ''],
     ]
     
     worksheet = None
@@ -208,7 +209,7 @@ async def test_full_sync_cycle_digital_prizes(
         assert prize1.promo_code == 'PROMO123'
         assert prize1.instructions == 'Используйте промокод на сайте example.com'
         assert prize1.sheet_name == test_worksheet_name
-        assert prize1.code_word == test_worksheet_name
+        assert prize1.code_word == test_worksheet_name  # code_word теперь из столбца B
         assert prize1.row_id == 2  # Вторая строка (первая - заголовки)
         
         # Проверяем второй приз
@@ -261,10 +262,10 @@ async def test_full_sync_cycle_physical_prizes(
     # Подготовка тестовых данных
     test_data = [
         # Заголовки
-        ['telegram_id', 'prize_type', 'promo_code', 'instructions', 'last_name', 'first_name', 'patronymic', 'city', 'street', 'house', 'apartment', 'phone', 'comment'],
+        ['telegram_id', 'code_word', 'prize_type', 'promo_code', 'instructions', 'last_name', 'first_name', 'patronymic', 'city', 'street', 'house', 'apartment', 'phone', 'comment'],
         # Физические призы с данными доставки
-        ['111111111', 'physical', '', '', 'Иванов', 'Иван', 'Иванович', 'Москва', 'Ленина', '10', '5', '+79991234567', 'Позвонить перед доставкой'],
-        ['222222222', 'physical', '', '', 'Петров', 'Петр', 'Петрович', 'Санкт-Петербург', 'Невский проспект', '20', '', '+79997654321', ''],
+        ['111111111', test_worksheet_name, 'physical', '', '', 'Иванов', 'Иван', 'Иванович', 'Москва', 'Ленина', '10', '5', '+79991234567', 'Позвонить перед доставкой'],
+        ['222222222', test_worksheet_name, 'physical', '', '', 'Петров', 'Петр', 'Петрович', 'Санкт-Петербург', 'Невский проспект', '20', '', '+79997654321', ''],
     ]
     
     worksheet = None
@@ -354,8 +355,8 @@ async def test_sync_idempotency(
     prize_repository = PrizeRepository()
     
     test_data = [
-        ['telegram_id', 'prize_type', 'promo_code', 'instructions', 'last_name', 'first_name', 'patronymic', 'city', 'street', 'house', 'apartment', 'phone', 'comment'],
-        ['999999999', 'digital', 'IDEMPOTENT', 'Test idempotency', '', '', '', '', '', '', '', '', ''],
+        ['telegram_id', 'code_word', 'prize_type', 'promo_code', 'instructions', 'last_name', 'first_name', 'patronymic', 'city', 'street', 'house', 'apartment', 'phone', 'comment'],
+        ['999999999', test_worksheet_name, 'digital', 'IDEMPOTENT', 'Test idempotency', '', '', '', '', '', '', '', '', ''],
     ]
     
     worksheet = None
@@ -439,13 +440,13 @@ async def test_sync_all_sheets_integration(
     worksheet2_name = f"{test_worksheet_name}_2"
     
     test_data1 = [
-        ['telegram_id', 'prize_type', 'promo_code', 'instructions', 'last_name', 'first_name', 'patronymic', 'city', 'street', 'house', 'apartment', 'phone', 'comment'],
-        ['111111111', 'digital', 'SHEET1', 'From sheet 1', '', '', '', '', '', '', '', '', ''],
+        ['telegram_id', 'code_word', 'prize_type', 'promo_code', 'instructions', 'last_name', 'first_name', 'patronymic', 'city', 'street', 'house', 'apartment', 'phone', 'comment'],
+        ['111111111', worksheet1_name, 'digital', 'SHEET1', 'From sheet 1', '', '', '', '', '', '', '', '', ''],
     ]
     
     test_data2 = [
-        ['telegram_id', 'prize_type', 'promo_code', 'instructions', 'last_name', 'first_name', 'patronymic', 'city', 'street', 'house', 'apartment', 'phone', 'comment'],
-        ['222222222', 'digital', 'SHEET2', 'From sheet 2', '', '', '', '', '', '', '', '', ''],
+        ['telegram_id', 'code_word', 'prize_type', 'promo_code', 'instructions', 'last_name', 'first_name', 'patronymic', 'city', 'street', 'house', 'apartment', 'phone', 'comment'],
+        ['222222222', worksheet2_name, 'digital', 'SHEET2', 'From sheet 2', '', '', '', '', '', '', '', '', ''],
     ]
     
     worksheet1 = None
@@ -521,4 +522,237 @@ async def test_sync_all_sheets_integration(
                 delete_test_worksheet,
                 test_spreadsheet,
                 worksheet2_name
+            )
+
+
+
+@pytest.mark.asyncio
+async def test_unique_index_on_telegram_id_code_word(
+    test_worksheet_name,
+    gspread_client,
+    test_spreadsheet
+):
+    """
+    Feature: google-sheets-code-word-column
+    Integration Test: Проверка уникального индекса на (telegram_id, code_word)
+    
+    Validates: Requirements 3.1, 3.2
+    
+    Проверяет:
+    1. Попытка вставки дубликата (telegram_id, code_word) обрабатывается через upsert
+    2. Существующая запись обновляется, а не создается дубликат
+    3. Разные code_word для одного telegram_id создают отдельные записи
+    """
+    config = get_config()
+    prize_repository = PrizeRepository()
+    
+    # Создаем два тестовых листа с разными code_word
+    worksheet1_name = f"{test_worksheet_name}_unique1"
+    worksheet2_name = f"{test_worksheet_name}_unique2"
+    
+    # Лист 1: telegram_id=333333333, code_word=worksheet1_name
+    test_data1 = [
+        ['telegram_id', 'code_word', 'prize_type', 'promo_code', 'instructions', 'last_name', 'first_name', 'patronymic', 'city', 'street', 'house', 'apartment', 'phone', 'comment'],
+        ['333333333', worksheet1_name, 'digital', 'PROMO_V1', 'Версия 1', '', '', '', '', '', '', '', '', ''],
+    ]
+    
+    # Лист 2: тот же telegram_id=333333333, но другой code_word=worksheet2_name
+    test_data2 = [
+        ['telegram_id', 'code_word', 'prize_type', 'promo_code', 'instructions', 'last_name', 'first_name', 'patronymic', 'city', 'street', 'house', 'apartment', 'phone', 'comment'],
+        ['333333333', worksheet2_name, 'digital', 'PROMO_V2', 'Версия 2', '', '', '', '', '', '', '', '', ''],
+    ]
+    
+    worksheet1 = None
+    worksheet2 = None
+    
+    try:
+        # Создаем листы
+        print(f"\n[TEST] Создание тестовых листов для проверки уникального индекса")
+        loop = asyncio.get_event_loop()
+        
+        worksheet1 = await loop.run_in_executor(
+            None,
+            create_test_worksheet,
+            test_spreadsheet,
+            worksheet1_name,
+            test_data1
+        )
+        
+        worksheet2 = await loop.run_in_executor(
+            None,
+            create_test_worksheet,
+            test_spreadsheet,
+            worksheet2_name,
+            test_data2
+        )
+        
+        await asyncio.sleep(2)
+        
+        sync_service = SyncService(
+            google_sheets_config=config.google_sheets,
+            sync_config=config.sync,
+            prize_repository=prize_repository
+        )
+        
+        # Первая синхронизация - создаем запись с (333333333, worksheet1_name)
+        print(f"[TEST] Первая синхронизация (telegram_id=333333333, code_word={worksheet1_name})")
+        stats1 = await sync_service.sync_sheet(worksheet1_name)
+        assert stats1['total_records'] == 1
+        
+        prize1 = await prize_repository.find_prize(333333333, worksheet1_name)
+        assert prize1 is not None
+        assert prize1.code_word == worksheet1_name
+        assert prize1.promo_code == 'PROMO_V1'
+        first_id = prize1.id
+        
+        # Вторая синхронизация - создаем запись с тем же telegram_id, но другим code_word
+        print(f"[TEST] Вторая синхронизация (telegram_id=333333333, code_word={worksheet2_name})")
+        stats2 = await sync_service.sync_sheet(worksheet2_name)
+        assert stats2['total_records'] == 1
+        
+        prize2 = await prize_repository.find_prize(333333333, worksheet2_name)
+        assert prize2 is not None
+        assert prize2.code_word == worksheet2_name
+        assert prize2.promo_code == 'PROMO_V2'
+        second_id = prize2.id
+        
+        # Проверяем, что созданы две отдельные записи (разные ID)
+        assert first_id != second_id, "Должны быть созданы две отдельные записи с разными ID"
+        
+        # Проверяем, что первая запись не изменилась
+        prize1_check = await prize_repository.find_prize(333333333, worksheet1_name)
+        assert prize1_check is not None
+        assert prize1_check.id == first_id
+        assert prize1_check.promo_code == 'PROMO_V1'
+        
+        print(f"[TEST] ✓ Уникальный индекс работает корректно: разные code_word создают отдельные записи")
+        
+        # Тест upsert: повторная синхронизация того же листа должна обновить запись
+        print(f"[TEST] Проверка upsert - повторная синхронизация листа 1")
+        
+        # Обновляем данные в первом листе
+        updated_data1 = [
+            ['telegram_id', 'code_word', 'prize_type', 'promo_code', 'instructions', 'last_name', 'first_name', 'patronymic', 'city', 'street', 'house', 'apartment', 'phone', 'comment'],
+            ['333333333', worksheet1_name, 'digital', 'PROMO_UPDATED', 'Обновленная версия', '', '', '', '', '', '', '', '', ''],
+        ]
+        
+        await loop.run_in_executor(
+            None,
+            lambda: worksheet1.update(values=updated_data1, range_name=f'A1:N{len(updated_data1)}')
+        )
+        
+        await asyncio.sleep(2)
+        
+        # Повторная синхронизация
+        stats3 = await sync_service.sync_sheet(worksheet1_name)
+        assert stats3['total_records'] == 1
+        
+        # Проверяем, что запись обновилась (тот же ID, но новые данные)
+        prize1_updated = await prize_repository.find_prize(333333333, worksheet1_name)
+        assert prize1_updated is not None
+        assert prize1_updated.id == first_id, "ID должен остаться тем же (upsert, а не insert)"
+        assert prize1_updated.promo_code == 'PROMO_UPDATED', "promo_code должен обновиться"
+        assert prize1_updated.instructions == 'Обновленная версия'
+        
+        print(f"[TEST] ✓ Upsert работает корректно: существующая запись обновляется")
+        
+    finally:
+        # Удаляем тестовые листы
+        if worksheet1:
+            print(f"[TEST] Удаление тестового листа 1")
+            await loop.run_in_executor(
+                None,
+                delete_test_worksheet,
+                test_spreadsheet,
+                worksheet1_name
+            )
+        
+        if worksheet2:
+            print(f"[TEST] Удаление тестового листа 2")
+            await loop.run_in_executor(
+                None,
+                delete_test_worksheet,
+                test_spreadsheet,
+                worksheet2_name
+            )
+
+
+@pytest.mark.asyncio
+async def test_unique_index_different_telegram_ids_same_code_word(
+    test_worksheet_name,
+    gspread_client,
+    test_spreadsheet
+):
+    """
+    Feature: google-sheets-code-word-column
+    Integration Test: Разные telegram_id с одинаковым code_word
+    
+    Validates: Requirements 3.1, 3.2
+    
+    Проверяет, что разные пользователи могут иметь одинаковый code_word
+    (уникальность только на комбинации telegram_id + code_word)
+    """
+    config = get_config()
+    prize_repository = PrizeRepository()
+    
+    # Один лист с двумя разными telegram_id, но одинаковым code_word
+    test_data = [
+        ['telegram_id', 'code_word', 'prize_type', 'promo_code', 'instructions', 'last_name', 'first_name', 'patronymic', 'city', 'street', 'house', 'apartment', 'phone', 'comment'],
+        ['444444444', 'SHARED_CODE', 'digital', 'PROMO_USER1', 'Для пользователя 1', '', '', '', '', '', '', '', '', ''],
+        ['555555555', 'SHARED_CODE', 'digital', 'PROMO_USER2', 'Для пользователя 2', '', '', '', '', '', '', '', '', ''],
+    ]
+    
+    worksheet = None
+    
+    try:
+        # Создаем тестовый лист
+        print(f"\n[TEST] Создание тестового листа с одинаковым code_word для разных пользователей")
+        loop = asyncio.get_event_loop()
+        worksheet = await loop.run_in_executor(
+            None,
+            create_test_worksheet,
+            test_spreadsheet,
+            test_worksheet_name,
+            test_data
+        )
+        
+        await asyncio.sleep(2)
+        
+        # Запускаем синхронизацию
+        print(f"[TEST] Запуск синхронизации")
+        sync_service = SyncService(
+            google_sheets_config=config.google_sheets,
+            sync_config=config.sync,
+            prize_repository=prize_repository
+        )
+        
+        stats = await sync_service.sync_sheet(test_worksheet_name)
+        assert stats['total_records'] == 2, "Должны быть созданы 2 записи"
+        
+        # Проверяем, что обе записи созданы с одинаковым code_word
+        prize1 = await prize_repository.find_prize(444444444, 'SHARED_CODE')
+        assert prize1 is not None
+        assert prize1.telegram_id == 444444444
+        assert prize1.code_word == 'SHARED_CODE'
+        assert prize1.promo_code == 'PROMO_USER1'
+        
+        prize2 = await prize_repository.find_prize(555555555, 'SHARED_CODE')
+        assert prize2 is not None
+        assert prize2.telegram_id == 555555555
+        assert prize2.code_word == 'SHARED_CODE'
+        assert prize2.promo_code == 'PROMO_USER2'
+        
+        # Проверяем, что это разные записи
+        assert prize1.id != prize2.id, "Должны быть созданы две отдельные записи"
+        
+        print(f"[TEST] ✓ Разные telegram_id могут иметь одинаковый code_word")
+        
+    finally:
+        if worksheet:
+            print(f"[TEST] Удаление тестового листа")
+            await loop.run_in_executor(
+                None,
+                delete_test_worksheet,
+                test_spreadsheet,
+                test_worksheet_name
             )

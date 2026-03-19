@@ -65,6 +65,7 @@ const formSchema = z.object({
   phone: z
     .string()
     .trim()
+    .regex(/^[\+0-9]+$/, 'Можно использовать только цифры и символ +')
     .regex(/^\+?[0-9]{10,15}$/, 'Неверный формат телефона'),
   comment: z
     .string()
@@ -454,6 +455,14 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
           type="tel"
           id="phone"
           placeholder="+79991234567"
+          onInput={(e) => {
+            // Фильтруем ввод: оставляем только +0123456789
+            const input = e.currentTarget;
+            const filteredValue = input.value.replace(/[^+0-9]/g, '');
+            if (input.value !== filteredValue) {
+              input.value = filteredValue;
+            }
+          }}
           className="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           style={{ 
             backgroundColor: 'var(--tg-theme-bg-color, #ffffff)',

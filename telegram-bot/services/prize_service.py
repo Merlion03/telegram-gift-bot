@@ -365,7 +365,7 @@ class PrizeService:
     ) -> None:
         """
         Отмечает приз как полученный через асинхронную очередь
-        
+
         Args:
             telegram_id: Telegram ID пользователя
             code_word: Кодовое слово
@@ -377,16 +377,17 @@ class PrizeService:
             from datetime import timedelta
             msk_tz = timezone(timedelta(hours=3))
             claimed_at = datetime.now(msk_tz).strftime('%d.%m.%Y %H:%M:%S')
-            
+
             # Если есть сервис очереди - используем его (асинхронно)
             if self.update_queue_service:
                 await self.update_queue_service.add_prize_claimed_update(
                     telegram_id=telegram_id,
                     code_word=code_word,
+                    sheet_name=sheet_name,
                     row_id=row_id,
                     claimed_at=claimed_at
                 )
-                
+
                 logger.info(
                     "prize_claimed_queued_for_update",
                     telegram_id=telegram_id,
@@ -397,7 +398,7 @@ class PrizeService:
             else:
                 # Fallback: синхронное обновление (старая логика)
                 await self._mark_prize_claimed(row_id, sheet_name)
-                
+
         except Exception as e:
             logger.error(
                 "failed_to_mark_prize_claimed_async",

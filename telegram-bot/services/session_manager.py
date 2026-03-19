@@ -9,6 +9,7 @@ SessionManager - сервис управления жизненным цикло
 """
 import structlog
 from typing import Optional
+from typing import Optional
 from datetime import datetime, timezone, timedelta
 
 from database.repository import SupportRepository
@@ -43,21 +44,27 @@ class SessionManager:
     async def get_or_create_session(
         self,
         telegram_id: int,
-        session_type: str = 'chat'
+        session_type: str = 'chat',
+        first_name: Optional[str] = None,
+        last_name: Optional[str] = None,
+        username: Optional[str] = None
     ) -> int:
         """
-        Получает активную сессию или создаёт новую
+        Получает активную сессию или создаёт новую с информацией о пользователе
         
         Validates: Requirements 1.1, 1.2
         
         Логика:
         1. Проверяет наличие активной сессии для пользователя
         2. Если есть - возвращает её ID
-        3. Если нет - создаёт новую сессию с указанным типом
+        3. Если нет - создаёт новую сессию с указанным типом и информацией о пользователе
         
         Args:
             telegram_id: Telegram ID пользователя
             session_type: Тип сессии ('chat' или 'support')
+            first_name: Имя пользователя из Telegram (опционально)
+            last_name: Фамилия пользователя из Telegram (опционально)
+            username: Username пользователя из Telegram (опционально)
             
         Returns:
             ID сессии (существующей или новой)
@@ -84,8 +91,13 @@ class SessionManager:
                 )
                 return existing_session.id
             
-            # Создаём новую сессию
-            session_id = await self.repository.create_session(telegram_id)
+            # Создаём новую сессию с информацией о пользователе
+            session_id = await self.repository.create_session(
+                telegram_id=telegram_id,
+                first_name=first_name,
+                last_name=last_name,
+                username=username
+            )
             
             # Если нужен тип 'support', обновляем его
             if session_type == 'support':
@@ -95,7 +107,8 @@ class SessionManager:
                 "new_session_created",
                 session_id=session_id,
                 telegram_id=telegram_id,
-                session_type=session_type
+                session_type=session_type,
+                user_name=f"{first_name or ''} {last_name or ''}".strip() or None
             )
             
             return session_id

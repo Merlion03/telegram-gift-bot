@@ -3,6 +3,8 @@
 Использует асинхронный SQLAlchemy engine с psycopg3 и connection pooling
 """
 import logging
+import sys
+import asyncio
 from typing import AsyncGenerator
 from contextlib import asynccontextmanager
 from sqlalchemy.ext.asyncio import (
@@ -17,6 +19,26 @@ from database.models import Base
 
 
 logger = logging.getLogger(__name__)
+
+
+# КРИТИЧЕСКИ ВАЖНО: Исправление для Windows
+# psycopg не может работать с ProactorEventLoop на Windows
+# Необходимо использовать SelectorEventLoop
+if sys.platform == "win32":
+    import selectors
+    
+    class WindowsSelectorEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
+        """
+        Политика event loop для Windows, использующая SelectorEventLoop
+        вместо ProactorEventLoop для совместимости с psycopg
+        """
+        def new_event_loop(self):
+            selector = selectors.SelectSelector()
+            return asyncio.SelectorEventLoop(selector)
+    
+    # Устанавливаем политику глобально перед любыми операциями с БД
+    asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())
+    logger.info("Windows detected: using SelectorEventLoop for psycopg compatibility")
 
 
 class DatabaseConnection:

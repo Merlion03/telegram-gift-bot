@@ -437,100 +437,164 @@ class SyncService:
             raise
     
     def _convert_sheet_data_to_prizes(
-        self,
-        sheet_data: List[List[str]],
-        sheet_name: str
-    ) -> List[Dict[str, Any]]:
-        """
-        Преобразует данные из Google Sheets в формат для PostgreSQL
-        
-        Args:
-            sheet_data: Данные из листа
-            sheet_name: Название листа
-        
-        Returns:
-            Список данных призов для PostgreSQL
-        """
-        prizes_data = []
-        now = datetime.now(timezone.utc)
-        
-        for row_index, row_values in enumerate(sheet_data):
-            # Пропускаем пустые строки
-            if not row_values or not any(row_values):
-                continue
-            
-            # Проверяем минимальные требования (telegram_id и prize_type)
-            if len(row_values) < 2 or not row_values[0] or not row_values[1]:
-                logger.warning(
-                    "invalid_row_skipped",
+            self,
+            sheet_data: List[List[str]],
+            sheet_name: str
+        ) -> List[Dict[str, Any]]:
+            """
+            Преобразует данные из Google Sheets в формат для PostgreSQL
+
+            Args:
+                sheet_data: Данные из листа
+                sheet_name: Название листа
+
+            Returns:
+                Список данных призов для PostgreSQL
+            """
+            # Валидация структуры листа - минимум 4 столбца (telegram_id, username, code_word, prize_type)
+            if not sheet_data:
+                logger.error(
+                    "sheet_structure_invalid",
                     sheet_name=sheet_name,
-                    row_index=row_index + 2,  # +2 потому что пропустили заголовок и индекс с 0
-                    row_values=row_values[:5]  # Логируем только первые 5 значений для безопасности
+                    reason="empty_sheet",
+                    found_columns=0,
+                    required_columns=4
                 )
-                continue
-            
-            try:
-                # Парсим telegram_id
-                telegram_id = int(row_values[0])
-                
-                # Базовые данные приза
-                prize_data = {
-                    'telegram_id': telegram_id,
-                    'prize_type': row_values[1],
-                    'sheet_name': sheet_name,
-                    'code_word': sheet_name,  # code_word = sheet_name согласно требованиям
-                    'row_id': row_index + 2,  # +2 потому что пропустили заголовок и индекс с 0
-                    'created_at': now,
-                    'updated_at': now
-                }
-                
-                # Добавляем данные для цифрового приза
-                if prize_data['prize_type'] == 'digital':
-                    prize_data['promo_code'] = row_values[2] if len(row_values) > 2 else None
-                    prize_data['instructions'] = row_values[3] if len(row_values) > 3 else None
-                
-                # Добавляем данные для физического приза (если есть)
-                if prize_data['prize_type'] == 'physical' and len(row_values) > 4:
-                    # Структура столбцов для физических призов:
-                    # E (индекс 4): last_name
-                    # F (индекс 5): first_name
-                    # G (индекс 6): patronymic
-                    # H (индекс 7): city
-                    # I (индекс 8): street
-                    # J (индекс 9): house
-                    # K (индекс 10): apartment
-                    # L (индекс 11): phone
-                    # M (индекс 12): comment
-                    prize_data['last_name'] = row_values[4] if len(row_values) > 4 else None
-                    prize_data['first_name'] = row_values[5] if len(row_values) > 5 else None
-                    prize_data['patronymic'] = row_values[6] if len(row_values) > 6 else None
-                    prize_data['city'] = row_values[7] if len(row_values) > 7 else None
-                    prize_data['street'] = row_values[8] if len(row_values) > 8 else None
-                    prize_data['house'] = row_values[9] if len(row_values) > 9 else None
-                    prize_data['apartment'] = row_values[10] if len(row_values) > 10 else None
-                    prize_data['phone'] = row_values[11] if len(row_values) > 11 else None
-                    prize_data['comment'] = row_values[12] if len(row_values) > 12 else None
-                
-                prizes_data.append(prize_data)
-                
-            except (ValueError, IndexError) as e:
-                logger.warning(
-                    "invalid_row_data_skipped",
+                return []
+
+            # Проверяем первую строку данных на наличие минимум 4 столбцов
+            first_row = sheet_data[0] if sheet_data else []
+            if len(first_row) < 4:
+                logger.error(
+                    "sheet_structure_invalid",
                     sheet_name=sheet_name,
-                    row_index=row_index + 2,
-                    error=str(e),
-                    row_values=row_values[:5]
+                    reason="insufficient_columns",
+                    found_columns=len(first_row),
+                    required_columns=4,
+                    message="Требуется минимум 4 столбца: telegram_id, username, code_word, prize_type"
                 )
-                continue
-        
-        logger.debug(
-            "sheet_data_converted",
-            sheet_name=sheet_name,
-            total_rows=len(sheet_data),
-            valid_prizes=len(prizes_data)
-        )
-        
-        return prizes_data
+                return []
+
+            prizes_data = []
+            now = datetime.now(timezone.utc)
+
+            for row_index, row_values in enumerate(sheet_data):
+                # Пропускаем пустые строки
+                if not row_values or not any(row_values):
+                    continue
+
+                # Проверяем минимальные требования (telegram_id, username, code_word и prize_type)
+                if len(row_values) < 4:
+                    logger.warning(
+                        "invalid_row_skipped",
+                        sheet_name=sheet_name,
+                        row_index=row_index + 2,
+                        reason="insufficient_columns",
+                        found_columns=len(row_values),
+                        required_columns=4
+                    )
+                    continue
+
+                # Проверяем обязательные поля
+                if not row_values[0]:
+                    logger.warning(
+                        "invalid_row_skipped",
+                        sheet_name=sheet_name,
+                        row_index=row_index + 2,
+                        reason="missing_telegram_id"
+                    )
+                    continue
+
+                # Валидация code_word (столбец C, индекс 2)
+                if not row_values[2] or not row_values[2].strip():
+                    logger.warning(
+                        "invalid_row_skipped",
+                        sheet_name=sheet_name,
+                        row_index=row_index + 2,
+                        reason="missing_code_word",
+                        message="Столбец code_word (C) обязателен для заполнения"
+                    )
+                    continue
+
+                if not row_values[3]:
+                    logger.warning(
+                        "invalid_row_skipped",
+                        sheet_name=sheet_name,
+                        row_index=row_index + 2,
+                        reason="missing_prize_type"
+                    )
+                    continue
+
+                try:
+                    # Парсим telegram_id
+                    telegram_id = int(row_values[0])
+
+                    # Извлекаем username из столбца B (индекс 1) с обработкой пустых значений
+                    username = row_values[1].strip() if len(row_values) > 1 and row_values[1] else None
+
+                    # Извлекаем code_word из столбца C (индекс 2) и применяем .strip()
+                    code_word = row_values[2].strip()
+
+                    # Базовые данные приза
+                    prize_data = {
+                        'telegram_id': telegram_id,
+                        'username': username,  # Новое поле из столбца B
+                        'prize_type': row_values[3],  # Сдвинуто с индекса 2 на индекс 3
+                        'code_word': code_word,  # Теперь из столбца C, а не B
+                        'sheet_name': sheet_name,  # Сохраняем для аудита
+                        'row_id': row_index + 2,  # +2 потому что пропустили заголовок и индекс с 0
+                        'created_at': now,
+                        'updated_at': now
+                    }
+
+                    # Добавляем данные для цифрового приза (индексы сдвинуты на +1)
+                    if prize_data['prize_type'] == 'digital':
+                        prize_data['promo_code'] = row_values[4] if len(row_values) > 4 else None  # Было: индекс 3
+                        prize_data['instructions'] = row_values[5] if len(row_values) > 5 else None  # Было: индекс 4
+
+                    # Добавляем данные для физического приза (индексы сдвинуты на +1)
+                    if prize_data['prize_type'] == 'physical' and len(row_values) > 6:
+                        # Структура столбцов для физических призов (все индексы +1):
+                        # G (индекс 6): last_name (было: индекс 5)
+                        # H (индекс 7): first_name (было: индекс 6)
+                        # I (индекс 8): patronymic (было: индекс 7)
+                        # J (индекс 9): city (было: индекс 8)
+                        # K (индекс 10): street (было: индекс 9)
+                        # L (индекс 11): house (было: индекс 10)
+                        # M (индекс 12): apartment (было: индекс 11)
+                        # N (индекс 13): phone (было: индекс 12)
+                        # O (индекс 14): comment (было: индекс 13)
+                        prize_data['last_name'] = row_values[6] if len(row_values) > 6 else None
+                        prize_data['first_name'] = row_values[7] if len(row_values) > 7 else None
+                        prize_data['patronymic'] = row_values[8] if len(row_values) > 8 else None
+                        prize_data['city'] = row_values[9] if len(row_values) > 9 else None
+                        prize_data['street'] = row_values[10] if len(row_values) > 10 else None
+                        prize_data['house'] = row_values[11] if len(row_values) > 11 else None
+                        prize_data['apartment'] = row_values[12] if len(row_values) > 12 else None
+                        prize_data['phone'] = row_values[13] if len(row_values) > 13 else None
+                        prize_data['comment'] = row_values[14] if len(row_values) > 14 else None
+
+                    prizes_data.append(prize_data)
+
+                except (ValueError, IndexError) as e:
+                    logger.warning(
+                        "invalid_row_data_skipped",
+                        sheet_name=sheet_name,
+                        row_index=row_index + 2,
+                        error=str(e),
+                        row_values=row_values[:5]
+                    )
+                    continue
+
+            logger.debug(
+                "sheet_data_converted",
+                sheet_name=sheet_name,
+                total_rows=len(sheet_data),
+                valid_prizes=len(prizes_data)
+            )
+
+            return prizes_data
+
     
     async def _batch_upsert_prizes(self, prizes_data: List[Dict[str, Any]]) -> int:
         """

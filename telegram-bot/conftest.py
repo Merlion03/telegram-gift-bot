@@ -1,49 +1,10 @@
 """
 Конфигурация pytest для тестов Telegram-бота
-
-Исправляет проблему с event loop на Windows для работы с PostgreSQL
 """
-import asyncio
-import sys
 import pytest
 import pytest_asyncio
 from unittest.mock import AsyncMock, Mock
 import structlog
-
-# Исправление для Windows: принудительно используем SelectorEventLoop
-if sys.platform == "win32":
-    import selectors
-    # Используем встроенную политику для Windows с SelectorEventLoop
-    try:
-        # Для Python 3.14+ используем новый подход
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    except AttributeError:
-        # Для старых версий Python создаем собственную политику
-        class WindowsSelectorEventLoopPolicy(asyncio.DefaultEventLoopPolicy):
-            def new_event_loop(self):
-                return asyncio.SelectorEventLoop(selectors.SelectSelector())
-        
-        asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())
-
-
-@pytest.fixture(scope="session")
-def event_loop():
-    """
-    Создает event loop для всей сессии тестов
-    
-    На Windows принудительно использует SelectorEventLoop
-    для совместимости с psycopg
-    """
-    if sys.platform == "win32":
-        # Используем SelectorEventLoop для совместимости с psycopg на Windows
-        import selectors
-        loop = asyncio.SelectorEventLoop(selectors.SelectSelector())
-    else:
-        loop = asyncio.new_event_loop()
-    
-    asyncio.set_event_loop(loop)
-    yield loop
-    loop.close()
 
 
 @pytest.fixture(autouse=True)

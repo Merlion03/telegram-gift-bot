@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import '../styles/telegram-theme.css'
 
 export const metadata: Metadata = {
   title: 'Telegram Bot WebApp',

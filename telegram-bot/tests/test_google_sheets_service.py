@@ -120,20 +120,22 @@ async def test_property_1_prize_lookup_digital(telegram_id, code_word, prize_typ
             mock_spreadsheet.worksheet.return_value = mock_worksheet
             mock_worksheet.find.return_value = mock_cell
             
-            # Формируем данные строки в зависимости от типа приза
+            # Формируем данные строки в зависимости от типа приза (ОБНОВЛЕНО - добавлен username)
             if prize_type == 'digital':
                 row_values = [
-                    str(telegram_id),
-                    'digital',
-                    'PROMO123',
-                    'Use this code at checkout'
+                    str(telegram_id),      # Индекс 0: telegram_id
+                    '@testuser',           # Индекс 1: username (НОВЫЙ СТОЛБЕЦ)
+                    'digital',             # Индекс 2: prize_type (СДВИНУТО)
+                    'PROMO123',            # Индекс 3: promo_code (СДВИНУТО)
+                    'Use this code at checkout'  # Индекс 4: instructions (СДВИНУТО)
                 ]
             else:
                 row_values = [
-                    str(telegram_id),
-                    'physical',
-                    '',
-                    ''
+                    str(telegram_id),      # Индекс 0: telegram_id
+                    '@testuser',           # Индекс 1: username (НОВЫЙ СТОЛБЕЦ)
+                    'physical',            # Индекс 2: prize_type (СДВИНУТО)
+                    '',                    # Индекс 3: promo_code (пусто для physical)
+                    ''                     # Индекс 4: instructions (пусто для physical)
                 ]
             
             mock_worksheet.row_values.return_value = row_values
@@ -285,7 +287,8 @@ async def test_missing_promo_code_for_digital_prize(google_sheets_service):
     google_sheets_service.client.open_by_key.return_value = mock_spreadsheet
     mock_spreadsheet.worksheet.return_value = mock_worksheet
     mock_worksheet.find.return_value = mock_cell
-    mock_worksheet.row_values.return_value = ["12345", "digital"]  # Нет промокода
+    # ОБНОВЛЕНО - добавлен username (индекс 1)
+    mock_worksheet.row_values.return_value = ["12345", "@testuser", "digital"]  # Нет промокода
     
     # Act
     result = await google_sheets_service.find_winner(12345, "test_code")
@@ -385,27 +388,27 @@ async def test_property_8_round_trip_delivery_data(row_id, last_name, first_name
             # Assert: проверяем успешность сохранения
             assert result is True, "Сохранение должно быть успешным"
             
-            # Проверяем, что данные были сохранены в правильные ячейки (E-M)
-            assert f'E{row_id}' in saved_data, "Фамилия должна быть сохранена в столбец E"
-            assert f'F{row_id}' in saved_data, "Имя должно быть сохранено в столбец F"
-            assert f'G{row_id}' in saved_data, "Отчество должно быть сохранено в столбец G"
-            assert f'H{row_id}' in saved_data, "Город должен быть сохранён в столбец H"
-            assert f'I{row_id}' in saved_data, "Улица должна быть сохранена в столбец I"
-            assert f'J{row_id}' in saved_data, "Дом должен быть сохранён в столбец J"
-            assert f'K{row_id}' in saved_data, "Квартира должна быть сохранена в столбец K"
-            assert f'L{row_id}' in saved_data, "Телефон должен быть сохранён в столбец L"
-            assert f'M{row_id}' in saved_data, "Комментарий должен быть сохранён в столбец M"
+            # Проверяем, что данные были сохранены в правильные ячейки (F-N) - ОБНОВЛЕНО после добавления Username
+            assert f'F{row_id}' in saved_data, "Фамилия должна быть сохранена в столбец F"
+            assert f'G{row_id}' in saved_data, "Имя должно быть сохранено в столбец G"
+            assert f'H{row_id}' in saved_data, "Отчество должно быть сохранено в столбец H"
+            assert f'I{row_id}' in saved_data, "Город должен быть сохранён в столбец I"
+            assert f'J{row_id}' in saved_data, "Улица должна быть сохранена в столбец J"
+            assert f'K{row_id}' in saved_data, "Дом должен быть сохранён в столбец K"
+            assert f'L{row_id}' in saved_data, "Квартира должна быть сохранена в столбец L"
+            assert f'M{row_id}' in saved_data, "Телефон должен быть сохранён в столбец M"
+            assert f'N{row_id}' in saved_data, "Комментарий должен быть сохранён в столбец N"
             
             # Round-trip проверка: сохранённые данные должны совпадать с исходными
-            assert saved_data[f'E{row_id}'] == last_name, "Фамилия должна совпадать после сохранения"
-            assert saved_data[f'F{row_id}'] == first_name, "Имя должно совпадать после сохранения"
-            assert saved_data[f'G{row_id}'] == patronymic, "Отчество должно совпадать после сохранения"
-            assert saved_data[f'H{row_id}'] == city, "Город должен совпадать после сохранения"
-            assert saved_data[f'I{row_id}'] == street, "Улица должна совпадать после сохранения"
-            assert saved_data[f'J{row_id}'] == house, "Дом должен совпадать после сохранения"
-            assert saved_data[f'K{row_id}'] == apartment, "Квартира должна совпадать после сохранения"
-            assert saved_data[f'L{row_id}'] == phone, "Телефон должен совпадать после сохранения"
-            assert saved_data[f'M{row_id}'] == comment, "Комментарий должен совпадать после сохранения"
+            assert saved_data[f'F{row_id}'] == last_name, "Фамилия должна совпадать после сохранения"
+            assert saved_data[f'G{row_id}'] == first_name, "Имя должно совпадать после сохранения"
+            assert saved_data[f'H{row_id}'] == patronymic, "Отчество должно совпадать после сохранения"
+            assert saved_data[f'I{row_id}'] == city, "Город должен совпадать после сохранения"
+            assert saved_data[f'J{row_id}'] == street, "Улица должна совпадать после сохранения"
+            assert saved_data[f'K{row_id}'] == house, "Дом должен совпадать после сохранения"
+            assert saved_data[f'L{row_id}'] == apartment, "Квартира должна совпадать после сохранения"
+            assert saved_data[f'M{row_id}'] == phone, "Телефон должен совпадать после сохранения"
+            assert saved_data[f'N{row_id}'] == comment, "Комментарий должен совпадать после сохранения"
             
             # Проверяем, что batch_update был вызван один раз
             mock_worksheet.batch_update.assert_called_once()

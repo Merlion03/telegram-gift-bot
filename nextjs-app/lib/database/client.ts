@@ -156,7 +156,7 @@ export class DatabaseClient {
       const countResult = await this.pool.query(countQuery, queryParams);
       const total = parseInt(countResult.rows[0].total, 10);
 
-      // Получаем сессии с подсчётом непрочитанных сообщений
+      // Получаем сессии с подсчётом непрочитанных сообщений и информацией о пользователях
       // Сортировка по времени последнего сообщения (Requirements 3.1)
       const sessionsQuery = `
         SELECT 
@@ -166,13 +166,16 @@ export class DatabaseClient {
           s.session_type,
           s.created_at,
           s.closed_at,
+          s.first_name,
+          s.last_name,
+          s.username,
           COUNT(CASE WHEN m.message_type = 'from_user' AND m.delivered = false THEN 1 END) as unread_count,
           MAX(m.message_text) as last_message,
           MAX(m.created_at) as last_message_at
         FROM support_sessions s
         LEFT JOIN support_messages m ON s.id = m.session_id
         ${whereClause}
-        GROUP BY s.id, s.telegram_id, s.status, s.session_type, s.created_at, s.closed_at
+        GROUP BY s.id, s.telegram_id, s.status, s.session_type, s.created_at, s.closed_at, s.first_name, s.last_name, s.username
         ORDER BY COALESCE(MAX(m.created_at), s.created_at) DESC
         LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
       `;
@@ -192,6 +195,11 @@ export class DatabaseClient {
         unread_count: parseInt(row.unread_count, 10),
         last_message: row.last_message || undefined,
         last_message_at: row.last_message_at ? row.last_message_at.toISOString() : undefined,
+        // Информация о пользователе
+        user_name: row.first_name && row.last_name 
+          ? `${row.first_name} ${row.last_name}` 
+          : row.first_name || undefined,
+        user_username: row.username || undefined,
       }));
 
       const has_more = offset + sessions.length < total;

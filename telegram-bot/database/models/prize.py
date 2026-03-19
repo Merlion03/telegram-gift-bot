@@ -26,6 +26,9 @@ class Prize(Base):
     # Telegram ID пользователя
     telegram_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     
+    # Username пользователя в Telegram (например @username)
+    username: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    
     # Тип приза: 'digital' или 'physical'
     prize_type: Mapped[str] = mapped_column(String(20), nullable=False)
     

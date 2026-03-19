@@ -41,12 +41,21 @@ class SupportRepository(BaseRepository):
     - Получения активных сессий
     """
     
-    async def create_session(self, telegram_id: int) -> int:
+    async def create_session(
+        self, 
+        telegram_id: int, 
+        first_name: Optional[str] = None,
+        last_name: Optional[str] = None,
+        username: Optional[str] = None
+    ) -> int:
         """
-        Создаёт новую сессию поддержки
+        Создаёт новую сессию поддержки с информацией о пользователе
         
         Args:
             telegram_id: Telegram ID пользователя
+            first_name: Имя пользователя из Telegram (опционально)
+            last_name: Фамилия пользователя из Telegram (опционально)
+            username: Username пользователя из Telegram (опционально)
         
         Returns:
             int: ID созданной сессии
@@ -57,7 +66,10 @@ class SupportRepository(BaseRepository):
         try:
             new_session = SupportSession(
                 telegram_id=telegram_id,
-                status='active'
+                status='active',
+                first_name=first_name,
+                last_name=last_name,
+                username=username
             )
             
             async with self._get_session_context() as session:
@@ -69,7 +81,8 @@ class SupportRepository(BaseRepository):
             logger.info(
                 "support_session_created",
                 session_id=session_id,
-                telegram_id=telegram_id
+                telegram_id=telegram_id,
+                user_name=f"{first_name or ''} {last_name or ''}".strip() or None
             )
             return session_id
             

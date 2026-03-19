@@ -22,6 +22,11 @@ export interface SupportSession {
   unread_count?: number; // Количество непрочитанных сообщений
   last_message?: string; // Текст последнего сообщения
   last_message_at?: string; // Время последнего сообщения (ISO 8601 timestamp)
+  // Дополнительные поля для UI (опциональные)
+  user_avatar?: string; // URL аватара пользователя
+  user_name?: string; // Имя пользователя
+  user_username?: string; // Username пользователя в Telegram
+  user_online?: boolean; // Статус онлайн пользователя
 }
 
 // Сообщение поддержки

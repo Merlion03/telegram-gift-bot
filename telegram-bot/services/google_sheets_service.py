@@ -172,22 +172,24 @@ class GoogleSheetsService:
                 return None
             
             # Формируем результат
-            # Структура столбцов:
+            # Структура столбцов (ОБНОВЛЕНО - добавлен столбец Username):
             # A (индекс 0): telegram_id
-            # B (индекс 1): prize_type (digital/physical)
-            # C (индекс 2): promo_code (для digital)
-            # D (индекс 3): instructions (для digital)
-            # E-M (индексы 4-12): данные доставки (для physical)
+            # B (индекс 1): username (НОВЫЙ СТОЛБЕЦ)
+            # C (индекс 2): prize_type (digital/physical) - СДВИНУТО с индекса 1
+            # D (индекс 3): promo_code (для digital) - СДВИНУТО с индекса 2
+            # E (индекс 4): instructions (для digital) - СДВИНУТО с индекса 3
+            # F-N (индексы 5-13): данные доставки (для physical) - СДВИНУТО с индексов 4-12
             result = {
                 'row_id': cell.row,
                 'telegram_id': int(row_values[0]),
-                'prize_type': row_values[1] if len(row_values) > 1 else None,  # Колонка B (индекс 1)
+                'username': row_values[1] if len(row_values) > 1 else None,  # Колонка B (индекс 1) - НОВОЕ ПОЛЕ
+                'prize_type': row_values[2] if len(row_values) > 2 else None,  # Колонка C (индекс 2) - СДВИНУТО
             }
             
             # Добавляем данные для цифрового приза
             if result['prize_type'] == 'digital':
-                result['promo_code'] = row_values[2] if len(row_values) > 2 else None  # Колонка C (индекс 2)
-                result['instructions'] = row_values[3] if len(row_values) > 3 else None  # Колонка D (индекс 3)
+                result['promo_code'] = row_values[3] if len(row_values) > 3 else None  # Колонка D (индекс 3) - СДВИНУТО
+                result['instructions'] = row_values[4] if len(row_values) > 4 else None  # Колонка E (индекс 4) - СДВИНУТО
             
             logger.info(
                 "winner_found",
@@ -297,70 +299,70 @@ class GoogleSheetsService:
                 worksheet = sheet.get_worksheet(0)  # Первый worksheet
             
             # Обновляем ячейки с данными доставки
-            # Новая структура столбцов для физических призов:
-            # E (индекс 4): last_name
-            # F (индекс 5): first_name
-            # G (индекс 6): patronymic
-            # H (индекс 7): city
-            # I (индекс 8): street
-            # J (индекс 9): house
-            # K (индекс 10): apartment
-            # L (индекс 11): phone
-            # M (индекс 12): comment
-            # N (индекс 13): claimed_at
+            # Новая структура столбцов для физических призов (после добавления Username в B):
+            # F (индекс 5): last_name (сдвинуто с E)
+            # G (индекс 6): first_name (сдвинуто с F)
+            # H (индекс 7): patronymic (сдвинуто с G)
+            # I (индекс 8): city (сдвинуто с H)
+            # J (индекс 9): street (сдвинуто с I)
+            # K (индекс 10): house (сдвинуто с J)
+            # L (индекс 11): apartment (сдвинуто с K)
+            # M (индекс 12): phone (сдвинуто с L)
+            # N (индекс 13): comment (сдвинуто с M)
+            # O (индекс 14): claimed_at (сдвинуто с N)
             updates = []
             
             # Данные доставки
             if 'last_name' in delivery_data:
                 updates.append({
-                    'range': f'E{row_id}',
+                    'range': f'F{row_id}',
                     'values': [[delivery_data.get('last_name', '')]]
                 })
             if 'first_name' in delivery_data:
                 updates.append({
-                    'range': f'F{row_id}',
+                    'range': f'G{row_id}',
                     'values': [[delivery_data.get('first_name', '')]]
                 })
             if 'patronymic' in delivery_data:
                 updates.append({
-                    'range': f'G{row_id}',
+                    'range': f'H{row_id}',
                     'values': [[delivery_data.get('patronymic', '')]]
                 })
             if 'city' in delivery_data:
                 updates.append({
-                    'range': f'H{row_id}',
+                    'range': f'I{row_id}',
                     'values': [[delivery_data.get('city', '')]]
                 })
             if 'street' in delivery_data:
                 updates.append({
-                    'range': f'I{row_id}',
+                    'range': f'J{row_id}',
                     'values': [[delivery_data.get('street', '')]]
                 })
             if 'house' in delivery_data:
                 updates.append({
-                    'range': f'J{row_id}',
+                    'range': f'K{row_id}',
                     'values': [[delivery_data.get('house', '')]]
                 })
             if 'apartment' in delivery_data:
                 updates.append({
-                    'range': f'K{row_id}',
+                    'range': f'L{row_id}',
                     'values': [[delivery_data.get('apartment', '')]]
                 })
             if 'phone' in delivery_data:
                 updates.append({
-                    'range': f'L{row_id}',
+                    'range': f'M{row_id}',
                     'values': [[delivery_data.get('phone', '')]]
                 })
             if 'comment' in delivery_data:
                 updates.append({
-                    'range': f'M{row_id}',
+                    'range': f'N{row_id}',
                     'values': [[delivery_data.get('comment', '')]]
                 })
             
             # Время получения приза
             if 'claimed_at' in delivery_data:
                 updates.append({
-                    'range': f'N{row_id}',
+                    'range': f'O{row_id}',
                     'values': [[delivery_data.get('claimed_at', '')]]
                 })
             
