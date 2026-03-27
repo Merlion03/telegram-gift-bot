@@ -5,6 +5,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { ErrorMessage, getReadableErrorMessage } from '@/components/common/ErrorMessage';
+import { useConfirmationModal } from '@/hooks/webapp/useConfirmationModal';
+import { ConfirmationModal } from '@/components/webapp/ConfirmationModal';
 
 // Схема валидации формы
 const formSchema = z.object({
@@ -84,6 +86,15 @@ interface DeliveryFormProps {
 export function DeliveryForm({ prizeId }: DeliveryFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isFormSubmitted, setIsFormSubmitted] = useState(false); // Состояние для блокировки формы после успешной отправки
+  const [successMessage, setSuccessMessage] = useState<string | null>(null); // Состояние для отображения сообщения об успехе
+  
+  const {
+    isOpen,
+    deliveryData,
+    openModal,
+    closeModal,
+  } = useConfirmationModal();
   
   const {
     register,
@@ -94,6 +105,14 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
   });
   
   const onSubmit = async (data: FormData) => {
+    // Перехватываем отправку формы и открываем модальное окно вместо немедленной отправки
+    // Requirement 1.1, 1.2: Предотвращаем немедленную отправку и открываем модальное окно
+    console.log('onSubmit вызван, открываем модальное окно', data);
+    openModal(data);
+    console.log('openModal вызван');
+  };
+  
+  const handleConfirmSubmit = async () => {
     setIsSubmitting(true);
     setError(null);
     
@@ -115,7 +134,7 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          ...data,
+          ...deliveryData,
           prize_id: prizeId,
           initData: initDataRaw,
         }),
@@ -134,13 +153,20 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
         throw new Error(errorMessage);
       }
       
-      // Успех - показываем уведомление и закрываем WebApp
+      // Requirement 3.3, 3.4, 3.5: Закрыть модальное окно, показать Success_Message, заблокировать форму
+      closeModal();
+      setSuccessMessage('Данные были отправлены. Ожидайте');
+      setIsFormSubmitted(true);
+      
+      // Показываем уведомление и закрываем WebApp
       WebApp.showAlert('Данные успешно сохранены!', () => {
         WebApp.close();
       });
       
     } catch (err) {
+      // Requirement 5.1, 5.2, 5.3, 5.4: Закрыть модальное окно, показать ошибку, сохранить данные, разрешить повторную отправку
       const errorMessage = getReadableErrorMessage(err);
+      closeModal();
       setError(errorMessage);
       console.error('Ошибка отправки формы:', err);
     } finally {
@@ -149,13 +175,28 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
   };
   
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 p-4 max-w-md mx-auto">
-      <style jsx>{`
-        input::placeholder,
-        textarea::placeholder {
-          color: var(--tg-theme-hint-color, #8e8e93);
-        }
-      `}</style>
+    <>
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 p-4 max-w-md mx-auto">
+        <style jsx>{`
+          input::placeholder,
+          textarea::placeholder {
+            color: var(--tg-theme-hint-color, #8e8e93);
+          }
+        `}</style>
+        
+        {/* Requirement 3.4: Отображение Success_Message после успешной отправки */}
+        {successMessage && (
+          <div 
+            className="p-4 rounded-md border"
+            style={{
+              backgroundColor: 'var(--tg-theme-bg-color, #ffffff)',
+              color: 'var(--tg-theme-text-color, #000000)',
+              borderColor: 'var(--tg-theme-button-color, #3390ec)',
+            }}
+          >
+            <p className="text-center font-medium">{successMessage}</p>
+          </div>
+        )}
       
       {/* Секция: Получатель */}
       <div className="space-y-3">
@@ -188,7 +229,7 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
             color: 'var(--tg-theme-text-color, #000000)',
             borderColor: 'var(--tg-theme-hint-color, #999999)'
           }}
-          disabled={isSubmitting}
+          disabled={isSubmitting || isFormSubmitted}
         />
         {errors.last_name && (
           <p className="mt-1 text-sm text-red-600">{errors.last_name.message}</p>
@@ -214,7 +255,7 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
             color: 'var(--tg-theme-text-color, #000000)',
             borderColor: 'var(--tg-theme-hint-color, #999999)'
           }}
-          disabled={isSubmitting}
+          disabled={isSubmitting || isFormSubmitted}
         />
         {errors.first_name && (
           <p className="mt-1 text-sm text-red-600">{errors.first_name.message}</p>
@@ -240,7 +281,7 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
             color: 'var(--tg-theme-text-color, #000000)',
             borderColor: 'var(--tg-theme-hint-color, #999999)'
           }}
-          disabled={isSubmitting}
+          disabled={isSubmitting || isFormSubmitted}
         />
         {errors.patronymic && (
           <p className="mt-1 text-sm text-red-600">{errors.patronymic.message}</p>
@@ -284,7 +325,7 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
             color: 'var(--tg-theme-text-color, #000000)',
             borderColor: 'var(--tg-theme-hint-color, #999999)'
           }}
-          disabled={isSubmitting}
+          disabled={isSubmitting || isFormSubmitted}
         />
         {errors.country && (
           <p id="country-error" className="mt-1 text-sm text-red-600">{errors.country.message}</p>
@@ -315,7 +356,7 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
             color: 'var(--tg-theme-text-color, #000000)',
             borderColor: 'var(--tg-theme-hint-color, #999999)'
           }}
-          disabled={isSubmitting}
+          disabled={isSubmitting || isFormSubmitted}
         />
         {errors.postal_code && (
           <p id="postal_code-error" className="mt-1 text-sm text-red-600">{errors.postal_code.message}</p>
@@ -342,7 +383,7 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
             color: 'var(--tg-theme-text-color, #000000)',
             borderColor: 'var(--tg-theme-hint-color, #999999)'
           }}
-          disabled={isSubmitting}
+          disabled={isSubmitting || isFormSubmitted}
         />
         {errors.city && (
           <p className="mt-1 text-sm text-red-600">{errors.city.message}</p>
@@ -368,7 +409,7 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
             color: 'var(--tg-theme-text-color, #000000)',
             borderColor: 'var(--tg-theme-hint-color, #999999)'
           }}
-          disabled={isSubmitting}
+          disabled={isSubmitting || isFormSubmitted}
         />
         {errors.street && (
           <p className="mt-1 text-sm text-red-600">{errors.street.message}</p>
@@ -395,7 +436,7 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
               color: 'var(--tg-theme-text-color, #000000)',
               borderColor: 'var(--tg-theme-hint-color, #999999)'
             }}
-            disabled={isSubmitting}
+            disabled={isSubmitting || isFormSubmitted}
           />
           {errors.house && (
             <p className="mt-1 text-sm text-red-600">{errors.house.message}</p>
@@ -421,7 +462,7 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
               color: 'var(--tg-theme-text-color, #000000)',
               borderColor: 'var(--tg-theme-hint-color, #999999)'
             }}
-            disabled={isSubmitting}
+            disabled={isSubmitting || isFormSubmitted}
           />
           {errors.apartment && (
             <p className="mt-1 text-sm text-red-600">{errors.apartment.message}</p>
@@ -469,7 +510,7 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
             color: 'var(--tg-theme-text-color, #000000)',
             borderColor: 'var(--tg-theme-hint-color, #999999)'
           }}
-          disabled={isSubmitting}
+          disabled={isSubmitting || isFormSubmitted}
         />
         {errors.phone && (
           <p className="mt-1 text-sm text-red-600">{errors.phone.message}</p>
@@ -495,7 +536,7 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
             color: 'var(--tg-theme-text-color, #000000)',
             borderColor: 'var(--tg-theme-hint-color, #999999)'
           }}
-          disabled={isSubmitting}
+          disabled={isSubmitting || isFormSubmitted}
         />
         {errors.comment && (
           <p className="mt-1 text-sm text-red-600">{errors.comment.message}</p>
@@ -517,11 +558,23 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
       
       <button
         type="submit"
-        disabled={isSubmitting}
+        disabled={isSubmitting || isFormSubmitted}
         className="w-full rounded-md bg-blue-600 px-4 py-3 text-white font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
         {isSubmitting ? 'Отправка...' : 'Отправить данные'}
       </button>
     </form>
+    
+    {/* Requirement 2.1, 3.1, 4.1, 6.1, 6.2, 6.4: Модальное окно подтверждения */}
+    {isOpen && deliveryData && (
+      <ConfirmationModal
+        isOpen={isOpen}
+        onClose={closeModal}
+        onConfirm={handleConfirmSubmit}
+        deliveryData={deliveryData}
+        isSubmitting={isSubmitting}
+      />
+    )}
+    </>
   );
 }
