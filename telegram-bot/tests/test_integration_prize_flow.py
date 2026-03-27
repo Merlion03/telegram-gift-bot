@@ -37,8 +37,12 @@ def create_mock_worksheet_with_digital_prize(telegram_id: int):
     """
     Создаёт mock worksheet с цифровым призом
     
-    Структура строки:
-    [telegram_id, 'digital', 'PROMO123', 'Используйте промокод на сайте']
+    Структура строки согласно GoogleSheetsService._find_winner_sync:
+    A (индекс 0): telegram_id
+    B (индекс 1): username
+    C (индекс 2): prize_type (digital/physical)
+    D (индекс 3): promo_code (для digital)
+    E (индекс 4): instructions (для digital)
     """
     mock_worksheet = MagicMock()
     
@@ -48,11 +52,23 @@ def create_mock_worksheet_with_digital_prize(telegram_id: int):
     mock_worksheet.find.return_value = mock_cell
     
     # Mock для row_values - возвращает данные строки
+    # ВАЖНО: Индексы должны соответствовать реальной структуре таблицы
     mock_worksheet.row_values.return_value = [
-        str(telegram_id),
-        'digital',
-        'PROMO123',
-        'Используйте промокод на сайте example.com'
+        str(telegram_id),      # Столбец A (индекс 0): telegram_id
+        'test_user',           # Столбец B (индекс 1): username
+        'digital',             # Столбец C (индекс 2): prize_type
+        'PROMO123',            # Столбец D (индекс 3): promo_code
+        'Используйте промокод на сайте example.com',  # Столбец E (индекс 4): instructions
+        '',                    # Столбец F (индекс 5): last_name
+        '',                    # Столбец G (индекс 6): first_name
+        '',                    # Столбец H (индекс 7): patronymic
+        '',                    # Столбец I (индекс 8): city
+        '',                    # Столбец J (индекс 9): street
+        '',                    # Столбец K (индекс 10): house
+        '',                    # Столбец L (индекс 11): apartment
+        '',                    # Столбец M (индекс 12): phone
+        '',                    # Столбец N (индекс 13): comment
+        ''                     # Столбец O (индекс 14): claimed_at
     ]
     
     # Mock для update_cell (для отметки claimed_at)
@@ -65,8 +81,10 @@ def create_mock_worksheet_with_physical_prize(telegram_id: int):
     """
     Создаёт mock worksheet с физическим призом
     
-    Структура строки:
-    [telegram_id, 'physical']
+    Структура строки согласно GoogleSheetsService._find_winner_sync:
+    A (индекс 0): telegram_id
+    B (индекс 1): username
+    C (индекс 2): prize_type (physical)
     """
     mock_worksheet = MagicMock()
     
@@ -77,8 +95,9 @@ def create_mock_worksheet_with_physical_prize(telegram_id: int):
     
     # Mock для row_values
     mock_worksheet.row_values.return_value = [
-        str(telegram_id),
-        'physical'
+        str(telegram_id),      # Столбец A (индекс 0): telegram_id
+        'test_user',           # Столбец B (индекс 1): username
+        'physical'             # Столбец C (индекс 2): prize_type
     ]
     
     # Mock для update_cell (для отметки claimed_at)
@@ -115,7 +134,7 @@ async def test_integration_digital_prize_full_flow():
     2. Бот проверяет Telegram ID в Google Sheets
     3. Находит цифровой приз с промокодом
     4. Отправляет пользователю сообщение с промокодом и инструкцией
-    5. Отмечает приз как полученный (claimed_at)
+    5. Отмечает приз как полученный (claimed_at) через очередь обновлений
     
     Validates: Requirements 1.1, 1.2, 2.1, 2.2
     """
@@ -139,7 +158,14 @@ async def test_integration_digital_prize_full_flow():
                 spreadsheet_id="fake_spreadsheet_id"
             )
             
-            prize_service = PrizeService(sheets_service)
+            # Mock для UpdateQueueService
+            mock_update_queue = AsyncMock()
+            mock_update_queue.add_prize_claimed_update = AsyncMock()
+            
+            prize_service = PrizeService(
+                sheets_service,
+                update_queue_service=mock_update_queue
+            )
             prize_handler = PrizeHandler(
                 prize_service,
                 webapp_url="https://test-webapp.example.com"
@@ -159,11 +185,12 @@ async def test_integration_digital_prize_full_flow():
         # 2. Проверяем, что были получены данные строки
         mock_worksheet.row_values.assert_called_once_with(2)
         
-        # 3. Проверяем, что приз был отмечен как полученный (столбец N = 14)
-        mock_worksheet.update_cell.assert_called_once()
-        call_args = mock_worksheet.update_cell.call_args[0]
-        assert call_args[0] == 2, "Должна обновляться строка 2"
-        assert call_args[1] == 14, "Должен обновляться столбец N (claimed_at)"
+        # 3. Проверяем, что приз был добавлен в очередь обновлений
+        mock_update_queue.add_prize_claimed_update.assert_called_once()
+        call_args = mock_update_queue.add_prize_claimed_update.call_args
+        assert call_args[1]['telegram_id'] == telegram_id
+        assert call_args[1]['code_word'] == code_word
+        assert call_args[1]['row_id'] == 2
         
         # 4. Проверяем, что пользователю было отправлено сообщение
         assert mock_message.answer.called, "Пользователю должно быть отправлено сообщение"
@@ -285,39 +312,44 @@ async def test_integration_physical_prize_with_delivery_data_full_flow():
         
         # 8. Проверяем структуру обновлений
         updates = mock_worksheet.batch_update.call_args[0][0]
-        assert len(updates) == 9, "Должно быть 9 обновлений (все поля доставки E-M)"
+        assert len(updates) == 9, "Должно быть 9 обновлений (все поля доставки F-N)"
         
-        # Проверяем, что обновляются правильные ячейки (E-M)
+        # Проверяем, что обновляются правильные ячейки (F-N)
+        # Новая структура после добавления столбца Username в B:
+        # F: last_name, G: first_name, H: patronymic, I: city, J: street
+        # K: house, L: apartment, M: phone, N: comment
         ranges = [update['range'] for update in updates]
-        assert f'E{row_id}' in ranges, "Должна обновляться ячейка E (last_name)"
-        assert f'F{row_id}' in ranges, "Должна обновляться ячейка F (first_name)"
-        assert f'G{row_id}' in ranges, "Должна обновляться ячейка G (patronymic)"
-        assert f'H{row_id}' in ranges, "Должна обновляться ячейка H (city)"
-        assert f'I{row_id}' in ranges, "Должна обновляться ячейка I (street)"
-        assert f'J{row_id}' in ranges, "Должна обновляться ячейка J (house)"
-        assert f'K{row_id}' in ranges, "Должна обновляться ячейка K (apartment)"
-        assert f'L{row_id}' in ranges, "Должна обновляться ячейка L (phone)"
-        assert f'M{row_id}' in ranges, "Должна обновляться ячейка M (comment)"
+        assert f'F{row_id}' in ranges, "Должна обновляться ячейка F (last_name)"
+        assert f'G{row_id}' in ranges, "Должна обновляться ячейка G (first_name)"
+        assert f'H{row_id}' in ranges, "Должна обновляться ячейка H (patronymic)"
+        assert f'I{row_id}' in ranges, "Должна обновляться ячейка I (city)"
+        assert f'J{row_id}' in ranges, "Должна обновляться ячейка J (street)"
+        assert f'K{row_id}' in ranges, "Должна обновляться ячейка K (house)"
+        assert f'L{row_id}' in ranges, "Должна обновляться ячейка L (apartment)"
+        assert f'M{row_id}' in ranges, "Должна обновляться ячейка M (phone)"
+        assert f'N{row_id}' in ranges, "Должна обновляться ячейка N (comment)"
         
         # Проверяем содержимое обновлений
+        # Новая структура: F=last_name, G=first_name, H=patronymic, I=city, J=street
+        # K=house, L=apartment, M=phone, N=comment
         for update in updates:
-            if update['range'] == f'E{row_id}':
-                assert update['values'][0][0] == 'Иванов'
-            elif update['range'] == f'F{row_id}':
-                assert update['values'][0][0] == 'Иван'
+            if update['range'] == f'F{row_id}':
+                assert update['values'][0][0] == 'Иванов', "F должна содержать last_name"
             elif update['range'] == f'G{row_id}':
-                assert update['values'][0][0] == 'Иванович'
+                assert update['values'][0][0] == 'Иван', "G должна содержать first_name"
             elif update['range'] == f'H{row_id}':
-                assert update['values'][0][0] == 'Москва'
+                assert update['values'][0][0] == 'Иванович', "H должна содержать patronymic"
             elif update['range'] == f'I{row_id}':
-                assert update['values'][0][0] == 'ул. Тестовая'
+                assert update['values'][0][0] == 'Москва', "I должна содержать city"
             elif update['range'] == f'J{row_id}':
-                assert update['values'][0][0] == '1'
+                assert update['values'][0][0] == 'ул. Тестовая', "J должна содержать street"
             elif update['range'] == f'K{row_id}':
-                assert update['values'][0][0] == '10'
+                assert update['values'][0][0] == '1', "K должна содержать house"
             elif update['range'] == f'L{row_id}':
-                assert update['values'][0][0] == '+79991234567'
+                assert update['values'][0][0] == '10', "L должна содержать apartment"
             elif update['range'] == f'M{row_id}':
+                assert update['values'][0][0] == '+79991234567', "M должна содержать phone"
+            elif update['range'] == f'N{row_id}':
                 assert update['values'][0][0] == 'Доставка после 18:00'
 
 

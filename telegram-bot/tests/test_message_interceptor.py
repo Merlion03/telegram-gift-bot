@@ -16,6 +16,9 @@ def create_mock_user(telegram_id: int) -> User:
     """Создаёт mock объект User"""
     user = MagicMock(spec=User)
     user.id = telegram_id
+    user.first_name = "TestUser"
+    user.last_name = "TestLastName"
+    user.username = "test_username"
     return user
 
 
@@ -107,7 +110,10 @@ async def test_intercept_text_message():
     # Assert
     session_manager.get_or_create_session.assert_called_once_with(
         telegram_id=telegram_id,
-        session_type='chat'
+        session_type='chat',
+        first_name='TestUser',
+        last_name='TestLastName',
+        username='test_username'
     )
     session_manager.save_user_message.assert_called_once_with(
         session_id=expected_session_id,

@@ -14,11 +14,12 @@ from aiogram import Bot, Dispatcher
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import default_state
-from aiogram.types import Message
+from aiogram.types import Message, CallbackQuery
+from aiogram import F
 
 from config import get_config
 from fsm.storage import create_fsm_storage
-from fsm.states import SupportStates
+from fsm.states import SupportStates, PrizeFlowStates
 from utils.logging_config import get_logger, configure_logging
 
 # Импорт handlers
@@ -26,6 +27,7 @@ from handlers.common_handler import CommonHandler
 from handlers.prize_handler import PrizeHandler
 from handlers.support_handler import SupportHandler
 from handlers.delivery_handler import DeliveryHandler
+from handlers.prize_flow_handler import PrizeFlowHandler
 
 # Импорт services
 from services.google_sheets_service import GoogleSheetsService
@@ -150,14 +152,22 @@ class BotApplication:
         delivery_handler = DeliveryHandler(
             sheets_service=google_sheets_service,
             prize_repository=prize_repository,
+            prize_service=prize_service,
             session_manager=session_manager
+        )
+        
+        # Создание PrizeFlowHandler для управления процессом получения приза
+        prize_flow_handler = PrizeFlowHandler(
+            prize_service=prize_service,
+            session_manager=session_manager,
+            webapp_url=self.config.app.webapp_url
         )
         
         # Регистрация middleware (должна быть ДО регистрации handlers)
         self._register_middleware(session_manager)
         
         # Регистрация handlers
-        self._register_handlers(common_handler, prize_handler, support_handler, delivery_handler)
+        self._register_handlers(common_handler, prize_handler, support_handler, delivery_handler, prize_flow_handler)
         
         # Настройка обработчиков ошибок
         setup_error_handlers(self.dp)
@@ -188,7 +198,8 @@ class BotApplication:
         common_handler: CommonHandler,
         prize_handler: PrizeHandler,
         support_handler: SupportHandler,
-        delivery_handler: DeliveryHandler
+        delivery_handler: DeliveryHandler,
+        prize_flow_handler: PrizeFlowHandler
     ):
         """
         Регистрирует все handlers в диспетчере
@@ -198,6 +209,7 @@ class BotApplication:
             prize_handler: Обработчик призов
             support_handler: Обработчик поддержки
             delivery_handler: Обработчик данных доставки из WebApp
+            prize_flow_handler: Обработчик процесса получения приза
         """
         # Регистрация обработчиков общих команд
         # Обёртки для передачи session_id из middleware context
@@ -217,6 +229,51 @@ class BotApplication:
         self.dp.message.register(
             handle_help_wrapper,
             Command(commands=['help'])
+        )
+        
+        # Регистрация обработчиков Prize Flow
+        # Обработчик кнопки "🎁 Получить приз"
+        async def start_prize_flow_wrapper(message: Message, state: FSMContext, **kwargs):
+            session_id = kwargs.get('session_id')
+            await prize_flow_handler.start_prize_flow(message, state, session_id)
+        
+        self.dp.message.register(
+            start_prize_flow_wrapper,
+            lambda message: message.text == "🎁 Получить приз",
+            StateFilter(default_state)
+        )
+        
+        # Обработчик состояния waiting_for_consent
+        async def handle_consent_wrapper(message: Message, state: FSMContext, **kwargs):
+            session_id = kwargs.get('session_id')
+            await prize_flow_handler.handle_consent_response(message, state, session_id)
+        
+        self.dp.message.register(
+            handle_consent_wrapper,
+            StateFilter(PrizeFlowStates.waiting_for_consent)
+        )
+        
+        # Обработчик состояния waiting_for_code_word
+        async def handle_code_word_flow_wrapper(message: Message, state: FSMContext, **kwargs):
+            session_id = kwargs.get('session_id')
+            await prize_flow_handler.handle_code_word_input(message, state, session_id)
+        
+        self.dp.message.register(
+            handle_code_word_flow_wrapper,
+            StateFilter(PrizeFlowStates.waiting_for_code_word)
+        )
+        
+        # Обработчик состояния waiting_for_delivery_data (WebApp данные)
+        async def handle_delivery_flow_wrapper(message: Message, state: FSMContext, **kwargs):
+            session_id = kwargs.get('session_id')
+            await delivery_handler.handle_delivery_data(message, session_id)
+            # После сохранения данных сбрасываем состояние
+            await state.clear()
+        
+        self.dp.message.register(
+            handle_delivery_flow_wrapper,
+            lambda message: message.web_app_data is not None,
+            StateFilter(PrizeFlowStates.waiting_for_delivery_data)
         )
         
         # Регистрация обработчика кнопки "Позвать человека"
@@ -256,8 +313,8 @@ class BotApplication:
             StateFilter(default_state)
         )
         
-        # Регистрация обработчика данных доставки из WebApp
-        # Срабатывает когда пользователь отправляет данные из WebApp
+        # Регистрация обработчика данных доставки из WebApp (только в default_state)
+        # Срабатывает когда пользователь отправляет данные из WebApp вне Prize Flow
         async def handle_delivery_data_wrapper(message: Message, **kwargs):
             """Обёртка для обработки данных доставки из WebApp"""
             session_id = kwargs.get('session_id')
@@ -267,6 +324,40 @@ class BotApplication:
             handle_delivery_data_wrapper,
             lambda message: message.web_app_data is not None,
             StateFilter(default_state)
+        )
+        
+        # Регистрация callback обработчиков
+        # Callback для кнопки "🎁 Получить приз"
+        async def get_prize_callback_wrapper(callback: CallbackQuery, state: FSMContext, **kwargs):
+            session_id = kwargs.get('session_id')
+            await prize_flow_handler.handle_get_prize_callback(callback, state, session_id)
+        
+        self.dp.callback_query.register(
+            get_prize_callback_wrapper,
+            F.data == "get_prize",
+            StateFilter(default_state)
+        )
+        
+        # Callback для кнопок согласия GDPR
+        async def consent_callback_wrapper(callback: CallbackQuery, state: FSMContext, **kwargs):
+            session_id = kwargs.get('session_id')
+            await prize_flow_handler.handle_consent_callback(callback, state, session_id)
+        
+        self.dp.callback_query.register(
+            consent_callback_wrapper,
+            F.data.in_(["consent_agree", "consent_back"]),
+            StateFilter(PrizeFlowStates.waiting_for_consent)
+        )
+        
+        # Callback для кнопки "Завершить диалог" в поддержке
+        async def support_end_callback_wrapper(callback: CallbackQuery, state: FSMContext, **kwargs):
+            session_id = kwargs.get('session_id')
+            await support_handler.handle_support_end_callback(callback, state)
+        
+        self.dp.callback_query.register(
+            support_end_callback_wrapper,
+            F.data == "support_end",
+            StateFilter(SupportStates.in_support)
         )
         
         self.logger.info("handlers_registered")

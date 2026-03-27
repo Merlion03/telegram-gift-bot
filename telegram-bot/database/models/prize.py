@@ -17,6 +17,9 @@ class Prize(Base):
     
     Хранит информацию о призах для быстрого доступа без обращения к Google Sheets API.
     Синхронизируется с Google Sheets через Sync Service каждые 60 секунд.
+    
+    Поля:
+        gdpr_consent_date: Дата и время согласия пользователя на обработку персональных данных (GDPR)
     """
     __tablename__ = 'prizes'
     
@@ -65,6 +68,13 @@ class Prize(Base):
         onupdate=lambda: datetime.now(timezone.utc)
     )
     
+    # Дата согласия на обработку персональных данных (GDPR)
+    gdpr_consent_date: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Дата и время согласия на обработку персональных данных"
+    )
+    
     # Индексы для производительности
     __table_args__ = (
         # Уникальный составной индекс для предотвращения дублирования
@@ -76,6 +86,9 @@ class Prize(Base):
         
         # Индекс для быстрого поиска по листу (для синхронизации)
         Index('idx_prizes_sheet_name', 'sheet_name'),
+        
+        # Индекс для быстрого поиска по GDPR согласию
+        Index('idx_prizes_gdpr_consent', 'telegram_id', 'gdpr_consent_date'),
     )
     
     def __repr__(self) -> str:
@@ -113,3 +126,12 @@ class Prize(Base):
             self.house,
             self.phone
         ])
+    
+    def has_gdpr_consent(self) -> bool:
+        """
+        Проверяет наличие согласия на обработку персональных данных
+        
+        Returns:
+            bool: True если согласие дано (gdpr_consent_date не None), False иначе
+        """
+        return self.gdpr_consent_date is not None

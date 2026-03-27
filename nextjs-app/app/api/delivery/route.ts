@@ -17,6 +17,10 @@ import { z } from 'zod';
 import { InitDataValidator } from '@/lib/telegram/initDataValidator';
 import { GoogleSheetsClient } from '@/lib/google/sheetsClient';
 import { sanitizeDeliveryData } from '@/lib/utils/sanitize';
+import { PrizeClient, PrizeNotFoundError, BackendUnavailableError } from '@/lib/api/prizeClient';
+import type { PrizeInfo } from '@/lib/types/prize';
+import { validateSheetName } from '@/lib/utils/sheetNameValidator';
+import { SheetNotFoundError, SheetAccessDeniedError } from '@/lib/types/sheet';
 
 /**
  * Схема валидации данных доставки
@@ -153,6 +157,7 @@ export async function POST(request: NextRequest) {
     const botToken = process.env.BOT_TOKEN;
     const credentialsPath = process.env.GOOGLE_CREDENTIALS_PATH;
     const spreadsheetId = process.env.SPREADSHEET_ID;
+    const backendUrl = process.env.BACKEND_API_URL;
 
     if (!botToken) {
       console.error('BOT_TOKEN environment variable is not set');
@@ -182,6 +187,17 @@ export async function POST(request: NextRequest) {
         {
           error: 'Configuration error',
           message: 'Сервер неправильно настроен',
+        },
+        { status: 500 }
+      );
+    }
+
+    if (!backendUrl) {
+      console.error('BACKEND_API_URL environment variable is not set');
+      return NextResponse.json(
+        {
+          error: 'Configuration error',
+          message: 'Backend URL не настроен',
         },
         { status: 500 }
       );
@@ -224,6 +240,61 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Получение информации о призе из Backend API (Requirement 2.1, 9.2)
+    const prizeClient = new PrizeClient(backendUrl);
+    
+    let prizeInfo: PrizeInfo;
+    try {
+      prizeInfo = await prizeClient.getPrizeInfo(validatedData.prize_id);
+    } catch (error) {
+      if (error instanceof PrizeNotFoundError) {
+        // Requirement 9.4: Обработка HTTP 404 от Backend
+        console.error('Prize not found:', error.message);
+        return NextResponse.json(
+          {
+            error: 'Prize not found',
+            message: 'Приз не найден',
+          },
+          { status: 404 }
+        );
+      }
+      if (error instanceof BackendUnavailableError) {
+        // Requirement 6.5: Обработка недоступности Backend
+        console.error('Backend unavailable:', error.message);
+        return NextResponse.json(
+          {
+            error: 'Backend unavailable',
+            message: 'Сервис временно недоступен',
+          },
+          { status: 503 }
+        );
+      }
+      // Неожиданная ошибка
+      console.error('Unexpected error getting prize info:', error);
+      throw error;
+    }
+
+    // Валидация sheet_name (Requirement 2.4, 10.1-10.4)
+    try {
+      validateSheetName(prizeInfo.sheet_name);
+    } catch (error) {
+      console.error('Invalid sheet name from backend:', {
+        sheet_name: prizeInfo.sheet_name,
+        prize_id: validatedData.prize_id,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      return NextResponse.json(
+        {
+          error: 'Invalid sheet name',
+          message: 'Некорректное название листа',
+        },
+        { status: 500 }
+      );
+    }
+
+    // Логирование sheet_name (Requirement 2.5, 7.5)
+    console.log(`Using sheet: ${prizeInfo.sheet_name} for prize ${validatedData.prize_id}`);
+
     // Санитизация данных перед сохранением (Requirement 12.3)
     const sanitizedData = sanitizeDeliveryData({
       last_name: validatedData.last_name,
@@ -247,9 +318,11 @@ export async function POST(request: NextRequest) {
     );
 
     try {
+      // Requirement 2.2, 9.5: Передача sheet_name в GoogleSheetsClient
       const success = await sheetsClient.saveDeliveryData(
-        validatedData.prize_id,
-        sanitizedData
+        prizeInfo.row_id,
+        sanitizedData,
+        prizeInfo.sheet_name
       );
 
       if (!success) {
@@ -265,13 +338,48 @@ export async function POST(request: NextRequest) {
         { status: 200 }
       );
     } catch (error) {
-      // Requirement 4.7: Обработка ошибки сохранения в Google Sheets
+      // Requirement 6.4: Обработка ошибок GoogleSheetsClient
+      if (error instanceof SheetNotFoundError) {
+        console.error('Sheet not found:', {
+          sheet_name: prizeInfo.sheet_name,
+          prize_id: validatedData.prize_id,
+          telegram_id: telegramId,
+          error: error.message,
+        });
+        return NextResponse.json(
+          {
+            error: 'Sheet not found',
+            message: 'Лист не найден в таблице',
+          },
+          { status: 500 }
+        );
+      }
+      
+      if (error instanceof SheetAccessDeniedError) {
+        console.error('Access denied to sheet:', {
+          sheet_name: prizeInfo.sheet_name,
+          prize_id: validatedData.prize_id,
+          telegram_id: telegramId,
+          error: error.message,
+        });
+        return NextResponse.json(
+          {
+            error: 'Access denied',
+            message: 'Нет доступа к листу',
+          },
+          { status: 500 }
+        );
+      }
+      
+      // Requirement 4.7, 6.3, 7.4: Обработка общих ошибок с контекстом
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       
       console.error('Failed to save delivery data to Google Sheets:', {
         error: errorMessage,
+        sheet_name: prizeInfo.sheet_name,
         prize_id: validatedData.prize_id,
         telegram_id: telegramId,
+        stack: error instanceof Error ? error.stack : undefined,
       });
 
       return NextResponse.json(

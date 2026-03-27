@@ -33,10 +33,18 @@ class CommonHandler:
         """
         Обрабатывает команду /start
         
+        Отображает главное меню с описанием функций и кнопкой "Получить приз".
+        Текст приветствия не содержит слово "бот" согласно Requirements 1.4.
+        
         Args:
             message: Сообщение от пользователя
             session_id: ID сессии из middleware (опционально)
+            
+        Validates:
+            Requirements 1.1, 1.2, 1.3, 1.4, 10.7, 10.8
         """
+        from keyboards.reply_keyboards import get_main_menu_keyboard
+        
         telegram_id = message.from_user.id
         username = message.from_user.username or message.from_user.first_name
         
@@ -48,11 +56,12 @@ class CommonHandler:
         
         welcome_text = (
             f"Привет, {username}! 👋\n\n"
-            "Я бот для проверки призов в розыгрыше.\n\n"
-            "Отправьте мне кодовое слово, чтобы проверить, выиграли ли вы приз."
+            "Здесь вы можете проверить, выиграли ли вы приз в розыгрыше.\n\n"
+            "Нажмите кнопку ниже, чтобы начать."
         )
         
-        await message.answer(welcome_text)
+        keyboard = get_main_menu_keyboard()
+        await message.answer(welcome_text, reply_markup=keyboard)
         
         # Сохраняем ответ бота, если есть session_manager и session_id
         if self.session_manager and session_id:

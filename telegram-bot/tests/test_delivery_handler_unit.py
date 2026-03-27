@@ -11,6 +11,7 @@ import json
 from handlers.delivery_handler import DeliveryHandler
 from database.models.prize import Prize
 from services.google_sheets_service import GoogleSheetsService
+from services.prize_service import PrizeService
 from database.repositories.prize_repository import PrizeRepository
 
 
@@ -64,7 +65,8 @@ async def test_successful_delivery_data_save():
     # Создаём handler
     handler = DeliveryHandler(
         sheets_service=mock_sheets_service,
-        prize_repository=mock_prize_repository
+        prize_repository=mock_prize_repository,
+        prize_service=AsyncMock(spec=PrizeService)
     )
     
     # Mock метод _find_prize_by_id
@@ -80,8 +82,12 @@ async def test_successful_delivery_data_save():
     })
     mock_message.answer = AsyncMock()
     
+    # Mock FSMContext
+    mock_state = AsyncMock()
+    mock_state.clear = AsyncMock()
+    
     # Act
-    await handler.handle_delivery_data(mock_message)
+    await handler.handle_delivery_data(mock_message, mock_state)
     
     # Assert - проверяем, что данные записаны в Sheets
     mock_sheets_service.save_delivery_data.assert_called_once()
@@ -145,7 +151,8 @@ async def test_retry_logic_on_sheets_error():
     # Создаём handler
     handler = DeliveryHandler(
         sheets_service=mock_sheets_service,
-        prize_repository=mock_prize_repository
+        prize_repository=mock_prize_repository,
+        prize_service=AsyncMock(spec=PrizeService)
     )
     
     # Mock метод _find_prize_by_id
@@ -161,8 +168,12 @@ async def test_retry_logic_on_sheets_error():
     })
     mock_message.answer = AsyncMock()
     
+    # Mock FSMContext
+    mock_state = AsyncMock()
+    mock_state.clear = AsyncMock()
+    
     # Act
-    await handler.handle_delivery_data(mock_message)
+    await handler.handle_delivery_data(mock_message, mock_state)
     
     # Assert - проверяем, что save_delivery_data был вызван
     mock_sheets_service.save_delivery_data.assert_called_once()
@@ -227,7 +238,8 @@ async def test_postgres_update_after_sheets_success():
     # Создаём handler
     handler = DeliveryHandler(
         sheets_service=mock_sheets_service,
-        prize_repository=mock_prize_repository
+        prize_repository=mock_prize_repository,
+        prize_service=AsyncMock(spec=PrizeService)
     )
     
     # Mock метод _find_prize_by_id
@@ -243,8 +255,12 @@ async def test_postgres_update_after_sheets_success():
     })
     mock_message.answer = AsyncMock()
     
+    # Mock FSMContext
+    mock_state = AsyncMock()
+    mock_state.clear = AsyncMock()
+    
     # Act
-    await handler.handle_delivery_data(mock_message)
+    await handler.handle_delivery_data(mock_message, mock_state)
     
     # Assert - проверяем порядок вызовов
     # Сначала должна быть запись в Sheets
@@ -304,7 +320,8 @@ async def test_user_notification_on_critical_error():
     # Создаём handler
     handler = DeliveryHandler(
         sheets_service=mock_sheets_service,
-        prize_repository=mock_prize_repository
+        prize_repository=mock_prize_repository,
+        prize_service=AsyncMock(spec=PrizeService)
     )
     
     # Mock метод _find_prize_by_id - приз не найден
@@ -320,8 +337,12 @@ async def test_user_notification_on_critical_error():
     })
     mock_message.answer = AsyncMock()
     
+    # Mock FSMContext
+    mock_state = AsyncMock()
+    mock_state.clear = AsyncMock()
+    
     # Act
-    await handler.handle_delivery_data(mock_message)
+    await handler.handle_delivery_data(mock_message, mock_state)
     
     # Assert - проверяем, что save_delivery_data НЕ был вызван
     mock_sheets_service.save_delivery_data.assert_not_called()
@@ -361,7 +382,8 @@ async def test_invalid_json_from_webapp():
     # Создаём handler
     handler = DeliveryHandler(
         sheets_service=mock_sheets_service,
-        prize_repository=mock_prize_repository
+        prize_repository=mock_prize_repository,
+        prize_service=AsyncMock(spec=PrizeService)
     )
     
     # Mock Message с невалидным JSON
@@ -371,8 +393,12 @@ async def test_invalid_json_from_webapp():
     mock_message.web_app_data.data = "invalid json {{{{"
     mock_message.answer = AsyncMock()
     
+    # Mock FSMContext
+    mock_state = AsyncMock()
+    mock_state.clear = AsyncMock()
+    
     # Act
-    await handler.handle_delivery_data(mock_message)
+    await handler.handle_delivery_data(mock_message, mock_state)
     
     # Assert - проверяем, что пользователь получил сообщение об ошибке
     mock_message.answer.assert_called_once()
@@ -415,7 +441,8 @@ async def test_missing_prize_id():
     # Создаём handler
     handler = DeliveryHandler(
         sheets_service=mock_sheets_service,
-        prize_repository=mock_prize_repository
+        prize_repository=mock_prize_repository,
+        prize_service=AsyncMock(spec=PrizeService)
     )
     
     # Mock Message без prize_id
@@ -425,8 +452,12 @@ async def test_missing_prize_id():
     mock_message.web_app_data.data = json.dumps(delivery_data)  # Нет prize_id
     mock_message.answer = AsyncMock()
     
+    # Mock FSMContext
+    mock_state = AsyncMock()
+    mock_state.clear = AsyncMock()
+    
     # Act
-    await handler.handle_delivery_data(mock_message)
+    await handler.handle_delivery_data(mock_message, mock_state)
     
     # Assert - проверяем, что пользователь получил сообщение об ошибке
     mock_message.answer.assert_called_once()
@@ -485,7 +516,8 @@ async def test_graceful_degradation_postgres_error():
     # Создаём handler
     handler = DeliveryHandler(
         sheets_service=mock_sheets_service,
-        prize_repository=mock_prize_repository
+        prize_repository=mock_prize_repository,
+        prize_service=AsyncMock(spec=PrizeService)
     )
     
     # Mock метод _find_prize_by_id
@@ -501,8 +533,12 @@ async def test_graceful_degradation_postgres_error():
     })
     mock_message.answer = AsyncMock()
     
+    # Mock FSMContext
+    mock_state = AsyncMock()
+    mock_state.clear = AsyncMock()
+    
     # Act
-    await handler.handle_delivery_data(mock_message)
+    await handler.handle_delivery_data(mock_message, mock_state)
     
     # Assert - проверяем, что данные записаны в Sheets
     mock_sheets_service.save_delivery_data.assert_called_once()
@@ -515,3 +551,421 @@ async def test_graceful_degradation_postgres_error():
     mock_message.answer.assert_called_once()
     success_message = mock_message.answer.call_args[0][0]
     assert "успешно" in success_message.lower()
+
+
+# ============================================================================
+# Новые тесты для обновлённого handle_delivery_data (Task 8.2)
+# ============================================================================
+
+# ============================================================================
+# Тест отображения главного меню после сохранения данных
+# ============================================================================
+
+@pytest.mark.asyncio
+async def test_main_menu_displayed_after_delivery_save():
+    """
+    Тест отображения главного меню после успешного сохранения данных доставки
+    
+    Проверяет, что после успешного сохранения данных пользователь
+    получает главное меню с кнопкой "Получить приз".
+    
+    Validates: Requirements 7.10
+    """
+    # Arrange
+    telegram_id = 123456789
+    prize_id = 2
+    code_word = 'test_code'
+    
+    delivery_data = {
+        'last_name': 'Иванов',
+        'first_name': 'Иван',
+        'patronymic': 'Иванович',
+        'city': 'Москва',
+        'street': 'Тестовая',
+        'house': '1',
+        'apartment': '10',
+        'phone': '+79991234567',
+        'comment': 'Тестовый комментарий'
+    }
+    
+    # Mock GoogleSheetsService - успешная запись
+    mock_sheets_service = AsyncMock(spec=GoogleSheetsService)
+    mock_sheets_service.save_delivery_data = AsyncMock(return_value=True)
+    
+    # Mock PrizeRepository - успешное обновление
+    mock_prize_repository = AsyncMock(spec=PrizeRepository)
+    mock_prize_repository.update_delivery_data = AsyncMock(return_value=True)
+    
+    # Mock Prize
+    mock_prize = Mock(spec=Prize)
+    mock_prize.telegram_id = telegram_id
+    mock_prize.code_word = code_word
+    mock_prize.sheet_name = code_word
+    mock_prize.row_id = prize_id
+    mock_prize.prize_type = 'physical'
+    
+    # Создаём handler
+    handler = DeliveryHandler(
+        sheets_service=mock_sheets_service,
+        prize_repository=mock_prize_repository,
+        prize_service=AsyncMock(spec=PrizeService)
+    )
+    
+    # Mock метод _find_prize_by_id
+    handler._find_prize_by_id = AsyncMock(return_value=mock_prize)
+    
+    # Mock Message
+    mock_message = AsyncMock()
+    mock_message.from_user.id = telegram_id
+    mock_message.web_app_data = Mock()
+    mock_message.web_app_data.data = json.dumps({
+        'prize_id': prize_id,
+        **delivery_data
+    })
+    mock_message.answer = AsyncMock()
+    
+    # Mock FSMContext
+    mock_state = AsyncMock()
+    mock_state.clear = AsyncMock()
+    
+    # Act
+    await handler.handle_delivery_data(mock_message, mock_state)
+    
+    # Assert - проверяем, что answer был вызван с клавиатурой
+    mock_message.answer.assert_called_once()
+    call_kwargs = mock_message.answer.call_args[1]
+    
+    # Проверяем наличие reply_markup
+    assert 'reply_markup' in call_kwargs
+    keyboard = call_kwargs['reply_markup']
+    
+    # Проверяем, что это InlineKeyboardMarkup с кнопкой "Получить приз"
+    assert keyboard is not None
+    assert len(keyboard.inline_keyboard) > 0
+    assert keyboard.inline_keyboard[0][0].text == "🎁 Получить приз"
+
+
+# ============================================================================
+# Тест сброса FSM состояния после сохранения данных
+# ============================================================================
+
+@pytest.mark.asyncio
+async def test_fsm_state_cleared_after_delivery_save():
+    """
+    Тест сброса FSM состояния после успешного сохранения данных доставки
+    
+    Проверяет, что после успешного сохранения данных FSM состояние
+    сбрасывается в default_state через state.clear().
+    
+    Validates: Requirements 7.11
+    """
+    # Arrange
+    telegram_id = 987654321
+    prize_id = 5
+    code_word = 'winner_code'
+    
+    delivery_data = {
+        'last_name': 'Петров',
+        'first_name': 'Петр',
+        'patronymic': 'Петрович',
+        'city': 'Санкт-Петербург',
+        'street': 'Невский проспект',
+        'house': '100',
+        'apartment': '50',
+        'phone': '+79991112233',
+        'comment': 'Позвонить после 18:00'
+    }
+    
+    # Mock GoogleSheetsService - успешная запись
+    mock_sheets_service = AsyncMock(spec=GoogleSheetsService)
+    mock_sheets_service.save_delivery_data = AsyncMock(return_value=True)
+    
+    # Mock PrizeRepository - успешное обновление
+    mock_prize_repository = AsyncMock(spec=PrizeRepository)
+    mock_prize_repository.update_delivery_data = AsyncMock(return_value=True)
+    
+    # Mock Prize
+    mock_prize = Mock(spec=Prize)
+    mock_prize.telegram_id = telegram_id
+    mock_prize.code_word = code_word
+    mock_prize.sheet_name = code_word
+    mock_prize.row_id = prize_id
+    mock_prize.prize_type = 'physical'
+    
+    # Создаём handler
+    handler = DeliveryHandler(
+        sheets_service=mock_sheets_service,
+        prize_repository=mock_prize_repository,
+        prize_service=AsyncMock(spec=PrizeService)
+    )
+    
+    # Mock метод _find_prize_by_id
+    handler._find_prize_by_id = AsyncMock(return_value=mock_prize)
+    
+    # Mock Message
+    mock_message = AsyncMock()
+    mock_message.from_user.id = telegram_id
+    mock_message.web_app_data = Mock()
+    mock_message.web_app_data.data = json.dumps({
+        'prize_id': prize_id,
+        **delivery_data
+    })
+    mock_message.answer = AsyncMock()
+    
+    # Mock FSMContext
+    mock_state = AsyncMock()
+    mock_state.clear = AsyncMock()
+    
+    # Act
+    await handler.handle_delivery_data(mock_message, mock_state)
+    
+    # Assert - проверяем, что state.clear() был вызван
+    mock_state.clear.assert_called_once()
+
+
+# ============================================================================
+# Тест сохранения подтверждающего сообщения через SessionManager
+# ============================================================================
+
+@pytest.mark.asyncio
+async def test_confirmation_message_saved_via_session_manager():
+    """
+    Тест сохранения подтверждающего сообщения через SessionManager
+    
+    Проверяет, что после успешного сохранения данных подтверждающее
+    сообщение сохраняется через SessionManager.
+    
+    Validates: Requirements 7.9, 11.2
+    """
+    # Arrange
+    telegram_id = 111222333
+    prize_id = 3
+    code_word = 'test_code'
+    session_id = 42
+    
+    delivery_data = {
+        'last_name': 'Сидоров',
+        'first_name': 'Сидор',
+        'patronymic': '',
+        'city': 'Казань',
+        'street': 'Баумана',
+        'house': '5',
+        'apartment': '',
+        'phone': '+79995554433',
+        'comment': ''
+    }
+    
+    # Mock GoogleSheetsService - успешная запись
+    mock_sheets_service = AsyncMock(spec=GoogleSheetsService)
+    mock_sheets_service.save_delivery_data = AsyncMock(return_value=True)
+    
+    # Mock PrizeRepository - успешное обновление
+    mock_prize_repository = AsyncMock(spec=PrizeRepository)
+    mock_prize_repository.update_delivery_data = AsyncMock(return_value=True)
+    
+    # Mock SessionManager
+    mock_session_manager = AsyncMock()
+    mock_session_manager.save_bot_message = AsyncMock()
+    
+    # Mock Prize
+    mock_prize = Mock(spec=Prize)
+    mock_prize.telegram_id = telegram_id
+    mock_prize.code_word = code_word
+    mock_prize.sheet_name = code_word
+    mock_prize.row_id = prize_id
+    mock_prize.prize_type = 'physical'
+    
+    # Создаём handler с SessionManager
+    handler = DeliveryHandler(
+        sheets_service=mock_sheets_service,
+        prize_repository=mock_prize_repository,
+        prize_service=AsyncMock(spec=PrizeService),
+        session_manager=mock_session_manager
+    )
+    
+    # Mock метод _find_prize_by_id
+    handler._find_prize_by_id = AsyncMock(return_value=mock_prize)
+    
+    # Mock Message
+    mock_message = AsyncMock()
+    mock_message.from_user.id = telegram_id
+    mock_message.web_app_data = Mock()
+    mock_message.web_app_data.data = json.dumps({
+        'prize_id': prize_id,
+        **delivery_data
+    })
+    mock_message.answer = AsyncMock()
+    
+    # Mock FSMContext
+    mock_state = AsyncMock()
+    mock_state.clear = AsyncMock()
+    
+    # Act
+    await handler.handle_delivery_data(mock_message, mock_state, session_id=session_id)
+    
+    # Assert - проверяем, что save_bot_message был вызван
+    mock_session_manager.save_bot_message.assert_called_once()
+    
+    # Проверяем параметры вызова
+    call_kwargs = mock_session_manager.save_bot_message.call_args[1]
+    assert call_kwargs['session_id'] == session_id
+    assert 'успешно сохранены' in call_kwargs['message_text'].lower()
+
+
+# ============================================================================
+# Тест сброса FSM состояния при ошибке
+# ============================================================================
+
+@pytest.mark.asyncio
+async def test_fsm_state_cleared_on_error():
+    """
+    Тест сброса FSM состояния при ошибке
+    
+    Проверяет, что при ошибке (например, приз не найден) FSM состояние
+    сбрасывается и отображается главное меню.
+    
+    Validates: Requirements 7.11, 12.1
+    """
+    # Arrange
+    telegram_id = 444555666
+    prize_id = 999  # Несуществующий приз
+    
+    delivery_data = {
+        'last_name': 'Тестов',
+        'first_name': 'Тест',
+        'city': 'Москва',
+        'street': 'Тестовая',
+        'house': '1',
+        'phone': '+79991234567'
+    }
+    
+    # Mock GoogleSheetsService
+    mock_sheets_service = AsyncMock(spec=GoogleSheetsService)
+    
+    # Mock PrizeRepository
+    mock_prize_repository = AsyncMock(spec=PrizeRepository)
+    
+    # Создаём handler
+    handler = DeliveryHandler(
+        sheets_service=mock_sheets_service,
+        prize_repository=mock_prize_repository,
+        prize_service=AsyncMock(spec=PrizeService)
+    )
+    
+    # Mock метод _find_prize_by_id - приз не найден
+    handler._find_prize_by_id = AsyncMock(return_value=None)
+    
+    # Mock Message
+    mock_message = AsyncMock()
+    mock_message.from_user.id = telegram_id
+    mock_message.web_app_data = Mock()
+    mock_message.web_app_data.data = json.dumps({
+        'prize_id': prize_id,
+        **delivery_data
+    })
+    mock_message.answer = AsyncMock()
+    
+    # Mock FSMContext
+    mock_state = AsyncMock()
+    mock_state.clear = AsyncMock()
+    
+    # Act
+    await handler.handle_delivery_data(mock_message, mock_state)
+    
+    # Assert - проверяем, что state.clear() был вызван
+    mock_state.clear.assert_called_once()
+    
+    # Assert - проверяем, что answer был вызван с клавиатурой главного меню
+    mock_message.answer.assert_called_once()
+    call_kwargs = mock_message.answer.call_args[1]
+    assert 'reply_markup' in call_kwargs
+    
+    keyboard = call_kwargs['reply_markup']
+    assert keyboard is not None
+    assert len(keyboard.inline_keyboard) > 0
+    assert keyboard.inline_keyboard[0][0].text == "🎁 Получить приз"
+
+
+# ============================================================================
+# Тест главного меню при ошибке записи в Sheets
+# ============================================================================
+
+@pytest.mark.asyncio
+async def test_main_menu_displayed_on_sheets_error():
+    """
+    Тест отображения главного меню при ошибке записи в Sheets
+    
+    Проверяет, что при неуспешной записи в Sheets пользователь
+    получает главное меню вместе с сообщением об ошибке.
+    
+    Validates: Requirements 7.10, 12.1
+    """
+    # Arrange
+    telegram_id = 777888999
+    prize_id = 2
+    code_word = 'test_code'
+    
+    delivery_data = {
+        'last_name': 'Иванов',
+        'first_name': 'Иван',
+        'city': 'Москва',
+        'street': 'Тестовая',
+        'house': '1',
+        'phone': '+79991234567'
+    }
+    
+    # Mock GoogleSheetsService - неуспешная запись
+    mock_sheets_service = AsyncMock(spec=GoogleSheetsService)
+    mock_sheets_service.save_delivery_data = AsyncMock(return_value=False)
+    
+    # Mock PrizeRepository
+    mock_prize_repository = AsyncMock(spec=PrizeRepository)
+    
+    # Mock Prize
+    mock_prize = Mock(spec=Prize)
+    mock_prize.telegram_id = telegram_id
+    mock_prize.code_word = code_word
+    mock_prize.sheet_name = code_word
+    mock_prize.row_id = prize_id
+    mock_prize.prize_type = 'physical'
+    
+    # Создаём handler
+    handler = DeliveryHandler(
+        sheets_service=mock_sheets_service,
+        prize_repository=mock_prize_repository,
+        prize_service=AsyncMock(spec=PrizeService)
+    )
+    
+    # Mock метод _find_prize_by_id
+    handler._find_prize_by_id = AsyncMock(return_value=mock_prize)
+    
+    # Mock Message
+    mock_message = AsyncMock()
+    mock_message.from_user.id = telegram_id
+    mock_message.web_app_data = Mock()
+    mock_message.web_app_data.data = json.dumps({
+        'prize_id': prize_id,
+        **delivery_data
+    })
+    mock_message.answer = AsyncMock()
+    
+    # Mock FSMContext
+    mock_state = AsyncMock()
+    mock_state.clear = AsyncMock()
+    
+    # Act
+    await handler.handle_delivery_data(mock_message, mock_state)
+    
+    # Assert - проверяем, что state.clear() был вызван
+    mock_state.clear.assert_called_once()
+    
+    # Assert - проверяем, что answer был вызван с клавиатурой главного меню
+    mock_message.answer.assert_called_once()
+    call_kwargs = mock_message.answer.call_args[1]
+    assert 'reply_markup' in call_kwargs
+    
+    keyboard = call_kwargs['reply_markup']
+    assert keyboard is not None
+    assert len(keyboard.inline_keyboard) > 0
+    assert keyboard.inline_keyboard[0][0].text == "🎁 Получить приз"
+

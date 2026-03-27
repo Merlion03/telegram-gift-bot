@@ -68,6 +68,248 @@ class PrizeService:
             use_postgres=self.config.sync.use_postgres
         )
     
+    async def check_user_exists(self, telegram_id: int) -> bool:
+        """
+        Проверяет наличие пользователя в таблице призов
+        
+        Validates: Requirements 2.1, 2.2
+        
+        Args:
+            telegram_id: Telegram ID пользователя
+            
+        Returns:
+            True если пользователь найден, False иначе
+            
+        Raises:
+            DatabaseUnavailableError: Если БД недоступна
+        """
+        logger.info(
+            "checking_user_exists",
+            telegram_id=telegram_id
+        )
+        
+        try:
+            user_exists = await self.prize_repository.check_user_exists(telegram_id)
+            
+            logger.info(
+                "user_exists_check_completed",
+                telegram_id=telegram_id,
+                exists=user_exists
+            )
+            
+            return user_exists
+            
+        except DatabaseUnavailableError as e:
+            logger.error(
+                "database_unavailable_during_user_check",
+                telegram_id=telegram_id,
+                error=str(e)
+            )
+            raise
+    
+    async def check_gdpr_consent(self, telegram_id: int) -> bool:
+        """
+        Проверяет наличие GDPR согласия у пользователя
+        
+        Validates: Requirements 3.1
+        
+        Args:
+            telegram_id: Telegram ID пользователя
+            
+        Returns:
+            True если согласие дано, False иначе
+            
+        Raises:
+            DatabaseUnavailableError: Если БД недоступна
+        """
+        logger.info(
+            "checking_gdpr_consent",
+            telegram_id=telegram_id
+        )
+        
+        try:
+            consent_date = await self.prize_repository.get_gdpr_consent_date(telegram_id)
+            has_consent = consent_date is not None
+            
+            logger.info(
+                "gdpr_consent_check_completed",
+                telegram_id=telegram_id,
+                has_consent=has_consent,
+                consent_date=consent_date.isoformat() if consent_date else None
+            )
+            
+            return has_consent
+            
+        except DatabaseUnavailableError as e:
+            logger.error(
+                "database_unavailable_during_gdpr_check",
+                telegram_id=telegram_id,
+                error=str(e)
+            )
+            raise
+    
+    async def save_gdpr_consent(self, telegram_id: int) -> None:
+        """
+        Сохраняет GDPR согласие пользователя с текущим timestamp
+        
+        Validates: Requirements 3.3, 12.1, 12.5
+        
+        Args:
+            telegram_id: Telegram ID пользователя
+            
+        Raises:
+            DatabaseUnavailableError: Если БД недоступна
+        """
+        consent_date = datetime.now(timezone.utc)
+        
+        logger.info(
+            "saving_gdpr_consent",
+            telegram_id=telegram_id,
+            consent_date=consent_date.isoformat()
+        )
+        
+        try:
+            await self.prize_repository.update_gdpr_consent(telegram_id, consent_date)
+            
+            logger.info(
+                "gdpr_consent_saved",
+                telegram_id=telegram_id,
+                consent_date=consent_date.isoformat()
+            )
+            
+        except DatabaseUnavailableError as e:
+            logger.error(
+                "database_unavailable_during_gdpr_save",
+                telegram_id=telegram_id,
+                consent_date=consent_date.isoformat(),
+                error=str(e)
+            )
+            raise
+    
+    async def validate_code_word(self, telegram_id: int, code_word: str) -> bool:
+        """
+        Проверяет корректность кодового слова для пользователя
+        
+        Validates: Requirements 5.3, 12.4
+        
+        Args:
+            telegram_id: Telegram ID пользователя
+            code_word: Кодовое слово для проверки
+            
+        Returns:
+            True если кодовое слово верно, False иначе
+            
+        Raises:
+            DatabaseUnavailableError: Если БД недоступна
+        """
+        logger.info(
+            "validating_code_word",
+            telegram_id=telegram_id,
+            code_word=code_word
+        )
+        
+        # Валидация входных данных
+        if not code_word or len(code_word.strip()) == 0:
+            logger.warning(
+                "empty_code_word",
+                telegram_id=telegram_id
+            )
+            return False
+        
+        if len(code_word) > 100:
+            logger.warning(
+                "code_word_too_long",
+                telegram_id=telegram_id,
+                length=len(code_word)
+            )
+            return False
+        
+        try:
+            # Проверяем наличие приза с данным кодовым словом
+            prize = await self.prize_repository.find_prize(
+                telegram_id=telegram_id,
+                code_word=code_word,
+                timeout_ms=500
+            )
+            
+            is_valid = prize is not None
+            
+            logger.info(
+                "code_word_validation_completed",
+                telegram_id=telegram_id,
+                code_word=code_word,
+                is_valid=is_valid
+            )
+            
+            return is_valid
+            
+        except DatabaseUnavailableError as e:
+            logger.error(
+                "database_unavailable_during_code_word_validation",
+                telegram_id=telegram_id,
+                code_word=code_word,
+                error=str(e)
+            )
+            raise
+    
+    async def validate_prize_id(
+        self,
+        prize_id: int,
+        telegram_id: int
+    ) -> bool:
+        """
+        Проверяет, что prize_id принадлежит указанному пользователю
+        
+        Validates: Security Requirement 2
+        
+        Args:
+            prize_id: ID приза для проверки
+            telegram_id: Telegram ID пользователя
+            
+        Returns:
+            True если приз принадлежит пользователю, False иначе
+            
+        Raises:
+            DatabaseUnavailableError: Если БД недоступна
+        """
+        logger.info(
+            "validating_prize_id",
+            prize_id=prize_id,
+            telegram_id=telegram_id
+        )
+        
+        try:
+            is_valid = await self.prize_repository.validate_prize_ownership(
+                prize_id=prize_id,
+                telegram_id=telegram_id
+            )
+            
+            logger.info(
+                "prize_id_validation_completed",
+                prize_id=prize_id,
+                telegram_id=telegram_id,
+                is_valid=is_valid
+            )
+            
+            # Логирование попытки доступа к чужому призу
+            if not is_valid:
+                logger.warning(
+                    "invalid_prize_id_access_attempt",
+                    prize_id=prize_id,
+                    telegram_id=telegram_id
+                )
+            
+            return is_valid
+            
+        except DatabaseUnavailableError as e:
+            logger.error(
+                "database_unavailable_during_prize_id_validation",
+                prize_id=prize_id,
+                telegram_id=telegram_id,
+                error=str(e)
+            )
+            raise
+    
     async def check_prize(
         self, 
         telegram_id: int, 
@@ -200,6 +442,14 @@ class PrizeService:
                     f"Промокод отсутствует для пользователя {telegram_id}"
                 )
             
+            # Логирование доступа к промокоду (Security Requirement 1, 3)
+            logger.info(
+                "promo_code_retrieved_from_db",
+                telegram_id=telegram_id,
+                prize_id=prize.id,
+                has_promo_code=True
+            )
+            
             # Отметка о получении приза (асинхронно)
             await self._mark_prize_claimed_async(
                 telegram_id=telegram_id,
@@ -303,6 +553,14 @@ class PrizeService:
                 raise MissingPromoCodeError(
                     f"Промокод отсутствует для пользователя {telegram_id}"
                 )
+            
+            # Логирование доступа к промокоду (Security Requirement 1, 3)
+            logger.info(
+                "promo_code_retrieved_from_sheets",
+                telegram_id=telegram_id,
+                row_id=prize_data.get('row_id'),
+                has_promo_code=True
+            )
             
             # Отметка о получении приза (асинхронно)
             await self._mark_prize_claimed_async(

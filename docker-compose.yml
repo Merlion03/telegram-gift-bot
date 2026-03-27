@@ -72,6 +72,54 @@ services:
       retries: 3
       start_period: 40s
 
+  # Backend API Server (FastAPI)
+  api-server:
+    build:
+      context: ./telegram-bot
+      dockerfile: Dockerfile
+    container_name: telegram-api-server
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["python", "start_api_server.py"]
+    environment:
+      # Bot Configuration (нужен для config.py, но не используется)
+      BOT_TOKEN: ${BOT_TOKEN}
+      WEBAPP_URL: ${WEBAPP_URL:-http://localhost:3000}
+      
+      # Database Configuration
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-telegram_bot}
+      DB_USER: ${DB_USER:-botuser}
+      DB_PASSWORD: ${DB_PASSWORD:-changeme}
+      
+      # Google Sheets Configuration
+      GOOGLE_CREDENTIALS_PATH: /app/credentials/google-credentials.json
+      SPREADSHEET_ID: ${SPREADSHEET_ID}
+      
+      # Database Pool Configuration
+      DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-5}
+      DATABASE_MAX_OVERFLOW: ${DATABASE_MAX_OVERFLOW:-15}
+      
+      # Logging Configuration
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      JSON_LOGS: ${JSON_LOGS:-false}
+    volumes:
+      # Монтируем credentials для Google Sheets (read-only)
+      - ${GOOGLE_CREDENTIALS_HOST_PATH:-./credentials/google-credentials.json}:/app/credentials/google-credentials.json:ro
+    ports:
+      - "5000:5000"
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
   # Sync Worker (синхронизация Google Sheets -> PostgreSQL)
   sync-worker:
     build:
@@ -170,6 +218,9 @@ services:
       # Google Sheets Configuration
       GOOGLE_CREDENTIALS_PATH: /app/credentials/google-credentials.json
       SPREADSHEET_ID: ${SPREADSHEET_ID}
+      
+      # Backend API Configuration
+      BACKEND_API_URL: ${BACKEND_API_URL:-http://api-server:5000}
       
       # NextAuth Configuration
       NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}

@@ -31,7 +31,14 @@ class MockRepository:
         self.next_session_id = 1
         self.next_message_id = 1
     
-    async def create_session(self, telegram_id: int, session_type: str = 'chat') -> int:
+    async def create_session(
+        self, 
+        telegram_id: int, 
+        session_type: str = 'chat',
+        first_name: str = None,
+        last_name: str = None,
+        username: str = None
+    ) -> int:
         """Создаёт новую сессию"""
         session_id = self.next_session_id
         self.next_session_id += 1
@@ -383,12 +390,12 @@ async def test_end_dialog_keyboard():
         "Должна быть отправлена клавиатура"
     
     keyboard = call_kwargs['reply_markup']
-    from aiogram.types import ReplyKeyboardMarkup
-    assert isinstance(keyboard, ReplyKeyboardMarkup), \
-        "reply_markup должен быть ReplyKeyboardMarkup"
+    from aiogram.types import InlineKeyboardMarkup
+    assert isinstance(keyboard, InlineKeyboardMarkup), \
+        "reply_markup должен быть InlineKeyboardMarkup"
     
     # Проверяем наличие кнопки "Завершить диалог"
-    button_texts = [btn.text for row in keyboard.keyboard for btn in row]
+    button_texts = [btn.text for row in keyboard.inline_keyboard for btn in row]
     assert "Завершить диалог" in button_texts, \
         "Клавиатура должна содержать кнопку 'Завершить диалог'"
     
@@ -399,16 +406,11 @@ async def test_end_dialog_keyboard():
     mock_message_2 = create_mock_message(telegram_id, "Завершить диалог")
     await support_handler.end_support(mock_message_2, fsm_context)
     
-    # Assert: Клавиатура удалена
+    # Assert: Сообщение о завершении отправлено (inline клавиатуры не требуют удаления)
     assert mock_message_2.answer.called
-    call_kwargs_2 = mock_message_2.answer.call_args[1]
-    
-    assert 'reply_markup' in call_kwargs_2, \
-        "Должна быть отправлена команда удаления клавиатуры"
-    
-    from aiogram.types import ReplyKeyboardRemove
-    assert isinstance(call_kwargs_2['reply_markup'], ReplyKeyboardRemove), \
-        "reply_markup должен быть ReplyKeyboardRemove"
+    call_args = mock_message_2.answer.call_args[0]
+    assert "Диалог завершён" in call_args[0], \
+        "Должно быть отправлено сообщение о завершении диалога"
 
 
 # ============================================================================

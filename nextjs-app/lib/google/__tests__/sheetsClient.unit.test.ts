@@ -7,6 +7,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GoogleSheetsClient, DeliveryData } from '../sheetsClient';
+import { SheetNotFoundError, SheetAccessDeniedError } from '../../types/sheet';
 
 // Мокирование googleapis
 vi.mock('googleapis', () => {
@@ -57,7 +58,33 @@ describe('GoogleSheetsClient', () => {
 
     // Настройка моков
     mockSheetsBatchUpdate.mockResolvedValue({ data: {} });
-    mockSheetsGet.mockResolvedValue({ data: { spreadsheetId: testSpreadsheetId } });
+    
+    // Мокируем ответ с информацией о листах
+    mockSheetsGet.mockResolvedValue({ 
+      data: { 
+        spreadsheetId: testSpreadsheetId,
+        sheets: [
+          {
+            properties: {
+              title: 'Sheet1',
+              sheetId: 0,
+            },
+          },
+          {
+            properties: {
+              title: 'Sheet2',
+              sheetId: 1,
+            },
+          },
+          {
+            properties: {
+              title: 'Лист1',
+              sheetId: 2,
+            },
+          },
+        ],
+      } 
+    });
 
     // Мокирование переменной окружения с credentials
     process.env.GOOGLE_CREDENTIALS_JSON = JSON.stringify(testCredentials);
@@ -95,7 +122,7 @@ describe('GoogleSheetsClient', () => {
       };
 
       // Act
-      const result = await client.saveDeliveryData(rowId, deliveryData);
+      const result = await client.saveDeliveryData(rowId, deliveryData, 'Sheet1');
 
       // Assert
       expect(result).toBe(true);
@@ -109,18 +136,18 @@ describe('GoogleSheetsClient', () => {
         requestBody: {
           valueInputOption: 'RAW',
           data: [
-            { range: `Sheet1!E${rowId}`, values: [[deliveryData.last_name]] },
-            { range: `Sheet1!F${rowId}`, values: [[deliveryData.first_name]] },
-            { range: `Sheet1!G${rowId}`, values: [[deliveryData.patronymic]] },
-            { range: `Sheet1!H${rowId}`, values: [[deliveryData.city]] },
-            { range: `Sheet1!I${rowId}`, values: [[deliveryData.street]] },
-            { range: `Sheet1!J${rowId}`, values: [[deliveryData.house]] },
-            { range: `Sheet1!K${rowId}`, values: [[deliveryData.apartment]] },
-            { range: `Sheet1!L${rowId}`, values: [[deliveryData.phone]] },
-            { range: `Sheet1!M${rowId}`, values: [[deliveryData.comment]] },
-            { range: `Sheet1!N${rowId}`, values: [[deliveryData.country]] },
-            { range: `Sheet1!O${rowId}`, values: [[deliveryData.postal_code]] },
-            { range: `Sheet1!P${rowId}`, values: [[expect.any(String)]] }, // ISO timestamp
+            { range: `Sheet1!E${rowId}:E${rowId}`, values: [[deliveryData.last_name]] },
+            { range: `Sheet1!F${rowId}:F${rowId}`, values: [[deliveryData.first_name]] },
+            { range: `Sheet1!G${rowId}:G${rowId}`, values: [[deliveryData.patronymic]] },
+            { range: `Sheet1!H${rowId}:H${rowId}`, values: [[deliveryData.city]] },
+            { range: `Sheet1!I${rowId}:I${rowId}`, values: [[deliveryData.street]] },
+            { range: `Sheet1!J${rowId}:J${rowId}`, values: [[deliveryData.house]] },
+            { range: `Sheet1!K${rowId}:K${rowId}`, values: [[deliveryData.apartment]] },
+            { range: `Sheet1!L${rowId}:L${rowId}`, values: [[deliveryData.phone]] },
+            { range: `Sheet1!M${rowId}:M${rowId}`, values: [[deliveryData.comment]] },
+            { range: `Sheet1!N${rowId}:N${rowId}`, values: [[deliveryData.country]] },
+            { range: `Sheet1!O${rowId}:O${rowId}`, values: [[deliveryData.postal_code]] },
+            { range: `Sheet1!P${rowId}:P${rowId}`, values: [[expect.any(String)]] }, // ISO timestamp
           ],
         },
       });
@@ -148,7 +175,7 @@ describe('GoogleSheetsClient', () => {
       };
 
       // Act
-      const result = await client.saveDeliveryData(rowId, deliveryData);
+      const result = await client.saveDeliveryData(rowId, deliveryData, 'Sheet1');
 
       // Assert
       expect(result).toBe(true);
@@ -159,11 +186,11 @@ describe('GoogleSheetsClient', () => {
         requestBody: {
           valueInputOption: 'RAW',
           data: expect.arrayContaining([
-            { range: `Sheet1!G${rowId}`, values: [['']] },  // patronymic
-            { range: `Sheet1!K${rowId}`, values: [['']] },  // apartment
-            { range: `Sheet1!M${rowId}`, values: [['']] },  // comment
-            { range: `Sheet1!N${rowId}`, values: [[deliveryData.country]] },
-            { range: `Sheet1!O${rowId}`, values: [[deliveryData.postal_code]] },
+            { range: `Sheet1!G${rowId}:G${rowId}`, values: [['']] },  // patronymic
+            { range: `Sheet1!K${rowId}:K${rowId}`, values: [['']] },  // apartment
+            { range: `Sheet1!M${rowId}:M${rowId}`, values: [['']] },  // comment
+            { range: `Sheet1!N${rowId}:N${rowId}`, values: [[deliveryData.country]] },
+            { range: `Sheet1!O${rowId}:O${rowId}`, values: [[deliveryData.postal_code]] },
           ]),
         },
       });
@@ -192,7 +219,7 @@ describe('GoogleSheetsClient', () => {
       };
 
       // Act
-      await client.saveDeliveryData(rowId, deliveryData);
+      await client.saveDeliveryData(rowId, deliveryData, 'Sheet1');
 
       // Assert
       // Проверяем, что диапазоны сформированы правильно для новых полей
@@ -200,8 +227,8 @@ describe('GoogleSheetsClient', () => {
         expect.objectContaining({
           requestBody: expect.objectContaining({
             data: expect.arrayContaining([
-              { range: `Sheet1!N${rowId}`, values: [[deliveryData.country]] },
-              { range: `Sheet1!O${rowId}`, values: [[deliveryData.postal_code]] },
+              { range: `Sheet1!N${rowId}:N${rowId}`, values: [[deliveryData.country]] },
+              { range: `Sheet1!O${rowId}:O${rowId}`, values: [[deliveryData.postal_code]] },
             ]),
           }),
         })
@@ -230,7 +257,7 @@ describe('GoogleSheetsClient', () => {
       };
 
       // Act
-      await client.saveDeliveryData(rowId, deliveryData);
+      await client.saveDeliveryData(rowId, deliveryData, 'Sheet1');
 
       // Assert
       // Проверяем, что claimed_at записан в столбец P
@@ -238,7 +265,7 @@ describe('GoogleSheetsClient', () => {
         expect.objectContaining({
           requestBody: expect.objectContaining({
             data: expect.arrayContaining([
-              { range: `Sheet1!P${rowId}`, values: [[expect.any(String)]] },
+              { range: `Sheet1!P${rowId}:P${rowId}`, values: [[expect.any(String)]] },
             ]),
           }),
         })
@@ -247,7 +274,7 @@ describe('GoogleSheetsClient', () => {
       // Проверяем, что timestamp - валидная ISO строка
       const call = mockSheetsBatchUpdate.mock.calls[0];
       const timestampEntry = call[0].requestBody.data.find(
-        (entry: any) => entry.range === `Sheet1!P${rowId}`
+        (entry: any) => entry.range === `Sheet1!P${rowId}:P${rowId}`
       );
       const timestamp = timestampEntry.values[0][0];
       expect(() => new Date(timestamp)).not.toThrow();
@@ -279,8 +306,8 @@ describe('GoogleSheetsClient', () => {
       mockSheetsBatchUpdate.mockRejectedValueOnce(apiError);
 
       // Act & Assert
-      await expect(client.saveDeliveryData(rowId, deliveryData)).rejects.toThrow(
-        'Failed to save delivery data: API Error: Rate limit exceeded'
+      await expect(client.saveDeliveryData(rowId, deliveryData, 'Sheet1')).rejects.toThrow(
+        'API Error: Rate limit exceeded'
       );
 
       // Проверяем, что ошибка была залогирована
@@ -312,8 +339,8 @@ describe('GoogleSheetsClient', () => {
       mockSheetsBatchUpdate.mockRejectedValueOnce(networkError);
 
       // Act & Assert
-      await expect(client.saveDeliveryData(rowId, deliveryData)).rejects.toThrow(
-        'Failed to save delivery data: Network error: ECONNREFUSED'
+      await expect(client.saveDeliveryData(rowId, deliveryData, 'Sheet1')).rejects.toThrow(
+        'Network error: ECONNREFUSED'
       );
     });
 
@@ -342,8 +369,8 @@ describe('GoogleSheetsClient', () => {
       mockSheetsBatchUpdate.mockRejectedValueOnce(authError);
 
       // Act & Assert
-      await expect(client.saveDeliveryData(rowId, deliveryData)).rejects.toThrow(
-        'Failed to save delivery data: Invalid credentials'
+      await expect(client.saveDeliveryData(rowId, deliveryData, 'Sheet1')).rejects.toThrow(
+        'Invalid credentials'
       );
     });
 
@@ -372,8 +399,8 @@ describe('GoogleSheetsClient', () => {
       mockSheetsBatchUpdate.mockRejectedValueOnce(permissionError);
 
       // Act & Assert
-      await expect(client.saveDeliveryData(rowId, deliveryData)).rejects.toThrow(
-        'Failed to save delivery data: Permission denied'
+      await expect(client.saveDeliveryData(rowId, deliveryData, 'Sheet1')).rejects.toThrow(
+        'Permission denied'
       );
     });
 
@@ -399,14 +426,14 @@ describe('GoogleSheetsClient', () => {
       };
 
       // Act
-      await client.saveDeliveryData(rowId, deliveryData);
+      await client.saveDeliveryData(rowId, deliveryData, 'Sheet1');
 
       // Assert
       expect(mockSheetsBatchUpdate).toHaveBeenCalledWith(
         expect.objectContaining({
           requestBody: expect.objectContaining({
             data: expect.arrayContaining([
-              { range: `Sheet1!N${rowId}`, values: [['Германия']] },
+              { range: `Sheet1!N${rowId}:N${rowId}`, values: [['Германия']] },
             ]),
           }),
         })
@@ -435,14 +462,14 @@ describe('GoogleSheetsClient', () => {
       };
 
       // Act
-      await client.saveDeliveryData(rowId, deliveryData);
+      await client.saveDeliveryData(rowId, deliveryData, 'Sheet1');
 
       // Assert
       expect(mockSheetsBatchUpdate).toHaveBeenCalledWith(
         expect.objectContaining({
           requestBody: expect.objectContaining({
             data: expect.arrayContaining([
-              { range: `Sheet1!O${rowId}`, values: [['12345-6789']] },
+              { range: `Sheet1!O${rowId}:O${rowId}`, values: [['12345-6789']] },
             ]),
           }),
         })
@@ -471,7 +498,7 @@ describe('GoogleSheetsClient', () => {
       };
 
       // Act
-      await client.saveDeliveryData(rowId, deliveryData);
+      await client.saveDeliveryData(rowId, deliveryData, 'Sheet1');
 
       // Assert
       // Проверяем, что все диапазоны используют одну и ту же строку
@@ -479,14 +506,325 @@ describe('GoogleSheetsClient', () => {
         expect.objectContaining({
           requestBody: expect.objectContaining({
             data: expect.arrayContaining([
-              { range: `Sheet1!E${rowId}`, values: [[deliveryData.last_name]] },
-              { range: `Sheet1!F${rowId}`, values: [[deliveryData.first_name]] },
-              { range: `Sheet1!N${rowId}`, values: [[deliveryData.country]] },
-              { range: `Sheet1!O${rowId}`, values: [[deliveryData.postal_code]] },
-              { range: `Sheet1!P${rowId}`, values: [[expect.any(String)]] },
+              { range: `Sheet1!E${rowId}:E${rowId}`, values: [[deliveryData.last_name]] },
+              { range: `Sheet1!F${rowId}:F${rowId}`, values: [[deliveryData.first_name]] },
+              { range: `Sheet1!N${rowId}:N${rowId}`, values: [[deliveryData.country]] },
+              { range: `Sheet1!O${rowId}:O${rowId}`, values: [[deliveryData.postal_code]] },
+              { range: `Sheet1!P${rowId}:P${rowId}`, values: [[expect.any(String)]] },
             ]),
           }),
         })
+      );
+    });
+
+    it('должен использовать переданный sheet_name в диапазонах', async () => {
+      /**
+       * Тест: проверка использования динамического sheet_name
+       * Requirements: 3.2, 3.5
+       */
+      // Arrange
+      const rowId = 10;
+      const sheetName = 'Лист1';
+      const deliveryData: DeliveryData = {
+        last_name: 'Иванов',
+        first_name: 'Иван',
+        patronymic: null,
+        country: 'Россия',
+        postal_code: '123456',
+        city: 'Москва',
+        street: 'Ленина',
+        house: '1',
+        apartment: null,
+        phone: '+79991234567',
+        telegram_id: 123456789,
+      };
+
+      // Act
+      await client.saveDeliveryData(rowId, deliveryData, sheetName);
+
+      // Assert
+      expect(mockSheetsBatchUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          requestBody: expect.objectContaining({
+            data: expect.arrayContaining([
+              { range: `${sheetName}!E${rowId}:E${rowId}`, values: [[deliveryData.last_name]] },
+              { range: `${sheetName}!F${rowId}:F${rowId}`, values: [[deliveryData.first_name]] },
+              { range: `${sheetName}!N${rowId}:N${rowId}`, values: [[deliveryData.country]] },
+            ]),
+          }),
+        })
+      );
+    });
+
+    it('должен проверять существование листа перед сохранением', async () => {
+      /**
+       * Тест: проверка существования листа
+       * Requirements: 4.1
+       */
+      // Arrange
+      const rowId = 5;
+      const sheetName = 'Sheet2';
+      const deliveryData: DeliveryData = {
+        last_name: 'Петров',
+        first_name: 'Петр',
+        patronymic: null,
+        country: 'Россия',
+        postal_code: '654321',
+        city: 'Санкт-Петербург',
+        street: 'Невский',
+        house: '10',
+        apartment: null,
+        phone: '+79997654321',
+        telegram_id: 987654321,
+      };
+
+      // Act
+      await client.saveDeliveryData(rowId, deliveryData, sheetName);
+
+      // Assert
+      // Проверяем, что был вызван метод get для получения списка листов
+      expect(mockSheetsGet).toHaveBeenCalled();
+      expect(mockSheetsBatchUpdate).toHaveBeenCalled();
+    });
+
+    it('должен выбросить SheetNotFoundError для несуществующего листа', async () => {
+      /**
+       * Тест: обработка несуществующего листа
+       * Requirements: 4.2
+       */
+      // Arrange
+      const rowId = 5;
+      const sheetName = 'НесуществующийЛист';
+      const deliveryData: DeliveryData = {
+        last_name: 'Сидоров',
+        first_name: 'Сидор',
+        patronymic: null,
+        country: 'Россия',
+        postal_code: '111111',
+        city: 'Казань',
+        street: 'Пушкина',
+        house: '5',
+        apartment: null,
+        phone: '+79995555555',
+        telegram_id: 555555555,
+      };
+
+      // Act & Assert
+      await expect(client.saveDeliveryData(rowId, deliveryData, sheetName)).rejects.toThrow(
+        `Sheet "${sheetName}" does not exist in spreadsheet`
+      );
+    });
+
+    it('должен кэшировать проверки существования листа', async () => {
+      /**
+       * Тест: кэширование проверок существования
+       * Requirements: 4.3
+       */
+      // Arrange
+      const rowId1 = 5;
+      const rowId2 = 10;
+      const sheetName = 'Sheet1';
+      const deliveryData: DeliveryData = {
+        last_name: 'Федоров',
+        first_name: 'Федор',
+        patronymic: null,
+        country: 'Россия',
+        postal_code: '222222',
+        city: 'Уфа',
+        street: 'Ленина',
+        house: '15',
+        apartment: null,
+        phone: '+79996666666',
+        telegram_id: 666666666,
+      };
+
+      // Act
+      await client.saveDeliveryData(rowId1, deliveryData, sheetName);
+      mockSheetsGet.mockClear(); // Очищаем счетчик вызовов
+      await client.saveDeliveryData(rowId2, deliveryData, sheetName);
+
+      // Assert
+      // Второй вызов не должен запрашивать список листов (используется кэш)
+      expect(mockSheetsGet).not.toHaveBeenCalled();
+    });
+
+    it('должен логировать использование sheet_name', async () => {
+      /**
+       * Тест: логирование использования листа
+       * Requirements: 7.1
+       */
+      // Arrange
+      const rowId = 7;
+      const sheetName = 'Лист1';
+      const deliveryData: DeliveryData = {
+        last_name: 'Алексеев',
+        first_name: 'Алексей',
+        patronymic: null,
+        country: 'Россия',
+        postal_code: '333333',
+        city: 'Екатеринбург',
+        street: 'Малышева',
+        house: '20',
+        apartment: null,
+        phone: '+79997777777',
+        telegram_id: 777777777,
+      };
+
+      const consoleSpy = vi.spyOn(console, 'log');
+
+      // Act
+      await client.saveDeliveryData(rowId, deliveryData, sheetName);
+
+      // Assert
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining(`Using sheet: ${sheetName} for row ${rowId}`)
+      );
+
+      consoleSpy.mockRestore();
+    });
+
+    it('должен логировать проверку существования листа', async () => {
+      /**
+       * Тест: логирование проверки существования
+       * Requirements: 4.5, 7.2
+       */
+      // Arrange
+      const rowId = 8;
+      const sheetName = 'Sheet2';
+      const deliveryData: DeliveryData = {
+        last_name: 'Михайлов',
+        first_name: 'Михаил',
+        patronymic: null,
+        country: 'Россия',
+        postal_code: '444444',
+        city: 'Новосибирск',
+        street: 'Ленина',
+        house: '25',
+        apartment: null,
+        phone: '+79998888888',
+        telegram_id: 888888888,
+      };
+
+      const consoleSpy = vi.spyOn(console, 'log');
+
+      // Act
+      await client.saveDeliveryData(rowId, deliveryData, sheetName);
+
+      // Assert
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining(`Verifying sheet '${sheetName}' exists`)
+      );
+
+      consoleSpy.mockRestore();
+    });
+
+    it('должен логировать успешное сохранение с sheet_name', async () => {
+      /**
+       * Тест: логирование успешного сохранения
+       * Requirements: 7.3
+       */
+      // Arrange
+      const rowId = 9;
+      const sheetName = 'Лист1';
+      const deliveryData: DeliveryData = {
+        last_name: 'Николаев',
+        first_name: 'Николай',
+        patronymic: null,
+        country: 'Россия',
+        postal_code: '555555',
+        city: 'Самара',
+        street: 'Ленина',
+        house: '30',
+        apartment: null,
+        phone: '+79999999999',
+        telegram_id: 999999999,
+      };
+
+      const consoleSpy = vi.spyOn(console, 'log');
+
+      // Act
+      await client.saveDeliveryData(rowId, deliveryData, sheetName);
+
+      // Assert
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining(`Successfully saved delivery data to sheet '${sheetName}', row ${rowId}`)
+      );
+
+      consoleSpy.mockRestore();
+    });
+
+    it('должен логировать ошибки с контекстом (sheetName, rowId)', async () => {
+      /**
+       * Тест: логирование ошибок с контекстом
+       * Requirements: 6.3, 7.4
+       */
+      // Arrange
+      const rowId = 11;
+      const sheetName = 'Sheet1';
+      const deliveryData: DeliveryData = {
+        last_name: 'Павлов',
+        first_name: 'Павел',
+        patronymic: null,
+        country: 'Россия',
+        postal_code: '666666',
+        city: 'Ростов',
+        street: 'Ленина',
+        house: '35',
+        apartment: null,
+        phone: '+79991010101',
+        telegram_id: 101010101,
+      };
+
+      const apiError = new Error('Test API Error');
+      mockSheetsBatchUpdate.mockRejectedValueOnce(apiError);
+
+      const consoleErrorSpy = vi.spyOn(console, 'error');
+
+      // Act & Assert
+      await expect(client.saveDeliveryData(rowId, deliveryData, sheetName)).rejects.toThrow();
+
+      // Проверяем, что ошибка залогирована с контекстом
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'Error saving delivery data to Google Sheets:',
+        expect.objectContaining({
+          sheetName,
+          rowId,
+          error: 'Test API Error',
+          stack: expect.any(String),
+        })
+      );
+
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('должен обрабатывать ошибку "Unable to parse range" как SheetNotFoundError', async () => {
+      /**
+       * Тест: обработка ошибки парсинга диапазона
+       * Requirements: 6.1
+       */
+      // Arrange
+      const rowId = 12;
+      const sheetName = 'InvalidSheet';
+      const deliveryData: DeliveryData = {
+        last_name: 'Романов',
+        first_name: 'Роман',
+        patronymic: null,
+        country: 'Россия',
+        postal_code: '777777',
+        city: 'Воронеж',
+        street: 'Ленина',
+        house: '40',
+        apartment: null,
+        phone: '+79991111111',
+        telegram_id: 111111111,
+      };
+
+      const parseError = new Error('Unable to parse range: InvalidSheet!E12:E12');
+      mockSheetsBatchUpdate.mockRejectedValueOnce(parseError);
+
+      // Act & Assert
+      await expect(client.saveDeliveryData(rowId, deliveryData, sheetName)).rejects.toThrow(
+        `Sheet "${sheetName}" does not exist in spreadsheet`
       );
     });
   });

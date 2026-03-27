@@ -7,12 +7,15 @@ import json
 from typing import Optional
 from aiogram import Router
 from aiogram.types import Message
+from aiogram.fsm.context import FSMContext
 
 from services.google_sheets_service import GoogleSheetsService
-from database.repositories.prize_repository import PrizeRepository
+from services.prize_service import PrizeService
+from database.repositories.prize_repository import PrizeRepository, DatabaseUnavailableError
 from database.connection import get_database
 from utils.retry import retry_with_backoff
 from utils.logging_config import get_logger
+from keyboards.reply_keyboards import get_main_menu_keyboard
 
 logger = get_logger(__name__)
 
@@ -27,6 +30,7 @@ class DeliveryHandler:
         self,
         sheets_service: GoogleSheetsService,
         prize_repository: PrizeRepository,
+        prize_service: PrizeService,
         session_manager=None
     ):
         """
@@ -35,10 +39,12 @@ class DeliveryHandler:
         Args:
             sheets_service: Сервис для работы с Google Sheets
             prize_repository: Repository для работы с призами
+            prize_service: Сервис для валидации prize_id
             session_manager: Менеджер сессий для сохранения ответов бота (опционально)
         """
         self.sheets_service = sheets_service
         self.prize_repository = prize_repository
+        self.prize_service = prize_service
         self.session_manager = session_manager
         
         logger.info("delivery_handler_initialized")
@@ -46,6 +52,7 @@ class DeliveryHandler:
     async def handle_delivery_data(
         self,
         message: Message,
+        state: FSMContext,
         session_id: Optional[int] = None
     ) -> None:
         """
@@ -53,7 +60,14 @@ class DeliveryHandler:
         
         Args:
             message: Сообщение с web_app_data
+            state: FSM контекст для управления состояниями
             session_id: ID сессии из middleware (опционально)
+            
+        Validates:
+            Requirements 7.8 - Сохранение данных доставки в Prize_Table
+            Requirements 7.9 - Отправка подтверждения получения данных
+            Requirements 7.10 - Отображение главного меню после сохранения
+            Requirements 7.11 - Сброс FSM состояния в default_state
         """
         telegram_id = message.from_user.id
         
@@ -85,12 +99,64 @@ class DeliveryHandler:
                 await self._send_error_message(
                     message,
                     "Ошибка: отсутствует идентификатор приза",
+                    state,
+                    session_id
+                )
+                return
+            
+            # Валидация prize_id - проверяем, что приз принадлежит пользователю
+            try:
+                is_valid = await self.prize_service.validate_prize_id(
+                    prize_id=prize_id,
+                    telegram_id=telegram_id
+                )
+                
+                if not is_valid:
+                    logger.error(
+                        "invalid_prize_id_ownership",
+                        telegram_id=telegram_id,
+                        prize_id=prize_id
+                    )
+                    await self._send_error_message(
+                        message,
+                        "❌ Ошибка: недопустимый идентификатор приза",
+                        state,
+                        session_id
+                    )
+                    return
+                    
+            except DatabaseUnavailableError as e:
+                logger.error(
+                    "database_unavailable_during_prize_validation",
+                    telegram_id=telegram_id,
+                    prize_id=prize_id,
+                    error=str(e)
+                )
+                await self._send_error_message(
+                    message,
+                    "⚠️ Сервис временно недоступен. Попробуйте позже.",
+                    state,
                     session_id
                 )
                 return
             
             # Получаем приз из БД по prize_id (row_id)
-            prize = await self._find_prize_by_id(telegram_id, prize_id)
+            try:
+                prize = await self._find_prize_by_id(telegram_id, prize_id)
+            except DatabaseUnavailableError as e:
+                logger.error(
+                    "database_unavailable_during_delivery",
+                    telegram_id=telegram_id,
+                    prize_id=prize_id,
+                    error=str(e)
+                )
+                await self._send_error_message(
+                    message,
+                    "⚠️ Сервис временно недоступен. Попробуйте позже.",
+                    state,
+                    session_id
+                )
+                return
             
             if not prize:
                 logger.error(
@@ -101,6 +167,7 @@ class DeliveryHandler:
                 await self._send_error_message(
                     message,
                     "Ошибка: приз не найден",
+                    state,
                     session_id
                 )
                 return
@@ -137,6 +204,7 @@ class DeliveryHandler:
                 await self._send_error_message(
                     message,
                     "Произошла техническая ошибка при сохранении данных. Пожалуйста, обратитесь в поддержку.",
+                    state,
                     session_id
                 )
                 return
@@ -157,12 +225,13 @@ class DeliveryHandler:
                     code_word=prize.code_word
                 )
             
-            # Отправляем подтверждение пользователю
+            # Отправляем подтверждение пользователю с главным меню
             success_text = (
                 "✅ Спасибо! Ваши данные успешно сохранены.\n"
                 "Мы свяжемся с вами для уточнения деталей доставки."
             )
-            await message.answer(success_text)
+            keyboard = get_main_menu_keyboard()
+            await message.answer(success_text, reply_markup=keyboard)
             
             # Сохраняем ответ бота
             if self.session_manager and session_id:
@@ -177,6 +246,15 @@ class DeliveryHandler:
                         session_id=session_id,
                         error=str(e)
                     )
+            
+            # Сбрасываем FSM состояние
+            await state.clear()
+            
+            logger.info(
+                "fsm_state_cleared_after_delivery",
+                telegram_id=telegram_id,
+                prize_id=prize_id
+            )
             
             logger.info(
                 "delivery_data_saved_successfully",
@@ -195,6 +273,7 @@ class DeliveryHandler:
             await self._send_error_message(
                 message,
                 "Ошибка обработки данных. Пожалуйста, попробуйте снова.",
+                state,
                 session_id
             )
         
@@ -208,6 +287,7 @@ class DeliveryHandler:
             await self._send_error_message(
                 message,
                 "Произошла ошибка при обработке данных. Пожалуйста, попробуйте позже.",
+                state,
                 session_id
             )
     
@@ -225,6 +305,9 @@ class DeliveryHandler:
         
         Returns:
             Prize объект или None
+            
+        Raises:
+            DatabaseUnavailableError: Если БД недоступна
         """
         try:
             # Используем репозиторий для поиска приза по row_id
@@ -247,6 +330,15 @@ class DeliveryHandler:
                 
                 return prize
         
+        except DatabaseUnavailableError:
+            # Пробрасываем исключение наверх
+            logger.error(
+                "database_unavailable_finding_prize",
+                telegram_id=telegram_id,
+                prize_id=prize_id
+            )
+            raise
+        
         except Exception as e:
             logger.error(
                 "error_finding_prize_by_id",
@@ -254,7 +346,8 @@ class DeliveryHandler:
                 prize_id=prize_id,
                 error=str(e)
             )
-            return None
+            # Преобразуем в DatabaseUnavailableError для единообразной обработки
+            raise DatabaseUnavailableError(f"Ошибка доступа к БД: {str(e)}")
     
     async def _save_to_sheets(
         self,
@@ -332,17 +425,23 @@ class DeliveryHandler:
         self,
         message: Message,
         error_text: str,
+        state: FSMContext,
         session_id: Optional[int] = None
     ) -> None:
         """
-        Отправляет сообщение об ошибке пользователю
+        Отправляет сообщение об ошибке пользователю с главным меню
         
         Args:
             message: Сообщение пользователя
             error_text: Текст ошибки
+            state: FSM контекст для сброса состояния
             session_id: ID сессии (опционально)
         """
-        await message.answer(error_text)
+        keyboard = get_main_menu_keyboard()
+        await message.answer(error_text, reply_markup=keyboard)
+        
+        # Сбрасываем FSM состояние при ошибке
+        await state.clear()
         
         # Сохраняем ответ бота
         if self.session_manager and session_id:

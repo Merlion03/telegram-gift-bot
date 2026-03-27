@@ -39,6 +39,7 @@ def create_mock_message(telegram_id: int, text: str = "Привет"):
     message.from_user.id = telegram_id
     message.from_user.username = "test_user"
     message.from_user.first_name = "Test"
+    message.from_user.last_name = "User"
     message.text = text
     message.caption = None
     message.photo = None
@@ -63,7 +64,13 @@ class MockRepository(SupportRepository):
         self.next_session_id = 1
         self.next_message_id = 1
     
-    async def create_session(self, telegram_id: int) -> int:
+    async def create_session(
+        self, 
+        telegram_id: int,
+        first_name: str = None,
+        last_name: str = None,
+        username: str = None
+    ) -> int:
         """Создаёт mock сессию"""
         session_id = self.next_session_id
         self.next_session_id += 1

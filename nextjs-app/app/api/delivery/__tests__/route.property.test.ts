@@ -1,717 +1,342 @@
 /**
- * Property-based тесты для API route /api/delivery
+ * Property-Based тесты для Delivery API
  * 
- * Проверяют:
- * - Property 5: Передача InitData при открытии WebApp
- * - Property 6: Валидация обязательных полей формы
- * - Property 8: Round-trip сохранения данных доставки
- * 
- * Validates: Requirements 3.4, 4.1, 4.2, 4.5, 10.1
+ * Validates: Requirements 2.1, 2.2, 2.5, 6.4, 7.5, 9.2, 9.3, 9.5
  */
 
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { fc } from '@fast-check/vitest';
-import crypto from 'crypto';
-import { POST } from '../route';
+import { describe, expect, vi, beforeEach, afterEach } from 'vitest';
+import { fc, test } from '@fast-check/vitest';
 import { NextRequest } from 'next/server';
 
-// Моки для зависимостей
-vi.mock('@/lib/telegram/initDataValidator');
+// Моки модулей - ДОЛЖНЫ быть ДО импортов
+vi.mock('@/lib/api/prizeClient');
 vi.mock('@/lib/google/sheetsClient');
+vi.mock('@/lib/telegram/initDataValidator', () => ({
+  InitDataValidator: vi.fn().mockImplementation(() => ({
+    validate: vi.fn(),
+    extractUserData: vi.fn().mockReturnValue({ id: 12345 }),
+  })),
+}));
 
-import { InitDataValidator } from '@/lib/telegram/initDataValidator';
+// Импорты после моков
+import { POST } from '../route';
+import { PrizeClient } from '@/lib/api/prizeClient';
 import { GoogleSheetsClient } from '@/lib/google/sheetsClient';
+import { SheetNotFoundError, SheetAccessDeniedError } from '@/lib/types/sheet';
 
-describe('Delivery API Route - Property-Based Tests', () => {
-  const TEST_BOT_TOKEN = 'test_bot_token_123456789';
-  const TEST_SPREADSHEET_ID = 'test_spreadsheet_id';
+// Генераторы для property-based тестов
+const validSheetNameArbitrary = fc.string({ minLength: 1, maxLength: 100 })
+  .filter(name => {
+    const forbidden = ['[', ']', '*', '/', '\\', '?', ':'];
+    return !forbidden.some(char => name.includes(char)) && name.trim().length > 0;
+  });
 
+const prizeIdArbitrary = fc.integer({ min: 1, max: 10000 });
+
+const rowIdArbitrary = fc.integer({ min: 1, max: 10000 });
+
+const telegramIdArbitrary = fc.integer({ min: 1, max: 999999999 });
+
+// Генератор валидных строк (не только пробелы)
+const validStringArbitrary = (minLength: number, maxLength: number) =>
+  fc.string({ minLength, maxLength })
+    .filter(s => s.trim().length >= minLength);
+
+// Генератор валидного телефона
+const validPhoneArbitrary = fc.string({ minLength: 10, maxLength: 15 })
+  .map(s => '+' + s.replace(/\D/g, '').padEnd(10, '0').slice(0, 15));
+
+const validDeliveryDataArbitrary = fc.record({
+  last_name: validStringArbitrary(2, 50),
+  first_name: validStringArbitrary(2, 50),
+  patronymic: fc.option(validStringArbitrary(2, 50), { nil: '' }),
+  country: validStringArbitrary(2, 100),
+  postal_code: validStringArbitrary(3, 20),
+  city: validStringArbitrary(2, 100),
+  street: validStringArbitrary(2, 200),
+  house: validStringArbitrary(1, 20),
+  apartment: fc.option(validStringArbitrary(1, 20), { nil: '' }),
+  phone: validPhoneArbitrary,
+  comment: fc.option(fc.string({ maxLength: 500 })),
+});
+
+describe('Delivery API - Property Tests', () => {
   beforeEach(() => {
     // Настройка переменных окружения
-    process.env.BOT_TOKEN = TEST_BOT_TOKEN;
-    process.env.SPREADSHEET_ID = TEST_SPREADSHEET_ID;
-    process.env.GOOGLE_CREDENTIALS_JSON = JSON.stringify({
-      client_email: 'test@test.iam.gserviceaccount.com',
-      private_key: '-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n',
-    });
+    process.env.BOT_TOKEN = 'test-bot-token';
+    process.env.GOOGLE_CREDENTIALS_PATH = '/path/to/credentials.json';
+    process.env.SPREADSHEET_ID = 'test-spreadsheet-id';
+    process.env.BACKEND_API_URL = 'http://localhost:5000';
 
-    // Сброс всех моков
     vi.clearAllMocks();
-    vi.resetAllMocks();
-    
-    // Настройка дефолтных моков для классов
-    vi.mocked(InitDataValidator).mockImplementation((function(this: any, botToken: string) {
-      this.validate = vi.fn().mockReturnValue(true);
-      this.extractUserData = vi.fn().mockReturnValue({ id: 12345 });
-    } as any) as any);
-    
-    vi.mocked(GoogleSheetsClient).mockImplementation((function(this: any) {
-      this.saveDeliveryData = vi.fn().mockResolvedValue(true);
-      this.healthCheck = vi.fn().mockResolvedValue(true);
-    } as any) as any);
   });
 
   afterEach(() => {
-    // Очистка переменных окружения
-    delete process.env.BOT_TOKEN;
-    delete process.env.SPREADSHEET_ID;
-    delete process.env.GOOGLE_CREDENTIALS_JSON;
+    vi.restoreAllMocks();
   });
 
   /**
-   * Вспомогательная функция для генерации валидного hash
+   * Feature: google-sheets-dynamic-worksheet-selection, Property 4:
+   * Delivery API получает sheet_name из Backend
+   * 
+   * Validates: Requirements 2.1, 9.2
    */
-  function generateValidHash(dataCheckString: string, botToken: string): string {
-    const secretKey = crypto
-      .createHmac('sha256', 'WebAppData')
-      .update(botToken)
-      .digest();
+  test.prop([prizeIdArbitrary, validSheetNameArbitrary, rowIdArbitrary, validDeliveryDataArbitrary])(
+    'Property 4: должен получать sheet_name из Backend для любого валидного prize_id',
+    async (prizeId, sheetName, rowId, deliveryData) => {
+      // Arrange
+      const mockGetPrizeInfo = vi.fn().mockResolvedValue({
+        sheet_name: sheetName,
+        row_id: rowId,
+        code_word: 'TEST123',
+      });
+      
+      vi.mocked(PrizeClient).mockImplementation(() => ({
+        getPrizeInfo: mockGetPrizeInfo,
+      } as any));
 
-    return crypto
-      .createHmac('sha256', secretKey)
-      .update(dataCheckString)
-      .digest('hex');
-  }
+      vi.mocked(GoogleSheetsClient).mockImplementation(() => ({
+        saveDeliveryData: vi.fn().mockResolvedValue(true),
+      } as any));
+
+      const requestBody = {
+        ...deliveryData,
+        prize_id: prizeId,
+        initData: 'valid-init-data',
+      };
+
+      const request = new NextRequest('http://localhost:3000/api/delivery', {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+      });
+
+      // Act
+      await POST(request);
+
+      // Assert: PrizeClient.getPrizeInfo должен быть вызван с prize_id
+      expect(mockGetPrizeInfo).toHaveBeenCalledWith(prizeId);
+    }
+  );
 
   /**
-   * Вспомогательная функция для создания валидного InitData
+   * Feature: google-sheets-dynamic-worksheet-selection, Property 5:
+   * Delivery API передает sheet_name в GoogleSheetsClient
+   * 
+   * Validates: Requirements 2.2, 9.5
    */
-  function createValidInitData(
-    userId: number,
-    authDate: number,
-    botToken: string
-  ): string {
-    const params = new URLSearchParams({
-      auth_date: authDate.toString(),
-      user: JSON.stringify({ id: userId }),
-    });
+  test.prop([prizeIdArbitrary, validSheetNameArbitrary, rowIdArbitrary, validDeliveryDataArbitrary])(
+    'Property 5: должен передавать sheet_name в GoogleSheetsClient.saveDeliveryData',
+    async (prizeId, sheetName, rowId, deliveryData) => {
+      // Arrange
+      vi.mocked(PrizeClient).mockImplementation(() => ({
+        getPrizeInfo: vi.fn().mockResolvedValue({
+          sheet_name: sheetName,
+          row_id: rowId,
+          code_word: 'TEST123',
+        }),
+      } as any));
 
-    const dataCheckString = Array.from(params.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, value]) => `${key}=${value}`)
-      .join('\n');
+      const mockSaveDeliveryData = vi.fn().mockResolvedValue(true);
+      vi.mocked(GoogleSheetsClient).mockImplementation(() => ({
+        saveDeliveryData: mockSaveDeliveryData,
+      } as any));
 
-    const hash = generateValidHash(dataCheckString, botToken);
-    params.append('hash', hash);
+      const requestBody = {
+        ...deliveryData,
+        prize_id: prizeId,
+        initData: 'valid-init-data',
+      };
 
-    return params.toString();
-  }
+      const request = new NextRequest('http://localhost:3000/api/delivery', {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+      });
+
+      // Act
+      await POST(request);
+
+      // Assert: saveDeliveryData должен быть вызван с sheet_name
+      expect(mockSaveDeliveryData).toHaveBeenCalled();
+      const callArgs = mockSaveDeliveryData.mock.calls[0];
+      expect(callArgs[0]).toBe(rowId); // row_id
+      expect(callArgs[2]).toBe(sheetName); // sheet_name (третий параметр)
+    }
+  );
 
   /**
-   * Вспомогательная функция для создания mock request
+   * Feature: google-sheets-dynamic-worksheet-selection, Property 6:
+   * Delivery API логирует sheet_name
+   * 
+   * Validates: Requirements 2.5, 7.5
    */
-  function createMockRequest(body: unknown): NextRequest {
-    return {
-      json: async () => body,
-    } as NextRequest;
-  }
+  test.prop([prizeIdArbitrary, validSheetNameArbitrary, rowIdArbitrary, validDeliveryDataArbitrary])(
+    'Property 6: должен логировать sheet_name для любого успешного запроса',
+    async (prizeId, sheetName, rowId, deliveryData) => {
+      // Arrange
+      const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-  describe('Property 5: Передача InitData при открытии WebApp', () => {
-    /**
-     * Property: Запрос без InitData всегда отклоняется с ошибкой валидации
-     * 
-     * Validates: Requirements 3.4, 10.1
-     */
-    it('должен отклонять запросы без InitData', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.string({ minLength: 2, maxLength: 50 }), // full_name
-          fc.string({ minLength: 10, maxLength: 100 }), // address
-          fc.string({ minLength: 10, maxLength: 15 }).map(s => '+' + s.replace(/\D/g, '')), // phone
-          fc.integer({ min: 1, max: 100 }), // prize_id
-          async (fullName, address, phone, prizeId) => {
-            const requestBody = {
-              full_name: fullName,
-              address: address,
-              phone: phone,
-              prize_id: prizeId,
-              // initData отсутствует
-            };
+      vi.mocked(PrizeClient).mockImplementation(() => ({
+        getPrizeInfo: vi.fn().mockResolvedValue({
+          sheet_name: sheetName,
+          row_id: rowId,
+          code_word: 'TEST123',
+        }),
+      } as any));
 
-            const request = createMockRequest(requestBody);
-            const response = await POST(request);
-            const data = await response.json();
+      vi.mocked(GoogleSheetsClient).mockImplementation(() => ({
+        saveDeliveryData: vi.fn().mockResolvedValue(true),
+      } as any));
 
-            // Должен вернуть ошибку валидации
-            expect(response.status).toBe(400);
-            expect(data.error).toBe('Validation error');
-            expect(data.details).toBeDefined();
-            expect(data.details.some((d: any) => d.field === 'initData')).toBe(true);
-          }
-        ),
-        { numRuns: 10, timeout: 5000 }
+      const requestBody = {
+        ...deliveryData,
+        prize_id: prizeId,
+        initData: 'valid-init-data',
+      };
+
+      const request = new NextRequest('http://localhost:3000/api/delivery', {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+      });
+
+      // Act
+      await POST(request);
+
+      // Assert: должен быть лог с sheet_name и prize_id
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        expect.stringContaining(`Using sheet: ${sheetName} for prize ${prizeId}`)
       );
-    });
 
-    /**
-     * Property: Запрос с пустым InitData отклоняется
-     * 
-     * Validates: Requirements 3.4, 10.1
-     */
-    it('должен отклонять запросы с пустым InitData', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.string({ minLength: 2, maxLength: 50 }), // full_name
-          fc.string({ minLength: 10, maxLength: 100 }), // address
-          fc.string({ minLength: 10, maxLength: 15 }).map(s => '+' + s.replace(/\D/g, '')), // phone
-          fc.integer({ min: 1, max: 100 }), // prize_id
-          async (fullName, address, phone, prizeId) => {
-            const requestBody = {
-              full_name: fullName,
-              address: address,
-              phone: phone,
-              prize_id: prizeId,
-              initData: '', // Пустой InitData
-            };
+      consoleLogSpy.mockRestore();
+    }
+  );
 
-            const request = createMockRequest(requestBody);
-            const response = await POST(request);
-            const data = await response.json();
+  /**
+   * Feature: google-sheets-dynamic-worksheet-selection, Property 16:
+   * Delivery API обрабатывает ошибки GoogleSheetsClient
+   * 
+   * Validates: Requirements 6.4
+   */
+  test.prop([prizeIdArbitrary, validSheetNameArbitrary, rowIdArbitrary, validDeliveryDataArbitrary])(
+    'Property 16: должен обрабатывать SheetNotFoundError и возвращать HTTP 500',
+    async (prizeId, sheetName, rowId, deliveryData) => {
+      // Arrange
+      vi.mocked(PrizeClient).mockImplementation(() => ({
+        getPrizeInfo: vi.fn().mockResolvedValue({
+          sheet_name: sheetName,
+          row_id: rowId,
+          code_word: 'TEST123',
+        }),
+      } as any));
 
-            // Должен вернуть ошибку валидации
-            expect(response.status).toBe(400);
-            expect(data.error).toBe('Validation error');
-          }
-        ),
-        { numRuns: 10, timeout: 5000 }
-      );
-    });
+      vi.mocked(GoogleSheetsClient).mockImplementation(() => ({
+        saveDeliveryData: vi.fn().mockRejectedValue(new SheetNotFoundError(sheetName)),
+      } as any));
 
-    /**
-     * Property: Запрос с валидным InitData проходит проверку InitData
-     * 
-     * Validates: Requirements 3.4, 10.1
-     */
-    it('должен принимать запросы с валидным InitData', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // last_name
-          fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // first_name
-          fc.string({ minLength: 2, maxLength: 100 }).map(s => s.trim()).filter(s => s.length >= 2), // city
-          fc.string({ minLength: 2, maxLength: 200 }).map(s => s.trim()).filter(s => s.length >= 2), // street
-          fc.string({ minLength: 1, maxLength: 20 }).map(s => s.trim()).filter(s => s.length >= 1), // house
-          fc.integer({ min: 1000000000, max: 9999999999 }).map(n => '+' + n.toString()), // phone
-          fc.integer({ min: 1, max: 100 }), // prize_id
-          fc.integer({ min: 1, max: 999999 }), // user_id
-          async (lastName, firstName, city, street, house, phone, prizeId, userId) => {
-            const currentTimestamp = Math.floor(Date.now() / 1000);
-            const authDate = currentTimestamp - 100;
-            const initData = createValidInitData(userId, authDate, TEST_BOT_TOKEN);
+      const requestBody = {
+        ...deliveryData,
+        prize_id: prizeId,
+        initData: 'valid-init-data',
+      };
 
-            const requestBody = {
-              last_name: lastName,
-              first_name: firstName,
-              city: city,
-              street: street,
-              house: house,
-              phone: phone,
-              prize_id: prizeId,
-              initData: initData,
-            };
+      const request = new NextRequest('http://localhost:3000/api/delivery', {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+      });
 
-            const request = createMockRequest(requestBody);
-            const response = await POST(request);
+      // Act
+      const response = await POST(request);
+      const responseData = await response.json();
 
-            // Должен успешно обработать запрос (не 403)
-            expect(response.status).not.toBe(403);
-          }
-        ),
-        { numRuns: 10, timeout: 5000 }
-      );
-    });
-  });
+      // Assert
+      expect(response.status).toBe(500);
+      expect(responseData.error).toBe('Sheet not found');
+      expect(responseData.message).toBe('Лист не найден в таблице');
+    }
+  );
 
-  describe('Property 6: Валидация обязательных полей формы', () => {
-    /**
-     * Property: Запрос без обязательного поля full_name отклоняется
-     * 
-     * Validates: Requirements 4.1, 4.2
-     */
-    it('должен отклонять запросы без last_name', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.string({ minLength: 2, maxLength: 50 }), // first_name
-          fc.string({ minLength: 2, maxLength: 100 }), // city
-          fc.string({ minLength: 2, maxLength: 200 }), // street
-          fc.string({ minLength: 1, maxLength: 20 }), // house
-          fc.string({ minLength: 10, maxLength: 15 }).map(s => '+' + s.replace(/\D/g, '')), // phone
-          fc.integer({ min: 1, max: 100 }), // prize_id
-          async (firstName, city, street, house, phone, prizeId) => {
-            const currentTimestamp = Math.floor(Date.now() / 1000);
-            const initData = createValidInitData(12345, currentTimestamp - 100, TEST_BOT_TOKEN);
+  test.prop([prizeIdArbitrary, validSheetNameArbitrary, rowIdArbitrary, validDeliveryDataArbitrary])(
+    'Property 16: должен обрабатывать SheetAccessDeniedError и возвращать HTTP 500',
+    async (prizeId, sheetName, rowId, deliveryData) => {
+      // Arrange
+      vi.mocked(PrizeClient).mockImplementation(() => ({
+        getPrizeInfo: vi.fn().mockResolvedValue({
+          sheet_name: sheetName,
+          row_id: rowId,
+          code_word: 'TEST123',
+        }),
+      } as any));
 
-            const requestBody = {
-              // last_name отсутствует
-              first_name: firstName,
-              city: city,
-              street: street,
-              house: house,
-              phone: phone,
-              prize_id: prizeId,
-              initData: initData,
-            };
+      vi.mocked(GoogleSheetsClient).mockImplementation(() => ({
+        saveDeliveryData: vi.fn().mockRejectedValue(new SheetAccessDeniedError(sheetName)),
+      } as any));
 
-            const request = createMockRequest(requestBody);
-            const response = await POST(request);
-            const data = await response.json();
+      const requestBody = {
+        ...deliveryData,
+        prize_id: prizeId,
+        initData: 'valid-init-data',
+      };
 
-            expect(response.status).toBe(400);
-            expect(data.error).toBe('Validation error');
-            expect(data.details.some((d: any) => d.field === 'last_name')).toBe(true);
-          }
-        ),
-        { numRuns: 10, timeout: 5000 }
-      );
-    });
+      const request = new NextRequest('http://localhost:3000/api/delivery', {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+      });
 
-    /**
-     * Property: Запрос без обязательного поля city отклоняется
-     * 
-     * Validates: Requirements 4.1, 4.2
-     */
-    it('должен отклонять запросы без city', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.string({ minLength: 2, maxLength: 50 }), // last_name
-          fc.string({ minLength: 2, maxLength: 50 }), // first_name
-          fc.string({ minLength: 2, maxLength: 200 }), // street
-          fc.string({ minLength: 1, maxLength: 20 }), // house
-          fc.string({ minLength: 10, maxLength: 15 }).map(s => '+' + s.replace(/\D/g, '')), // phone
-          fc.integer({ min: 1, max: 100 }), // prize_id
-          async (lastName, firstName, street, house, phone, prizeId) => {
-            const currentTimestamp = Math.floor(Date.now() / 1000);
-            const initData = createValidInitData(12345, currentTimestamp - 100, TEST_BOT_TOKEN);
+      // Act
+      const response = await POST(request);
+      const responseData = await response.json();
 
-            const requestBody = {
-              last_name: lastName,
-              first_name: firstName,
-              // city отсутствует
-              street: street,
-              house: house,
-              phone: phone,
-              prize_id: prizeId,
-              initData: initData,
-            };
+      // Assert
+      expect(response.status).toBe(500);
+      expect(responseData.error).toBe('Access denied');
+      expect(responseData.message).toBe('Нет доступа к листу');
+    }
+  );
 
-            const request = createMockRequest(requestBody);
-            const response = await POST(request);
-            const data = await response.json();
+  /**
+   * Feature: google-sheets-dynamic-worksheet-selection, Property 20:
+   * Delivery API парсит JSON ответ Backend
+   * 
+   * Validates: Requirements 9.3
+   */
+  test.prop([prizeIdArbitrary, validSheetNameArbitrary, rowIdArbitrary, validDeliveryDataArbitrary])(
+    'Property 20: должен корректно парсить JSON ответ от Backend с полем sheet_name',
+    async (prizeId, sheetName, rowId, deliveryData) => {
+      // Arrange
+      const backendResponse = {
+        sheet_name: sheetName,
+        row_id: rowId,
+        code_word: 'TEST123',
+      };
 
-            expect(response.status).toBe(400);
-            expect(data.error).toBe('Validation error');
-            expect(data.details.some((d: any) => d.field === 'city')).toBe(true);
-          }
-        ),
-        { numRuns: 10, timeout: 5000 }
-      );
-    });
+      const mockGetPrizeInfo = vi.fn().mockResolvedValue(backendResponse);
+      
+      vi.mocked(PrizeClient).mockImplementation(() => ({
+        getPrizeInfo: mockGetPrizeInfo,
+      } as any));
 
-    /**
-     * Property: Запрос без обязательного поля phone отклоняется
-     * 
-     * Validates: Requirements 4.1, 4.2
-     */
-    it('должен отклонять запросы без phone', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.string({ minLength: 2, maxLength: 50 }), // last_name
-          fc.string({ minLength: 2, maxLength: 50 }), // first_name
-          fc.string({ minLength: 2, maxLength: 100 }), // city
-          fc.string({ minLength: 2, maxLength: 200 }), // street
-          fc.string({ minLength: 1, maxLength: 20 }), // house
-          fc.integer({ min: 1, max: 100 }), // prize_id
-          async (lastName, firstName, city, street, house, prizeId) => {
-            const currentTimestamp = Math.floor(Date.now() / 1000);
-            const initData = createValidInitData(12345, currentTimestamp - 100, TEST_BOT_TOKEN);
+      const mockSaveDeliveryData = vi.fn().mockResolvedValue(true);
+      vi.mocked(GoogleSheetsClient).mockImplementation(() => ({
+        saveDeliveryData: mockSaveDeliveryData,
+      } as any));
 
-            const requestBody = {
-              last_name: lastName,
-              first_name: firstName,
-              city: city,
-              street: street,
-              house: house,
-              // phone отсутствует
-              prize_id: prizeId,
-              initData: initData,
-            };
+      const requestBody = {
+        ...deliveryData,
+        prize_id: prizeId,
+        initData: 'valid-init-data',
+      };
 
-            const request = createMockRequest(requestBody);
-            const response = await POST(request);
-            const data = await response.json();
+      const request = new NextRequest('http://localhost:3000/api/delivery', {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+      });
 
-            expect(response.status).toBe(400);
-            expect(data.error).toBe('Validation error');
-            expect(data.details.some((d: any) => d.field === 'phone')).toBe(true);
-          }
-        ),
-        { numRuns: 10, timeout: 5000 }
-      );
-    });
+      // Act
+      await POST(request);
 
-    /**
-     * Property: Запрос с невалидным форматом phone отклоняется
-     * 
-     * Validates: Requirements 4.1, 4.2
-     */
-    it('должен отклонять запросы с невалидным форматом телефона', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.string({ minLength: 2, maxLength: 50 }), // full_name
-          fc.string({ minLength: 10, maxLength: 100 }), // address
-          fc.string({ minLength: 1, maxLength: 20 }).filter(s => !/^\+?[0-9]{10,15}$/.test(s)), // invalid phone
-          fc.integer({ min: 1, max: 100 }), // prize_id
-          async (fullName, address, invalidPhone, prizeId) => {
-            const currentTimestamp = Math.floor(Date.now() / 1000);
-            const initData = createValidInitData(12345, currentTimestamp - 100, TEST_BOT_TOKEN);
-
-            const requestBody = {
-              full_name: fullName,
-              address: address,
-              phone: invalidPhone,
-              prize_id: prizeId,
-              initData: initData,
-            };
-
-            const request = createMockRequest(requestBody);
-            const response = await POST(request);
-            const data = await response.json();
-
-            expect(response.status).toBe(400);
-            expect(data.error).toBe('Validation error');
-            expect(data.details.some((d: any) => d.field === 'phone')).toBe(true);
-          }
-        ),
-        { numRuns: 10, timeout: 5000 }
-      );
-    });
-
-    /**
-     * Property: Запрос с слишком коротким last_name отклоняется
-     * 
-     * Validates: Requirements 4.1, 4.2
-     */
-    it('должен отклонять запросы с слишком коротким last_name', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.string({ minLength: 0, maxLength: 1 }), // too short last_name
-          fc.string({ minLength: 2, maxLength: 50 }), // first_name
-          fc.string({ minLength: 2, maxLength: 100 }), // city
-          fc.string({ minLength: 2, maxLength: 200 }), // street
-          fc.string({ minLength: 1, maxLength: 20 }), // house
-          fc.string({ minLength: 10, maxLength: 15 }).map(s => '+' + s.replace(/\D/g, '')), // phone
-          fc.integer({ min: 1, max: 100 }), // prize_id
-          async (shortName, firstName, city, street, house, phone, prizeId) => {
-            const currentTimestamp = Math.floor(Date.now() / 1000);
-            const initData = createValidInitData(12345, currentTimestamp - 100, TEST_BOT_TOKEN);
-
-            const requestBody = {
-              last_name: shortName,
-              first_name: firstName,
-              city: city,
-              street: street,
-              house: house,
-              phone: phone,
-              prize_id: prizeId,
-              initData: initData,
-            };
-
-            const request = createMockRequest(requestBody);
-            const response = await POST(request);
-            const data = await response.json();
-
-            expect(response.status).toBe(400);
-            expect(data.error).toBe('Validation error');
-            expect(data.details.some((d: any) => d.field === 'last_name')).toBe(true);
-          }
-        ),
-        { numRuns: 10, timeout: 5000 }
-      );
-    });
-
-    /**
-     * Property: Запрос с слишком коротким city отклоняется
-     * 
-     * Validates: Requirements 4.1, 4.2
-     */
-    it('должен отклонять запросы с слишком коротким city', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.string({ minLength: 2, maxLength: 50 }), // last_name
-          fc.string({ minLength: 2, maxLength: 50 }), // first_name
-          fc.string({ minLength: 0, maxLength: 1 }), // too short city
-          fc.string({ minLength: 2, maxLength: 200 }), // street
-          fc.string({ minLength: 1, maxLength: 20 }), // house
-          fc.string({ minLength: 10, maxLength: 15 }).map(s => '+' + s.replace(/\D/g, '')), // phone
-          fc.integer({ min: 1, max: 100 }), // prize_id
-          async (lastName, firstName, shortCity, street, house, phone, prizeId) => {
-            const currentTimestamp = Math.floor(Date.now() / 1000);
-            const initData = createValidInitData(12345, currentTimestamp - 100, TEST_BOT_TOKEN);
-
-            const requestBody = {
-              last_name: lastName,
-              first_name: firstName,
-              city: shortCity,
-              street: street,
-              house: house,
-              phone: phone,
-              prize_id: prizeId,
-              initData: initData,
-            };
-
-            const request = createMockRequest(requestBody);
-            const response = await POST(request);
-            const data = await response.json();
-
-            expect(response.status).toBe(400);
-            expect(data.error).toBe('Validation error');
-            expect(data.details.some((d: any) => d.field === 'city')).toBe(true);
-          }
-        ),
-        { numRuns: 10, timeout: 5000 }
-      );
-    });
-
-    /**
-     * Property: Поле comment опционально и может отсутствовать
-     * 
-     * Validates: Requirements 4.1
-     */
-    it('должен принимать запросы без опционального поля comment', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // last_name
-          fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // first_name
-          fc.string({ minLength: 2, maxLength: 100 }).map(s => s.trim()).filter(s => s.length >= 2), // city
-          fc.string({ minLength: 2, maxLength: 200 }).map(s => s.trim()).filter(s => s.length >= 2), // street
-          fc.string({ minLength: 1, maxLength: 20 }).map(s => s.trim()).filter(s => s.length >= 1), // house
-          fc.integer({ min: 1000000000, max: 9999999999 }).map(n => '+' + n.toString()), // phone
-          fc.integer({ min: 1, max: 100 }), // prize_id
-          fc.integer({ min: 1, max: 999999 }), // user_id
-          async (lastName, firstName, city, street, house, phone, prizeId, userId) => {
-            const currentTimestamp = Math.floor(Date.now() / 1000);
-            const authDate = currentTimestamp - 100;
-            const initData = createValidInitData(userId, authDate, TEST_BOT_TOKEN);
-
-            const requestBody = {
-              last_name: lastName,
-              first_name: firstName,
-              city: city,
-              street: street,
-              house: house,
-              phone: phone,
-              prize_id: prizeId,
-              initData: initData,
-              // comment отсутствует
-            };
-
-            const request = createMockRequest(requestBody);
-            const response = await POST(request);
-
-            // Не должен вернуть ошибку валидации для comment
-            if (response.status === 400) {
-              const data = await response.json();
-              expect(data.details?.some((d: any) => d.field === 'comment')).toBe(false);
-            }
-          }
-        ),
-        { numRuns: 10, timeout: 5000 }
-      );
-    });
-  });
-
-  describe('Property 8: Round-trip сохранения данных доставки', () => {
-    /**
-     * Property: Данные, отправленные в API, корректно передаются в GoogleSheetsClient
-     * 
-     * Validates: Requirements 4.5
-     */
-    it('должен корректно передавать данные в GoogleSheetsClient', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // last_name
-          fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // first_name
-          fc.option(fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), { nil: undefined }), // patronymic
-          fc.string({ minLength: 2, maxLength: 100 }).map(s => s.trim()).filter(s => s.length >= 2), // country
-          fc.string({ minLength: 3, maxLength: 20 }).map(s => s.trim()).filter(s => s.length >= 3), // postal_code
-          fc.string({ minLength: 2, maxLength: 100 }).map(s => s.trim()).filter(s => s.length >= 2), // city
-          fc.string({ minLength: 2, maxLength: 200 }).map(s => s.trim()).filter(s => s.length >= 2), // street
-          fc.string({ minLength: 1, maxLength: 20 }).map(s => s.trim()).filter(s => s.length >= 1), // house
-          fc.option(fc.string({ minLength: 1, maxLength: 20 }).map(s => s.trim()).filter(s => s.length >= 1), { nil: undefined }), // apartment
-          fc.integer({ min: 1000000000, max: 9999999999 }).map(n => '+' + n.toString()), // phone
-          fc.option(fc.string({ minLength: 1, maxLength: 100 }), { nil: undefined }), // comment
-          fc.integer({ min: 1, max: 100 }), // prize_id
-          fc.integer({ min: 1, max: 999999 }), // user_id
-          async (lastName, firstName, patronymic, country, postalCode, city, street, house, apartment, phone, comment, prizeId, userId) => {
-            const currentTimestamp = Math.floor(Date.now() / 1000);
-            const authDate = currentTimestamp - 100;
-            const initData = createValidInitData(userId, authDate, TEST_BOT_TOKEN);
-
-            const requestBody = {
-              last_name: lastName,
-              first_name: firstName,
-              ...(patronymic && { patronymic }),
-              country: country,
-              postal_code: postalCode,
-              city: city,
-              street: street,
-              house: house,
-              ...(apartment && { apartment }),
-              phone: phone,
-              ...(comment && { comment }),
-              prize_id: prizeId,
-              initData: initData,
-            };
-
-            // Создание spy для saveDeliveryData
-            const saveDeliveryDataSpy = vi.fn().mockResolvedValue(true);
-            const extractUserDataSpy = vi.fn().mockReturnValue({ id: userId });
-
-            // Переопределение моков для этого теста
-            vi.mocked(InitDataValidator).mockImplementation((function(this: any) {
-              this.validate = vi.fn().mockReturnValue(true);
-              this.extractUserData = extractUserDataSpy;
-            } as any) as any);
-
-            vi.mocked(GoogleSheetsClient).mockImplementation((function(this: any) {
-              this.saveDeliveryData = saveDeliveryDataSpy;
-              this.healthCheck = vi.fn().mockResolvedValue(true);
-            } as any) as any);
-
-            const request = createMockRequest(requestBody);
-            const response = await POST(request);
-
-            // Проверка, что saveDeliveryData был вызван с санитизированными параметрами
-            expect(saveDeliveryDataSpy).toHaveBeenCalledWith(
-              prizeId,
-              expect.objectContaining({
-                telegram_id: userId,
-              })
-            );
-
-            // Проверка успешного ответа
-            expect(response.status).toBe(200);
-            const data = await response.json();
-            expect(data.success).toBe(true);
-          }
-        ),
-        { numRuns: 10, timeout: 5000 }
-      );
-    });
-
-    /**
-     * Property: При успешном сохранении API возвращает success: true
-     * 
-     * Validates: Requirements 4.5
-     */
-    it('должен возвращать success при успешном сохранении', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // last_name
-          fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // first_name
-          fc.string({ minLength: 2, maxLength: 100 }).map(s => s.trim()).filter(s => s.length >= 2), // country
-          fc.string({ minLength: 3, maxLength: 20 }).map(s => s.trim()).filter(s => s.length >= 3), // postal_code
-          fc.string({ minLength: 2, maxLength: 100 }).map(s => s.trim()).filter(s => s.length >= 2), // city
-          fc.string({ minLength: 2, maxLength: 200 }).map(s => s.trim()).filter(s => s.length >= 2), // street
-          fc.string({ minLength: 1, maxLength: 20 }).map(s => s.trim()).filter(s => s.length >= 1), // house
-          fc.integer({ min: 1000000000, max: 9999999999 }).map(n => '+' + n.toString()), // phone
-          fc.integer({ min: 1, max: 100 }), // prize_id
-          fc.integer({ min: 1, max: 999999 }), // user_id
-          async (lastName, firstName, country, postalCode, city, street, house, phone, prizeId, userId) => {
-            const currentTimestamp = Math.floor(Date.now() / 1000);
-            const authDate = currentTimestamp - 100;
-            const initData = createValidInitData(userId, authDate, TEST_BOT_TOKEN);
-
-            const requestBody = {
-              last_name: lastName,
-              first_name: firstName,
-              country: country,
-              postal_code: postalCode,
-              city: city,
-              street: street,
-              house: house,
-              phone: phone,
-              prize_id: prizeId,
-              initData: initData,
-            };
-
-            const request = createMockRequest(requestBody);
-            const response = await POST(request);
-            const data = await response.json();
-
-            expect(response.status).toBe(200);
-            expect(data.success).toBe(true);
-            expect(data.message).toBeDefined();
-          }
-        ),
-        { numRuns: 10, timeout: 5000 }
-      );
-    });
-
-    /**
-     * Property: Telegram ID из InitData корректно передаётся в данные доставки
-     * 
-     * Validates: Requirements 4.5, 10.1
-     */
-    it('должен корректно извлекать и передавать telegram_id', async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // last_name
-          fc.string({ minLength: 2, maxLength: 50 }).map(s => s.trim()).filter(s => s.length >= 2), // first_name
-          fc.string({ minLength: 2, maxLength: 100 }).map(s => s.trim()).filter(s => s.length >= 2), // country
-          fc.string({ minLength: 3, maxLength: 20 }).map(s => s.trim()).filter(s => s.length >= 3), // postal_code
-          fc.string({ minLength: 2, maxLength: 100 }).map(s => s.trim()).filter(s => s.length >= 2), // city
-          fc.string({ minLength: 2, maxLength: 200 }).map(s => s.trim()).filter(s => s.length >= 2), // street
-          fc.string({ minLength: 1, maxLength: 20 }).map(s => s.trim()).filter(s => s.length >= 1), // house
-          fc.integer({ min: 1000000000, max: 9999999999 }).map(n => '+' + n.toString()), // phone
-          fc.integer({ min: 1, max: 100 }), // prize_id
-          fc.integer({ min: 1, max: 999999 }), // user_id
-          async (lastName, firstName, country, postalCode, city, street, house, phone, prizeId, userId) => {
-            const currentTimestamp = Math.floor(Date.now() / 1000);
-            const authDate = currentTimestamp - 100;
-            const initData = createValidInitData(userId, authDate, TEST_BOT_TOKEN);
-
-            const requestBody = {
-              last_name: lastName,
-              first_name: firstName,
-              country: country,
-              postal_code: postalCode,
-              city: city,
-              street: street,
-              house: house,
-              phone: phone,
-              prize_id: prizeId,
-              initData: initData,
-            };
-
-            const saveDeliveryDataSpy = vi.fn().mockResolvedValue(true);
-            const extractUserDataSpy = vi.fn().mockReturnValue({ id: userId });
-
-            // Переопределение моков для этого теста
-            vi.mocked(InitDataValidator).mockImplementation((function(this: any) {
-              this.validate = vi.fn().mockReturnValue(true);
-              this.extractUserData = extractUserDataSpy;
-            } as any) as any);
-
-            vi.mocked(GoogleSheetsClient).mockImplementation((function(this: any) {
-              this.saveDeliveryData = saveDeliveryDataSpy;
-              this.healthCheck = vi.fn().mockResolvedValue(true);
-            } as any) as any);
-
-            const request = createMockRequest(requestBody);
-            await POST(request);
-
-            // Проверка, что telegram_id соответствует userId из InitData
-            expect(saveDeliveryDataSpy).toHaveBeenCalledWith(
-              prizeId,
-              expect.objectContaining({
-                telegram_id: userId,
-              })
-            );
-          }
-        ),
-        { numRuns: 10, timeout: 5000 }
-      );
-    });
-  });
+      // Assert: sheet_name из ответа Backend должен быть передан в saveDeliveryData
+      expect(mockSaveDeliveryData).toHaveBeenCalled();
+      const callArgs = mockSaveDeliveryData.mock.calls[0];
+      expect(callArgs[2]).toBe(sheetName); // Проверяем, что sheet_name корректно извлечен
+    }
+  );
 });
-

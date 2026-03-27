@@ -447,3 +447,244 @@ class PrizeRepository(BaseRepository):
             raise DatabaseUnavailableError(
                 f"Ошибка при обновлении данных доставки: {str(e)}"
             ) from e
+    
+    async def check_user_exists(self, telegram_id: int) -> bool:
+        """
+        Проверяет наличие пользователя в таблице призов
+        
+        Args:
+            telegram_id: Telegram ID пользователя
+        
+        Returns:
+            bool: True если пользователь найден, False иначе
+        
+        Raises:
+            DatabaseUnavailableError: Если БД недоступна
+        """
+        start_time = time.time()
+        
+        try:
+            async with self._get_session_context() as session:
+                # Запрос на проверку существования пользователя
+                query = select(Prize.id).where(Prize.telegram_id == telegram_id).limit(1)
+                
+                result = await session.execute(query)
+                exists = result.scalar_one_or_none() is not None
+                
+                # Логирование времени выполнения
+                elapsed_ms = (time.time() - start_time) * 1000
+                
+                logger.info(
+                    "user_existence_check_completed",
+                    telegram_id=telegram_id,
+                    exists=exists,
+                    elapsed_ms=round(elapsed_ms, 2)
+                )
+                
+                return exists
+                
+        except Exception as e:
+            elapsed_ms = (time.time() - start_time) * 1000
+            logger.error(
+                "user_existence_check_error",
+                telegram_id=telegram_id,
+                error=str(e),
+                elapsed_ms=round(elapsed_ms, 2),
+                exc_info=True
+            )
+            
+            raise DatabaseUnavailableError(
+                f"Ошибка при проверке существования пользователя: {str(e)}"
+            ) from e
+    
+    async def get_gdpr_consent_date(self, telegram_id: int) -> Optional[datetime]:
+        """
+        Получает дату GDPR согласия пользователя
+        
+        Args:
+            telegram_id: Telegram ID пользователя
+        
+        Returns:
+            datetime: Дата согласия или None если согласие не дано
+        
+        Raises:
+            DatabaseUnavailableError: Если БД недоступна
+        """
+        start_time = time.time()
+        
+        try:
+            async with self._get_session_context() as session:
+                # Запрос на получение даты согласия
+                # Используем индекс idx_prizes_gdpr_consent для оптимизации
+                query = select(Prize.gdpr_consent_date).where(
+                    Prize.telegram_id == telegram_id
+                ).limit(1)
+                
+                result = await session.execute(query)
+                consent_date = result.scalar_one_or_none()
+                
+                # Логирование времени выполнения
+                elapsed_ms = (time.time() - start_time) * 1000
+                
+                logger.info(
+                    "gdpr_consent_check_completed",
+                    telegram_id=telegram_id,
+                    has_consent=consent_date is not None,
+                    elapsed_ms=round(elapsed_ms, 2)
+                )
+                
+                return consent_date
+                
+        except Exception as e:
+            elapsed_ms = (time.time() - start_time) * 1000
+            logger.error(
+                "gdpr_consent_check_error",
+                telegram_id=telegram_id,
+                error=str(e),
+                elapsed_ms=round(elapsed_ms, 2),
+                exc_info=True
+            )
+            
+            raise DatabaseUnavailableError(
+                f"Ошибка при проверке GDPR согласия: {str(e)}"
+            ) from e
+    
+    async def update_gdpr_consent(
+        self,
+        telegram_id: int,
+        consent_date: datetime
+    ) -> bool:
+        """
+        Сохраняет дату GDPR согласия пользователя
+        
+        Обновляет поле gdpr_consent_date для всех призов пользователя,
+        так как согласие даётся один раз для всех призов.
+        
+        Args:
+            telegram_id: Telegram ID пользователя
+            consent_date: Дата и время согласия
+        
+        Returns:
+            bool: True если записи успешно обновлены, False если пользователь не найден
+        
+        Raises:
+            DatabaseUnavailableError: Если БД недоступна
+        """
+        start_time = time.time()
+        
+        try:
+            async with self._get_session_context() as session:
+                # UPDATE запрос для всех призов пользователя
+                stmt = (
+                    update(Prize)
+                    .where(Prize.telegram_id == telegram_id)
+                    .values(
+                        gdpr_consent_date=consent_date,
+                        updated_at=datetime.now(timezone.utc)
+                    )
+                )
+                
+                result = await session.execute(stmt)
+                # Commit выполняется автоматически в контексте менеджере
+                
+                updated = result.rowcount > 0
+                
+                # Логирование времени выполнения
+                elapsed_ms = (time.time() - start_time) * 1000
+                
+                logger.info(
+                    "gdpr_consent_update_completed",
+                    telegram_id=telegram_id,
+                    consent_date=consent_date.isoformat(),
+                    updated=updated,
+                    records_updated=result.rowcount,
+                    elapsed_ms=round(elapsed_ms, 2)
+                )
+                
+                return updated
+                
+        except Exception as e:
+            elapsed_ms = (time.time() - start_time) * 1000
+            logger.error(
+                "gdpr_consent_update_error",
+                telegram_id=telegram_id,
+                error=str(e),
+                elapsed_ms=round(elapsed_ms, 2),
+                exc_info=True
+            )
+            
+            raise DatabaseUnavailableError(
+                f"Ошибка при сохранении GDPR согласия: {str(e)}"
+            ) from e
+    
+    async def validate_prize_ownership(
+        self,
+        prize_id: int,
+        telegram_id: int
+    ) -> bool:
+        """
+        Проверяет, что prize_id принадлежит указанному пользователю
+        
+        Validates: Security Requirement 2
+        
+        Args:
+            prize_id: ID приза для проверки
+            telegram_id: Telegram ID пользователя
+        
+        Returns:
+            bool: True если приз принадлежит пользователю, False иначе
+        
+        Raises:
+            DatabaseUnavailableError: Если БД недоступна
+        """
+        start_time = time.time()
+        
+        try:
+            async with self._get_session_context() as session:
+                # Запрос на проверку владения призом
+                query = select(Prize.id).where(
+                    and_(
+                        Prize.id == prize_id,
+                        Prize.telegram_id == telegram_id
+                    )
+                ).limit(1)
+                
+                result = await session.execute(query)
+                is_owner = result.scalar_one_or_none() is not None
+                
+                # Логирование времени выполнения
+                elapsed_ms = (time.time() - start_time) * 1000
+                
+                logger.info(
+                    "prize_ownership_validation_completed",
+                    prize_id=prize_id,
+                    telegram_id=telegram_id,
+                    is_owner=is_owner,
+                    elapsed_ms=round(elapsed_ms, 2)
+                )
+                
+                # Логирование попытки доступа к чужому призу
+                if not is_owner:
+                    logger.warning(
+                        "unauthorized_prize_access_attempt",
+                        prize_id=prize_id,
+                        telegram_id=telegram_id
+                    )
+                
+                return is_owner
+                
+        except Exception as e:
+            elapsed_ms = (time.time() - start_time) * 1000
+            logger.error(
+                "prize_ownership_validation_error",
+                prize_id=prize_id,
+                telegram_id=telegram_id,
+                error=str(e),
+                elapsed_ms=round(elapsed_ms, 2),
+                exc_info=True
+            )
+            
+            raise DatabaseUnavailableError(
+                f"Ошибка при проверке владения призом: {str(e)}"
+            ) from e
+

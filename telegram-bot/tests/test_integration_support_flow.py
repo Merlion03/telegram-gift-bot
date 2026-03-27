@@ -9,7 +9,7 @@ Validates: Requirements 5.1, 6.1, 6.2, 8.1, 8.3, 9.1
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from aiogram.types import Message, User, Chat, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from aiogram.types import Message, User, Chat, InlineKeyboardMarkup
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from datetime import datetime, timezone
@@ -30,6 +30,9 @@ def create_mock_message(telegram_id: int, text: str = "Помогите!"):
     message = AsyncMock(spec=Message)
     message.from_user = MagicMock(spec=User)
     message.from_user.id = telegram_id
+    message.from_user.first_name = "Test"
+    message.from_user.last_name = "User"
+    message.from_user.username = "test_user"
     message.text = text
     message.caption = None
     message.photo = None
@@ -68,7 +71,13 @@ class MockRepository(SupportRepository):
         self.next_session_id = 1
         self.next_message_id = 1
     
-    async def create_session(self, telegram_id: int) -> int:
+    async def create_session(
+        self, 
+        telegram_id: int,
+        first_name: str = None,
+        last_name: str = None,
+        username: str = None
+    ) -> int:
         """Создаёт mock сессию"""
         session_id = self.next_session_id
         self.next_session_id += 1
@@ -230,8 +239,8 @@ async def test_integration_full_support_cycle():
     
     assert 'reply_markup' in call_kwargs, "Должна быть клавиатура"
     keyboard = call_kwargs['reply_markup']
-    assert isinstance(keyboard, ReplyKeyboardMarkup), \
-        "Клавиатура должна быть ReplyKeyboardMarkup"
+    assert isinstance(keyboard, InlineKeyboardMarkup), \
+        "Клавиатура должна быть InlineKeyboardMarkup"
     
     sent_text = mock_message_start.answer.call_args[0][0]
     assert "поддержк" in sent_text.lower(), "Сообщение должно упоминать поддержку"
@@ -333,10 +342,10 @@ async def test_integration_full_support_cycle():
     sent_text = mock_message_end.answer.call_args[0][0]
     assert "завершён" in sent_text.lower(), "Сообщение должно подтверждать завершение"
     
-    # 15. Проверяем, что клавиатура удалена
-    call_kwargs = mock_message_end.answer.call_args[1]
-    assert 'reply_markup' in call_kwargs
-    assert isinstance(call_kwargs['reply_markup'], ReplyKeyboardRemove), \
+    # 15. Проверяем, что сообщение о завершении отправлено (inline клавиатуры не требуют удаления)
+    assert mock_message_end.answer.called
+    call_args = mock_message_end.answer.call_args[0]
+    assert "Диалог завершён" in call_args[0]
         "Клавиатура должна быть удалена"
 
 

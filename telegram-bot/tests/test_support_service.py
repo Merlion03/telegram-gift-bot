@@ -67,7 +67,12 @@ async def test_property_10_create_support_session(
     assert result_session_id == session_id
     
     # Проверяем, что repository.create_session был вызван с правильным telegram_id
-    mock_repository.create_session.assert_called_once_with(telegram_id)
+    mock_repository.create_session.assert_called_once_with(
+        telegram_id=telegram_id,
+        first_name=None,
+        last_name=None,
+        username=None
+    )
 
 
 @given(
@@ -222,7 +227,12 @@ async def test_create_session_success(support_service, mock_repository):
     
     # Assert
     assert result == session_id
-    mock_repository.create_session.assert_called_once_with(telegram_id)
+    mock_repository.create_session.assert_called_once_with(
+        telegram_id=telegram_id,
+        first_name=None,
+        last_name=None,
+        username=None
+    )
 
 
 @pytest.mark.asyncio

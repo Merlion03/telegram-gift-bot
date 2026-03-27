@@ -149,10 +149,11 @@ class TestSyncServiceProperties:
         for i in range(row_count):
             sheet_data.append([
                 str(100000 + i),      # telegram_id (столбец A)
-                f'CODE_{i}',          # code_word (столбец B)
-                'digital',            # prize_type (столбец C)
-                f'promo_{i}',         # promo_code (столбец D)
-                f'instructions_{i}'   # instructions (столбец E)
+                f'user_{i}',          # username (столбец B)
+                f'CODE_{i}',          # code_word (столбец C)
+                'digital',            # prize_type (столбец D)
+                f'promo_{i}',         # promo_code (столбец E)
+                f'instructions_{i}'   # instructions (столбец F)
             ])
         
         # Act
@@ -205,10 +206,11 @@ class TestSyncServiceProperties:
         # Тестовые данные с новой структурой
         test_row = [
             '123456789',        # telegram_id (столбец A)
-            'CUSTOM_CODE',      # code_word (столбец B)
-            'digital',          # prize_type (столбец C)
-            'TEST_PROMO',       # promo_code (столбец D)
-            'Test instructions' # instructions (столбец E)
+            'test_user',        # username (столбец B)
+            'CUSTOM_CODE',      # code_word (столбец C)
+            'digital',          # prize_type (столбец D)
+            'TEST_PROMO',       # promo_code (столбец E)
+            'Test instructions' # instructions (столбец F)
         ]
         
         for sheet_name in sheet_names:
@@ -259,9 +261,10 @@ class TestSyncServiceProperties:
         sheet_data = []
         for telegram_id, code_word, prize_type in rows_data:
             row = [
-                str(telegram_id),  # Столбец A
-                code_word,         # Столбец B
-                prize_type,        # Столбец C
+                str(telegram_id),  # Столбец A: telegram_id
+                f'user_{telegram_id}',  # Столбец B: username
+                code_word,         # Столбец C: code_word
+                prize_type,        # Столбец D: prize_type
             ]
             sheet_data.append(row)
         
@@ -320,9 +323,10 @@ class TestSyncServiceProperties:
         sheet_data = []
         for telegram_id, code_word, prize_type in rows_data:
             row = [
-                str(telegram_id),  # Столбец A
-                code_word,         # Столбец B
-                prize_type,        # Столбец C
+                str(telegram_id),  # Столбец A: telegram_id
+                f'user_{telegram_id}',  # Столбец B: username
+                code_word,         # Столбец C: code_word
+                prize_type,        # Столбец D: prize_type
             ]
             sheet_data.append(row)
         
@@ -434,13 +438,23 @@ class TestSyncServiceProperties:
         # Формируем валидные строки
         valid_sheet_data = []
         for telegram_id, code_word, prize_type in valid_rows:
-            row = [str(telegram_id), code_word, prize_type]
+            row = [
+                str(telegram_id),      # Столбец A: telegram_id
+                f'user_{telegram_id}', # Столбец B: username
+                code_word,             # Столбец C: code_word
+                prize_type             # Столбец D: prize_type
+            ]
             valid_sheet_data.append(row)
         
         # Формируем невалидные строки
         invalid_sheet_data = []
         for telegram_id, code_word, prize_type in invalid_rows:
-            row = [str(telegram_id), code_word, prize_type]
+            row = [
+                str(telegram_id),      # Столбец A: telegram_id
+                f'user_{telegram_id}', # Столбец B: username
+                code_word,             # Столбец C: code_word (пустой)
+                prize_type             # Столбец D: prize_type
+            ]
             invalid_sheet_data.append(row)
         
         # Вставляем невалидные строки в случайную позицию
@@ -606,11 +620,12 @@ class TestSyncServiceProperties:
         sheet_data = []
         for telegram_id, code_word, prize_type, promo_code, instructions in rows_data:
             row = [
-                str(telegram_id),  # Столбец A (индекс 0)
-                code_word,         # Столбец B (индекс 1)
-                prize_type,        # Столбец C (индекс 2)
-                promo_code,        # Столбец D (индекс 3)
-                instructions,      # Столбец E (индекс 4)
+                str(telegram_id),      # Столбец A (индекс 0): telegram_id
+                f'user_{telegram_id}', # Столбец B (индекс 1): username
+                code_word,             # Столбец C (индекс 2): code_word
+                prize_type,            # Столбец D (индекс 3): prize_type
+                promo_code,            # Столбец E (индекс 4): promo_code
+                instructions,          # Столбец F (индекс 5): instructions
             ]
             sheet_data.append(row)
         
@@ -666,11 +681,12 @@ class TestSyncServiceProperties:
         sheet_data = []
         for i in range(duplicate_count):
             row = [
-                str(telegram_id),  # Одинаковый telegram_id
-                code_word,         # Одинаковый code_word
-                'digital',         # prize_type
-                f'PROMO_{i}',      # Разные promo_code
-                f'Instructions {i}'  # Разные instructions
+                str(telegram_id),      # Одинаковый telegram_id
+                f'user_{telegram_id}', # username
+                code_word,             # Одинаковый code_word
+                'digital',             # prize_type
+                f'PROMO_{i}',          # Разные promo_code
+                f'Instructions {i}'    # Разные instructions
             ]
             sheet_data.append(row)
         

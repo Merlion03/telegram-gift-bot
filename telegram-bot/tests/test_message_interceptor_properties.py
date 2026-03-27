@@ -34,6 +34,9 @@ def create_mock_message(telegram_id: int, text: str = None, file_id: str = None)
     message = MagicMock(spec=Message)
     message.from_user = MagicMock(spec=User)
     message.from_user.id = telegram_id
+    message.from_user.first_name = "TestUser"
+    message.from_user.last_name = "TestLastName"
+    message.from_user.username = "test_username"
     message.text = text
     message.caption = None
     message.photo = None

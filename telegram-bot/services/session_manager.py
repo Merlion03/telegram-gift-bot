@@ -316,6 +316,15 @@ class SessionManager:
             Exception: При ошибке сохранения
         """
         try:
+            # Проверяем существование сессии перед сохранением
+            session = await self.repository.get_session_by_id(session_id)
+            if not session:
+                logger.warning(
+                    "session_not_found_for_bot_message",
+                    session_id=session_id
+                )
+                raise ValueError(f"Session {session_id} not found")
+            
             # Для сообщений бота используем telegram_id = 0 (системный)
             message_id = await self.repository.save_message(
                 session_id=session_id,

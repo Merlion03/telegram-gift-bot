@@ -449,3 +449,426 @@ class TestFeatureFlag:
         # Проверяем, что использовался Google Sheets
         mock_sheets_service.find_winner.assert_called_once()
         mock_prize_repository.find_prize.assert_not_called()
+
+
+class TestCheckUserExists:
+    """Тесты проверки наличия пользователя в таблице призов"""
+    
+    @pytest.mark.asyncio
+    async def test_user_exists_returns_true(
+        self,
+        mock_sheets_service,
+        mock_prize_repository,
+        mock_config_postgres
+    ):
+        """
+        Тест: Пользователь найден в таблице - возвращает True
+        Validates: Requirements 2.1
+        """
+        # Arrange
+        telegram_id = 123456789
+        mock_prize_repository.check_user_exists = AsyncMock(return_value=True)
+        
+        prize_service = PrizeService(
+            sheets_service=mock_sheets_service,
+            prize_repository=mock_prize_repository
+        )
+        
+        # Act
+        result = await prize_service.check_user_exists(telegram_id)
+        
+        # Assert
+        assert result is True
+        mock_prize_repository.check_user_exists.assert_called_once_with(telegram_id)
+    
+    @pytest.mark.asyncio
+    async def test_user_not_exists_returns_false(
+        self,
+        mock_sheets_service,
+        mock_prize_repository,
+        mock_config_postgres
+    ):
+        """
+        Тест: Пользователь не найден в таблице - возвращает False
+        Validates: Requirements 2.1
+        """
+        # Arrange
+        telegram_id = 987654321
+        mock_prize_repository.check_user_exists = AsyncMock(return_value=False)
+        
+        prize_service = PrizeService(
+            sheets_service=mock_sheets_service,
+            prize_repository=mock_prize_repository
+        )
+        
+        # Act
+        result = await prize_service.check_user_exists(telegram_id)
+        
+        # Assert
+        assert result is False
+        mock_prize_repository.check_user_exists.assert_called_once_with(telegram_id)
+    
+    @pytest.mark.asyncio
+    async def test_user_exists_database_unavailable_raises_error(
+        self,
+        mock_sheets_service,
+        mock_prize_repository,
+        mock_config_postgres
+    ):
+        """
+        Тест: БД недоступна при проверке пользователя - выбрасывает DatabaseUnavailableError
+        Validates: Requirements 12.1
+        """
+        # Arrange
+        telegram_id = 123456789
+        mock_prize_repository.check_user_exists = AsyncMock(
+            side_effect=DatabaseUnavailableError("База данных недоступна")
+        )
+        
+        prize_service = PrizeService(
+            sheets_service=mock_sheets_service,
+            prize_repository=mock_prize_repository
+        )
+        
+        # Act & Assert
+        with pytest.raises(DatabaseUnavailableError) as exc_info:
+            await prize_service.check_user_exists(telegram_id)
+        
+        assert "База данных недоступна" in str(exc_info.value)
+
+
+class TestCheckGdprConsent:
+    """Тесты проверки GDPR согласия пользователя"""
+    
+    @pytest.mark.asyncio
+    async def test_gdpr_consent_exists_returns_true(
+        self,
+        mock_sheets_service,
+        mock_prize_repository,
+        mock_config_postgres
+    ):
+        """
+        Тест: GDPR согласие дано - возвращает True
+        Validates: Requirements 3.1
+        """
+        # Arrange
+        telegram_id = 123456789
+        consent_date = datetime(2024, 1, 15, 10, 30, 0, tzinfo=timezone.utc)
+        mock_prize_repository.get_gdpr_consent_date = AsyncMock(return_value=consent_date)
+        
+        prize_service = PrizeService(
+            sheets_service=mock_sheets_service,
+            prize_repository=mock_prize_repository
+        )
+        
+        # Act
+        result = await prize_service.check_gdpr_consent(telegram_id)
+        
+        # Assert
+        assert result is True
+        mock_prize_repository.get_gdpr_consent_date.assert_called_once_with(telegram_id)
+    
+    @pytest.mark.asyncio
+    async def test_gdpr_consent_not_exists_returns_false(
+        self,
+        mock_sheets_service,
+        mock_prize_repository,
+        mock_config_postgres
+    ):
+        """
+        Тест: GDPR согласие не дано - возвращает False
+        Validates: Requirements 3.1
+        """
+        # Arrange
+        telegram_id = 987654321
+        mock_prize_repository.get_gdpr_consent_date = AsyncMock(return_value=None)
+        
+        prize_service = PrizeService(
+            sheets_service=mock_sheets_service,
+            prize_repository=mock_prize_repository
+        )
+        
+        # Act
+        result = await prize_service.check_gdpr_consent(telegram_id)
+        
+        # Assert
+        assert result is False
+        mock_prize_repository.get_gdpr_consent_date.assert_called_once_with(telegram_id)
+    
+    @pytest.mark.asyncio
+    async def test_gdpr_consent_database_unavailable_raises_error(
+        self,
+        mock_sheets_service,
+        mock_prize_repository,
+        mock_config_postgres
+    ):
+        """
+        Тест: БД недоступна при проверке GDPR согласия - выбрасывает DatabaseUnavailableError
+        Validates: Requirements 12.1
+        """
+        # Arrange
+        telegram_id = 123456789
+        mock_prize_repository.get_gdpr_consent_date = AsyncMock(
+            side_effect=DatabaseUnavailableError("База данных недоступна")
+        )
+        
+        prize_service = PrizeService(
+            sheets_service=mock_sheets_service,
+            prize_repository=mock_prize_repository
+        )
+        
+        # Act & Assert
+        with pytest.raises(DatabaseUnavailableError) as exc_info:
+            await prize_service.check_gdpr_consent(telegram_id)
+        
+        assert "База данных недоступна" in str(exc_info.value)
+
+
+class TestSaveGdprConsent:
+    """Тесты сохранения GDPR согласия пользователя"""
+    
+    @pytest.mark.asyncio
+    async def test_save_gdpr_consent_with_current_timestamp(
+        self,
+        mock_sheets_service,
+        mock_prize_repository,
+        mock_config_postgres
+    ):
+        """
+        Тест: Сохранение GDPR согласия с текущим timestamp
+        Validates: Requirements 3.3
+        """
+        # Arrange
+        telegram_id = 123456789
+        mock_prize_repository.update_gdpr_consent = AsyncMock()
+        
+        prize_service = PrizeService(
+            sheets_service=mock_sheets_service,
+            prize_repository=mock_prize_repository
+        )
+        
+        # Act
+        before = datetime.now(timezone.utc)
+        await prize_service.save_gdpr_consent(telegram_id)
+        after = datetime.now(timezone.utc)
+        
+        # Assert
+        mock_prize_repository.update_gdpr_consent.assert_called_once()
+        call_args = mock_prize_repository.update_gdpr_consent.call_args
+        
+        assert call_args[0][0] == telegram_id
+        saved_date = call_args[0][1]
+        assert before <= saved_date <= after
+        assert saved_date.tzinfo == timezone.utc
+    
+    @pytest.mark.asyncio
+    async def test_save_gdpr_consent_database_unavailable_raises_error(
+        self,
+        mock_sheets_service,
+        mock_prize_repository,
+        mock_config_postgres
+    ):
+        """
+        Тест: БД недоступна при сохранении GDPR согласия - выбрасывает DatabaseUnavailableError
+        Validates: Requirements 12.1
+        """
+        # Arrange
+        telegram_id = 123456789
+        mock_prize_repository.update_gdpr_consent = AsyncMock(
+            side_effect=DatabaseUnavailableError("База данных недоступна")
+        )
+        
+        prize_service = PrizeService(
+            sheets_service=mock_sheets_service,
+            prize_repository=mock_prize_repository
+        )
+        
+        # Act & Assert
+        with pytest.raises(DatabaseUnavailableError) as exc_info:
+            await prize_service.save_gdpr_consent(telegram_id)
+        
+        assert "База данных недоступна" in str(exc_info.value)
+
+
+class TestValidateCodeWord:
+    """Тесты валидации кодового слова"""
+    
+    @pytest.mark.asyncio
+    async def test_valid_code_word_returns_true(
+        self,
+        mock_sheets_service,
+        mock_prize_repository,
+        mock_config_postgres
+    ):
+        """
+        Тест: Валидное кодовое слово - возвращает True
+        Validates: Requirements 5.3
+        """
+        # Arrange
+        telegram_id = 123456789
+        code_word = "valid_code"
+        
+        mock_prize = Mock(spec=Prize)
+        mock_prize.id = 1
+        mock_prize_repository.find_prize = AsyncMock(return_value=mock_prize)
+        
+        prize_service = PrizeService(
+            sheets_service=mock_sheets_service,
+            prize_repository=mock_prize_repository
+        )
+        
+        # Act
+        result = await prize_service.validate_code_word(telegram_id, code_word)
+        
+        # Assert
+        assert result is True
+        mock_prize_repository.find_prize.assert_called_once_with(
+            telegram_id=telegram_id,
+            code_word=code_word,
+            timeout_ms=500
+        )
+    
+    @pytest.mark.asyncio
+    async def test_invalid_code_word_returns_false(
+        self,
+        mock_sheets_service,
+        mock_prize_repository,
+        mock_config_postgres
+    ):
+        """
+        Тест: Невалидное кодовое слово - возвращает False
+        Validates: Requirements 5.3
+        """
+        # Arrange
+        telegram_id = 123456789
+        code_word = "invalid_code"
+        
+        mock_prize_repository.find_prize = AsyncMock(return_value=None)
+        
+        prize_service = PrizeService(
+            sheets_service=mock_sheets_service,
+            prize_repository=mock_prize_repository
+        )
+        
+        # Act
+        result = await prize_service.validate_code_word(telegram_id, code_word)
+        
+        # Assert
+        assert result is False
+        mock_prize_repository.find_prize.assert_called_once_with(
+            telegram_id=telegram_id,
+            code_word=code_word,
+            timeout_ms=500
+        )
+    
+    @pytest.mark.asyncio
+    async def test_empty_code_word_returns_false(
+        self,
+        mock_sheets_service,
+        mock_prize_repository,
+        mock_config_postgres
+    ):
+        """
+        Тест: Пустое кодовое слово - возвращает False
+        Validates: Requirements 12.4
+        """
+        # Arrange
+        telegram_id = 123456789
+        code_word = ""
+        
+        prize_service = PrizeService(
+            sheets_service=mock_sheets_service,
+            prize_repository=mock_prize_repository
+        )
+        
+        # Act
+        result = await prize_service.validate_code_word(telegram_id, code_word)
+        
+        # Assert
+        assert result is False
+        mock_prize_repository.find_prize.assert_not_called()
+    
+    @pytest.mark.asyncio
+    async def test_whitespace_only_code_word_returns_false(
+        self,
+        mock_sheets_service,
+        mock_prize_repository,
+        mock_config_postgres
+    ):
+        """
+        Тест: Кодовое слово из пробелов - возвращает False
+        Validates: Requirements 12.4
+        """
+        # Arrange
+        telegram_id = 123456789
+        code_word = "   "
+        
+        prize_service = PrizeService(
+            sheets_service=mock_sheets_service,
+            prize_repository=mock_prize_repository
+        )
+        
+        # Act
+        result = await prize_service.validate_code_word(telegram_id, code_word)
+        
+        # Assert
+        assert result is False
+        mock_prize_repository.find_prize.assert_not_called()
+    
+    @pytest.mark.asyncio
+    async def test_too_long_code_word_returns_false(
+        self,
+        mock_sheets_service,
+        mock_prize_repository,
+        mock_config_postgres
+    ):
+        """
+        Тест: Слишком длинное кодовое слово (>100 символов) - возвращает False
+        Validates: Requirements 12.4
+        """
+        # Arrange
+        telegram_id = 123456789
+        code_word = "a" * 101  # 101 символ
+        
+        prize_service = PrizeService(
+            sheets_service=mock_sheets_service,
+            prize_repository=mock_prize_repository
+        )
+        
+        # Act
+        result = await prize_service.validate_code_word(telegram_id, code_word)
+        
+        # Assert
+        assert result is False
+        mock_prize_repository.find_prize.assert_not_called()
+    
+    @pytest.mark.asyncio
+    async def test_validate_code_word_database_unavailable_raises_error(
+        self,
+        mock_sheets_service,
+        mock_prize_repository,
+        mock_config_postgres
+    ):
+        """
+        Тест: БД недоступна при валидации кодового слова - выбрасывает DatabaseUnavailableError
+        Validates: Requirements 12.1
+        """
+        # Arrange
+        telegram_id = 123456789
+        code_word = "test_code"
+        
+        mock_prize_repository.find_prize = AsyncMock(
+            side_effect=DatabaseUnavailableError("База данных недоступна")
+        )
+        
+        prize_service = PrizeService(
+            sheets_service=mock_sheets_service,
+            prize_repository=mock_prize_repository
+        )
+        
+        # Act & Assert
+        with pytest.raises(DatabaseUnavailableError) as exc_info:
+            await prize_service.validate_code_word(telegram_id, code_word)
+        
+        assert "База данных недоступна" in str(exc_info.value)
+

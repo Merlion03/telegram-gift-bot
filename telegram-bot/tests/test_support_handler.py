@@ -7,7 +7,7 @@ import pytest
 from hypothesis import given, strategies as st
 from unittest.mock import AsyncMock, MagicMock
 from aiogram.types import (
-    Message, User, Chat, ReplyKeyboardMarkup, ReplyKeyboardRemove,
+    Message, User, Chat, InlineKeyboardMarkup,
     PhotoSize, Document, Video, Audio, Voice
 )
 from aiogram.fsm.context import FSMContext
@@ -104,14 +104,14 @@ async def test_property_12_end_dialog_button_display(telegram_id, session_id):
         "Сообщение должно содержать reply_markup с кнопкой"
     
     keyboard = call_kwargs['reply_markup']
-    assert isinstance(keyboard, ReplyKeyboardMarkup), \
-        "reply_markup должен быть ReplyKeyboardMarkup"
+    assert isinstance(keyboard, InlineKeyboardMarkup), \
+        "reply_markup должен быть InlineKeyboardMarkup"
     
     # Проверяем наличие кнопки "Завершить диалог"
-    assert len(keyboard.keyboard) > 0, \
+    assert len(keyboard.inline_keyboard) > 0, \
         "Клавиатура должна содержать хотя бы одну строку кнопок"
     
-    button_texts = [btn.text for row in keyboard.keyboard for btn in row]
+    button_texts = [btn.text for row in keyboard.inline_keyboard for btn in row]
     assert "Завершить диалог" in button_texts, \
         "Клавиатура должна содержать кнопку 'Завершить диалог'"
     
@@ -247,9 +247,11 @@ async def test_property_22_command_processing_restoration(telegram_id, session_i
     assert mock_message.answer.called
     call_kwargs = mock_message.answer.call_args[1]
     
-    assert 'reply_markup' in call_kwargs
-    assert isinstance(call_kwargs['reply_markup'], ReplyKeyboardRemove), \
-        "Клавиатура должна быть удалена (ReplyKeyboardRemove)"
+    # Inline клавиатуры не требуют удаления, просто проверяем, что сообщение отправлено
+    assert mock_message.answer.called
+    call_args = mock_message.answer.call_args[0]
+    assert "Диалог завершён" in call_args[0], \
+        "Должно быть отправлено сообщение о завершении"
     
     # Проверяем, что сессия была закрыта
     mock_service.close_session.assert_called_once_with(session_id)

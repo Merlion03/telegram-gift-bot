@@ -117,7 +117,7 @@ class SupportRepository(BaseRepository):
             int: ID созданного сообщения
         
         Raises:
-            ValueError: Если message_type невалиден
+            ValueError: Если message_type невалиден или session_id не существует
             Exception: При ошибке сохранения
         """
         if message_type not in ('from_user', 'from_support', 'from_bot'):
@@ -127,6 +127,17 @@ class SupportRepository(BaseRepository):
             )
         
         try:
+            # Проверяем существование сессии ПЕРЕД сохранением сообщения
+            session_exists = await self.get_session_by_id(session_id)
+            if not session_exists:
+                logger.error(
+                    "session_not_found_before_save_message",
+                    session_id=session_id,
+                    telegram_id=telegram_id,
+                    message_type=message_type
+                )
+                raise ValueError(f"Session {session_id} not found in database")
+            
             # Санитизация текста от NUL bytes для совместимости с PostgreSQL
             sanitized_text = sanitize_text(message_text)
             sanitized_file_id = sanitize_text(file_id) if file_id else None

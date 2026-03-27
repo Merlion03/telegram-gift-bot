@@ -662,3 +662,226 @@ async def test_property_delivery_data_round_trip(
     assert found_prize.street == 'Test Street'
     assert found_prize.house == '1'
     assert found_prize.phone == phone
+
+
+# ============================================================================
+# Unit тесты для новых методов GDPR (Task 1.4)
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_check_user_exists_found(db_session: AsyncSession):
+    """
+    Тест проверки существования пользователя - пользователь найден
+    Validates: Requirements 2.1
+    """
+    # Arrange - создаём тестовый приз
+    prize = Prize(
+        telegram_id=123456789,
+        code_word='test_code',
+        prize_type='digital',
+        promo_code='PROMO123',
+        sheet_name='test_sheet',
+        row_id=2
+    )
+    db_session.add(prize)
+    await db_session.commit()
+    
+    repository = PrizeRepository(session=db_session)
+    
+    # Act - проверяем существование пользователя
+    exists = await repository.check_user_exists(123456789)
+    
+    # Assert
+    assert exists is True
+
+
+@pytest.mark.asyncio
+async def test_check_user_exists_not_found(db_session: AsyncSession):
+    """
+    Тест проверки существования пользователя - пользователь не найден
+    Validates: Requirements 2.1
+    """
+    # Arrange
+    repository = PrizeRepository(session=db_session)
+    
+    # Act - проверяем несуществующего пользователя
+    exists = await repository.check_user_exists(999999999)
+    
+    # Assert
+    assert exists is False
+
+
+@pytest.mark.asyncio
+async def test_get_gdpr_consent_date_with_consent(db_session: AsyncSession):
+    """
+    Тест получения даты GDPR согласия - согласие дано
+    Validates: Requirements 3.1
+    """
+    # Arrange - создаём приз с GDPR согласием
+    consent_date = datetime.now(timezone.utc)
+    prize = Prize(
+        telegram_id=123456789,
+        code_word='test_code',
+        prize_type='digital',
+        promo_code='PROMO123',
+        sheet_name='test_sheet',
+        row_id=2,
+        gdpr_consent_date=consent_date
+    )
+    db_session.add(prize)
+    await db_session.commit()
+    
+    repository = PrizeRepository(session=db_session)
+    
+    # Act - получаем дату согласия
+    result_date = await repository.get_gdpr_consent_date(123456789)
+    
+    # Assert
+    assert result_date is not None
+    # Сравниваем с точностью до секунды (из-за возможных различий в микросекундах)
+    assert abs((result_date - consent_date).total_seconds()) < 1
+
+
+@pytest.mark.asyncio
+async def test_get_gdpr_consent_date_without_consent(db_session: AsyncSession):
+    """
+    Тест получения даты GDPR согласия - согласие не дано
+    Validates: Requirements 3.1
+    """
+    # Arrange - создаём приз без GDPR согласия
+    prize = Prize(
+        telegram_id=123456789,
+        code_word='test_code',
+        prize_type='digital',
+        promo_code='PROMO123',
+        sheet_name='test_sheet',
+        row_id=2,
+        gdpr_consent_date=None
+    )
+    db_session.add(prize)
+    await db_session.commit()
+    
+    repository = PrizeRepository(session=db_session)
+    
+    # Act - получаем дату согласия
+    result_date = await repository.get_gdpr_consent_date(123456789)
+    
+    # Assert
+    assert result_date is None
+
+
+@pytest.mark.asyncio
+async def test_get_gdpr_consent_date_user_not_found(db_session: AsyncSession):
+    """
+    Тест получения даты GDPR согласия - пользователь не найден
+    Validates: Requirements 3.1
+    """
+    # Arrange
+    repository = PrizeRepository(session=db_session)
+    
+    # Act - получаем дату согласия для несуществующего пользователя
+    result_date = await repository.get_gdpr_consent_date(999999999)
+    
+    # Assert
+    assert result_date is None
+
+
+@pytest.mark.asyncio
+async def test_update_gdpr_consent_single_prize(db_session: AsyncSession):
+    """
+    Тест сохранения GDPR согласия для пользователя с одним призом
+    Validates: Requirements 3.3
+    """
+    # Arrange - создаём приз без согласия
+    prize = Prize(
+        telegram_id=123456789,
+        code_word='test_code',
+        prize_type='digital',
+        promo_code='PROMO123',
+        sheet_name='test_sheet',
+        row_id=2,
+        gdpr_consent_date=None
+    )
+    db_session.add(prize)
+    await db_session.commit()
+    
+    repository = PrizeRepository(session=db_session)
+    consent_date = datetime.now(timezone.utc)
+    
+    # Act - сохраняем согласие
+    success = await repository.update_gdpr_consent(123456789, consent_date)
+    await db_session.commit()
+    
+    # Assert
+    assert success is True
+    
+    # Проверяем, что согласие сохранено
+    updated_prize = await repository.find_prize(123456789, 'test_code')
+    assert updated_prize.gdpr_consent_date is not None
+    assert abs((updated_prize.gdpr_consent_date - consent_date).total_seconds()) < 1
+
+
+@pytest.mark.asyncio
+async def test_update_gdpr_consent_multiple_prizes(db_session: AsyncSession):
+    """
+    Тест сохранения GDPR согласия для пользователя с несколькими призами
+    Validates: Requirements 3.3
+    """
+    # Arrange - создаём несколько призов для одного пользователя
+    prize1 = Prize(
+        telegram_id=123456789,
+        code_word='code1',
+        prize_type='digital',
+        promo_code='PROMO1',
+        sheet_name='test_sheet',
+        row_id=2,
+        gdpr_consent_date=None
+    )
+    prize2 = Prize(
+        telegram_id=123456789,
+        code_word='code2',
+        prize_type='physical',
+        sheet_name='test_sheet',
+        row_id=3,
+        gdpr_consent_date=None
+    )
+    db_session.add(prize1)
+    db_session.add(prize2)
+    await db_session.commit()
+    
+    repository = PrizeRepository(session=db_session)
+    consent_date = datetime.now(timezone.utc)
+    
+    # Act - сохраняем согласие (должно обновить все призы пользователя)
+    success = await repository.update_gdpr_consent(123456789, consent_date)
+    await db_session.commit()
+    
+    # Assert
+    assert success is True
+    
+    # Проверяем, что согласие сохранено для всех призов
+    updated_prize1 = await repository.find_prize(123456789, 'code1')
+    updated_prize2 = await repository.find_prize(123456789, 'code2')
+    
+    assert updated_prize1.gdpr_consent_date is not None
+    assert updated_prize2.gdpr_consent_date is not None
+    assert abs((updated_prize1.gdpr_consent_date - consent_date).total_seconds()) < 1
+    assert abs((updated_prize2.gdpr_consent_date - consent_date).total_seconds()) < 1
+
+
+@pytest.mark.asyncio
+async def test_update_gdpr_consent_user_not_found(db_session: AsyncSession):
+    """
+    Тест сохранения GDPR согласия для несуществующего пользователя
+    Validates: Requirements 3.3
+    """
+    # Arrange
+    repository = PrizeRepository(session=db_session)
+    consent_date = datetime.now(timezone.utc)
+    
+    # Act - пытаемся сохранить согласие для несуществующего пользователя
+    success = await repository.update_gdpr_consent(999999999, consent_date)
+    
+    # Assert
+    assert success is False

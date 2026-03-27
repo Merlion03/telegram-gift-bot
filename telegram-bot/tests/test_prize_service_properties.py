@@ -241,3 +241,72 @@ async def test_property_6_physical_prize_handling(telegram_id, code_word):
             mock_prize.row_id,
             mock_prize.sheet_name
         )
+
+
+@pytest.mark.asyncio
+@settings(max_examples=100)
+@given(telegram_id=telegram_ids)
+async def test_property_5_gdpr_consent_persistence(telegram_id):
+    """
+    Feature: prize-flow-update
+    Property 5: GDPR Consent Persistence
+    
+    Для любого telegram_id, если GDPR согласие сохранено через save_gdpr_consent,
+    то последующий вызов check_gdpr_consent должен вернуть True, и timestamp
+    должен находиться в корректном диапазоне (между моментом до сохранения и после).
+    
+    Validates: Requirements 3.3
+    """
+    # Arrange
+    mock_sheets_service = Mock()
+    mock_prize_repository = Mock()
+    
+    # Переменная для хранения сохранённой даты согласия
+    saved_consent_date = None
+    
+    async def mock_update_gdpr_consent(tid, consent_date):
+        nonlocal saved_consent_date
+        saved_consent_date = consent_date
+    
+    async def mock_get_gdpr_consent_date(tid):
+        return saved_consent_date
+    
+    mock_prize_repository.update_gdpr_consent = AsyncMock(side_effect=mock_update_gdpr_consent)
+    mock_prize_repository.get_gdpr_consent_date = AsyncMock(side_effect=mock_get_gdpr_consent_date)
+    
+    with patch('services.prize_service.get_config') as mock_config:
+        mock_config.return_value.sync.use_postgres = True
+        
+        prize_service = PrizeService(
+            sheets_service=mock_sheets_service,
+            prize_repository=mock_prize_repository
+        )
+        
+        # Act
+        # Сохраняем timestamp до сохранения согласия
+        before = datetime.now(timezone.utc)
+        
+        # Сохраняем GDPR согласие
+        await prize_service.save_gdpr_consent(telegram_id)
+        
+        # Сохраняем timestamp после сохранения согласия
+        after = datetime.now(timezone.utc)
+        
+        # Проверяем наличие согласия
+        has_consent = await prize_service.check_gdpr_consent(telegram_id)
+        
+        # Assert
+        # Проверяем, что согласие было сохранено
+        assert has_consent is True
+        
+        # Проверяем, что timestamp находится в корректном диапазоне
+        assert saved_consent_date is not None
+        assert before <= saved_consent_date <= after
+        
+        # Проверяем, что timestamp имеет корректный timezone (UTC)
+        assert saved_consent_date.tzinfo == timezone.utc
+        
+        # Проверяем, что методы repository были вызваны
+        mock_prize_repository.update_gdpr_consent.assert_called_once()
+        mock_prize_repository.get_gdpr_consent_date.assert_called_once_with(telegram_id)
+
