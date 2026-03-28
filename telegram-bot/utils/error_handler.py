@@ -11,6 +11,7 @@ from aiogram.types import Update, ErrorEvent
 from aiogram.filters import ExceptionTypeFilter
 
 from utils.logging_config import get_logger
+from constants import GLOBAL_ERROR_MESSAGE, NETWORK_ERROR_MESSAGE
 
 logger = get_logger(__name__)
 
@@ -104,18 +105,12 @@ async def _send_error_message_to_user(update: Update) -> None:
     Args:
         update: Update объект от Telegram
     """
-    error_message = (
-        "Произошла ошибка при обработке вашего запроса. "
-        "Мы уже работаем над её исправлением. "
-        "Пожалуйста, попробуйте позже."
-    )
-    
     try:
         if update.message:
-            await update.message.answer(error_message)
+            await update.message.answer(GLOBAL_ERROR_MESSAGE)
         elif update.callback_query:
             await update.callback_query.answer(
-                error_message,
+                GLOBAL_ERROR_MESSAGE,
                 show_alert=True
             )
     except Exception as e:
@@ -149,16 +144,11 @@ async def network_error_handler(event: ErrorEvent) -> Any:
     )
     
     # Отправляем специфичное сообщение о сетевой ошибке
-    error_message = (
-        "Временные проблемы с подключением. "
-        "Пожалуйста, попробуйте ещё раз через несколько секунд."
-    )
-    
     try:
         if update.message:
-            await update.message.answer(error_message)
+            await update.message.answer(NETWORK_ERROR_MESSAGE)
         elif update.callback_query:
-            await update.callback_query.answer(error_message, show_alert=True)
+            await update.callback_query.answer(NETWORK_ERROR_MESSAGE, show_alert=True)
     except Exception as e:
         logger.error("failed_to_send_network_error_message", error=str(e))
     

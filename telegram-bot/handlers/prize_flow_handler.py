@@ -14,7 +14,7 @@
 
 from typing import Optional
 from aiogram import Router
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
 
 from services.prize_service import (
@@ -30,6 +30,23 @@ from keyboards.reply_keyboards import (
 from fsm.states import PrizeFlowStates
 from config import get_config
 from utils.logging_config import get_logger
+from constants import (
+    USER_NOT_FOUND_IN_PRIZE_TABLE,
+    GDPR_CONSENT_REQUEST,
+    CODE_WORD_REQUEST,
+    CONSENT_BACK_MESSAGE,
+    INVALID_CONSENT_RESPONSE,
+    EMPTY_CODE_WORD_HINT,
+    INVALID_CODE_WORD,
+    PRIZE_ERROR_AFTER_VALIDATION,
+    MISSING_PROMO_CODE_ERROR,
+    ERROR_SERVICE_UNAVAILABLE,
+    get_digital_prize_congratulations,
+    DIGITAL_PRIZE_DEFAULT_INSTRUCTIONS,
+    DIGITAL_PRIZE_MENU_MESSAGE,
+    PHYSICAL_PRIZE_INSTRUCTION,
+    PHYSICAL_PRIZE_BUTTON_TEXT
+)
 
 logger = get_logger(__name__)
 
@@ -127,13 +144,8 @@ class PrizeFlowHandler:
             
             if not user_exists:
                 # Пользователь не найден в таблице призов
-                not_found_text = (
-                    "❌ Ваш аккаунт отсутствует в списке победителей.\n\n"
-                    "Попробуйте зайти с другого аккаунта или обратитесь в поддержку."
-                )
-                
                 await callback.message.answer(
-                    not_found_text,
+                    USER_NOT_FOUND_IN_PRIZE_TABLE,
                     reply_markup=get_main_menu_keyboard()
                 )
                 
@@ -142,7 +154,7 @@ class PrizeFlowHandler:
                     try:
                         await self.session_manager.save_bot_message(
                             session_id=session_id,
-                            message_text=not_found_text
+                            message_text=USER_NOT_FOUND_IN_PRIZE_TABLE
                         )
                     except Exception as e:
                         logger.error(
@@ -162,13 +174,8 @@ class PrizeFlowHandler:
             
             if not has_consent:
                 # Запрос согласия на обработку персональных данных
-                consent_text = (
-                    "Для получения приза необходимо ваше согласие на обработку персональных данных.\n\n"
-                    "Нажмите кнопку ниже, если вы согласны."
-                )
-                
                 await callback.message.answer(
-                    consent_text,
+                    GDPR_CONSENT_REQUEST,
                     reply_markup=get_consent_keyboard()
                 )
                 
@@ -180,7 +187,7 @@ class PrizeFlowHandler:
                     try:
                         await self.session_manager.save_bot_message(
                             session_id=session_id,
-                            message_text=consent_text
+                            message_text=GDPR_CONSENT_REQUEST
                         )
                     except Exception as e:
                         logger.error(
@@ -196,11 +203,7 @@ class PrizeFlowHandler:
                 return
             
             # Шаг 3: Запрос кодового слова (если согласие уже есть)
-            code_word_text = (
-                "Введите кодовое слово для получения приза:"
-            )
-            
-            await callback.message.answer(code_word_text)
+            await callback.message.answer(CODE_WORD_REQUEST)
             
             # Устанавливаем состояние ожидания кодового слова
             await state.set_state(PrizeFlowStates.waiting_for_code_word)
@@ -210,7 +213,7 @@ class PrizeFlowHandler:
                 try:
                     await self.session_manager.save_bot_message(
                         session_id=session_id,
-                        message_text=code_word_text
+                        message_text=CODE_WORD_REQUEST
                     )
                 except Exception as e:
                     logger.error(
@@ -226,12 +229,8 @@ class PrizeFlowHandler:
         
         except DatabaseUnavailableError as e:
             # Обработка недоступности БД
-            error_text = (
-                "⚠️ Сервис временно недоступен. Попробуйте позже."
-            )
-            
             await callback.message.answer(
-                error_text,
+                ERROR_SERVICE_UNAVAILABLE,
                 reply_markup=get_main_menu_keyboard()
             )
             
@@ -240,7 +239,7 @@ class PrizeFlowHandler:
                 try:
                     await self.session_manager.save_bot_message(
                         session_id=session_id,
-                        message_text=error_text
+                        message_text=ERROR_SERVICE_UNAVAILABLE
                     )
                 except Exception as save_error:
                     logger.error(
@@ -294,13 +293,8 @@ class PrizeFlowHandler:
             
             if not user_exists:
                 # Пользователь не найден в таблице призов
-                not_found_text = (
-                    "❌ Ваш аккаунт отсутствует в списке победителей.\n\n"
-                    "Попробуйте зайти с другого аккаунта или обратитесь в поддержку."
-                )
-                
                 await message.answer(
-                    not_found_text,
+                    USER_NOT_FOUND_IN_PRIZE_TABLE,
                     reply_markup=get_main_menu_keyboard()
                 )
                 
@@ -309,7 +303,7 @@ class PrizeFlowHandler:
                     try:
                         await self.session_manager.save_bot_message(
                             session_id=session_id,
-                            message_text=not_found_text
+                            message_text=USER_NOT_FOUND_IN_PRIZE_TABLE
                         )
                     except Exception as e:
                         logger.error(
@@ -329,13 +323,8 @@ class PrizeFlowHandler:
             
             if not has_consent:
                 # Запрос согласия на обработку персональных данных
-                consent_text = (
-                    "Для получения приза необходимо ваше согласие на обработку персональных данных.\n\n"
-                    "Нажмите кнопку ниже, если вы согласны."
-                )
-                
                 await message.answer(
-                    consent_text,
+                    GDPR_CONSENT_REQUEST,
                     reply_markup=get_consent_keyboard()
                 )
                 
@@ -347,7 +336,7 @@ class PrizeFlowHandler:
                     try:
                         await self.session_manager.save_bot_message(
                             session_id=session_id,
-                            message_text=consent_text
+                            message_text=GDPR_CONSENT_REQUEST
                         )
                     except Exception as e:
                         logger.error(
@@ -362,13 +351,9 @@ class PrizeFlowHandler:
                 )
             else:
                 # Согласие уже дано, запрашиваем кодовое слово
-                code_word_text = (
-                    "Введите кодовое слово для получения приза:"
-                )
-                
                 await message.answer(
-                    code_word_text,
-                    reply_markup=remove_keyboard()
+                    CODE_WORD_REQUEST,
+                    reply_markup=ReplyKeyboardRemove()
                 )
                 
                 # Устанавливаем состояние ожидания кодового слова
@@ -379,7 +364,7 @@ class PrizeFlowHandler:
                     try:
                         await self.session_manager.save_bot_message(
                             session_id=session_id,
-                            message_text=code_word_text
+                            message_text=CODE_WORD_REQUEST
                         )
                     except Exception as e:
                         logger.error(
@@ -464,11 +449,7 @@ class PrizeFlowHandler:
                 await self.prize_service.save_gdpr_consent(telegram_id)
                 
                 # Запрашиваем кодовое слово
-                code_word_text = (
-                    "Введите кодовое слово для получения приза:"
-                )
-                
-                await callback.message.answer(code_word_text)
+                await callback.message.answer(CODE_WORD_REQUEST)
                 
                 # Устанавливаем состояние ожидания кодового слова
                 await state.set_state(PrizeFlowStates.waiting_for_code_word)
@@ -478,7 +459,7 @@ class PrizeFlowHandler:
                     try:
                         await self.session_manager.save_bot_message(
                             session_id=session_id,
-                            message_text=code_word_text
+                            message_text=CODE_WORD_REQUEST
                         )
                     except Exception as e:
                         logger.error(
@@ -494,12 +475,8 @@ class PrizeFlowHandler:
             
             except DatabaseUnavailableError as e:
                 # Обработка недоступности БД
-                error_text = (
-                    "⚠️ Сервис временно недоступен. Попробуйте позже."
-                )
-                
                 await callback.message.answer(
-                    error_text,
+                    ERROR_SERVICE_UNAVAILABLE,
                     reply_markup=get_main_menu_keyboard()
                 )
                 
@@ -511,7 +488,7 @@ class PrizeFlowHandler:
                     try:
                         await self.session_manager.save_bot_message(
                             session_id=session_id,
-                            message_text=error_text
+                            message_text=ERROR_SERVICE_UNAVAILABLE
                         )
                     except Exception as save_error:
                         logger.error(
@@ -528,12 +505,8 @@ class PrizeFlowHandler:
         
         elif callback_data == "consent_back":
             # Пользователь отменил процесс
-            back_text = (
-                "Вы вернулись в главное меню."
-            )
-            
             await callback.message.answer(
-                back_text,
+                CONSENT_BACK_MESSAGE,
                 reply_markup=get_main_menu_keyboard()
             )
             
@@ -545,7 +518,7 @@ class PrizeFlowHandler:
                 try:
                     await self.session_manager.save_bot_message(
                         session_id=session_id,
-                        message_text=back_text
+                        message_text=CONSENT_BACK_MESSAGE
                     )
                 except Exception as e:
                     logger.error(
@@ -595,12 +568,8 @@ class PrizeFlowHandler:
         # Проверка корректности ответа
         if response_text not in ["✅ Согласен", "◀️ Назад"]:
             # Некорректный ответ - просим использовать кнопки
-            hint_text = (
-                "⚠️ Пожалуйста, используйте кнопки ниже для ответа."
-            )
-            
             await message.answer(
-                hint_text,
+                INVALID_CONSENT_RESPONSE,
                 reply_markup=get_consent_keyboard()
             )
             
@@ -609,7 +578,7 @@ class PrizeFlowHandler:
                 try:
                     await self.session_manager.save_bot_message(
                         session_id=session_id,
-                        message_text=hint_text
+                        message_text=INVALID_CONSENT_RESPONSE
                     )
                 except Exception as e:
                     logger.error(
@@ -632,13 +601,9 @@ class PrizeFlowHandler:
                 await self.prize_service.save_gdpr_consent(telegram_id)
                 
                 # Запрашиваем кодовое слово
-                code_word_text = (
-                    "Введите кодовое слово для получения приза:"
-                )
-                
                 await message.answer(
-                    code_word_text,
-                    reply_markup=remove_keyboard()
+                    CODE_WORD_REQUEST,
+                    reply_markup=ReplyKeyboardRemove()
                 )
                 
                 # Устанавливаем состояние ожидания кодового слова
@@ -649,7 +614,7 @@ class PrizeFlowHandler:
                     try:
                         await self.session_manager.save_bot_message(
                             session_id=session_id,
-                            message_text=code_word_text
+                            message_text=CODE_WORD_REQUEST
                         )
                     except Exception as e:
                         logger.error(
@@ -665,12 +630,8 @@ class PrizeFlowHandler:
             
             except DatabaseUnavailableError as e:
                 # Обработка недоступности БД
-                error_text = (
-                    "⚠️ Сервис временно недоступен. Попробуйте позже."
-                )
-                
                 await message.answer(
-                    error_text,
+                    ERROR_SERVICE_UNAVAILABLE,
                     reply_markup=get_main_menu_keyboard()
                 )
                 
@@ -682,7 +643,7 @@ class PrizeFlowHandler:
                     try:
                         await self.session_manager.save_bot_message(
                             session_id=session_id,
-                            message_text=error_text
+                            message_text=ERROR_SERVICE_UNAVAILABLE
                         )
                     except Exception as save_error:
                         logger.error(
@@ -699,12 +660,8 @@ class PrizeFlowHandler:
         
         elif response_text == "◀️ Назад":
             # Пользователь отменил процесс
-            back_text = (
-                "Вы вернулись в главное меню."
-            )
-            
             await message.answer(
-                back_text,
+                CONSENT_BACK_MESSAGE,
                 reply_markup=get_main_menu_keyboard()
             )
             
@@ -716,7 +673,7 @@ class PrizeFlowHandler:
                 try:
                     await self.session_manager.save_bot_message(
                         session_id=session_id,
-                        message_text=back_text
+                        message_text=CONSENT_BACK_MESSAGE
                     )
                 except Exception as e:
                     logger.error(
@@ -764,18 +721,14 @@ class PrizeFlowHandler:
         
         # Валидация входных данных
         if not code_word or len(code_word) == 0:
-            hint_text = (
-                "⚠️ Пожалуйста, введите кодовое слово текстом."
-            )
-            
-            await message.answer(hint_text)
+            await message.answer(EMPTY_CODE_WORD_HINT)
             
             # Сохраняем ответ бота
             if self.session_manager and session_id:
                 try:
                     await self.session_manager.save_bot_message(
                         session_id=session_id,
-                        message_text=hint_text
+                        message_text=EMPTY_CODE_WORD_HINT
                     )
                 except Exception as e:
                     logger.error(
@@ -796,11 +749,7 @@ class PrizeFlowHandler:
             
             if not is_valid:
                 # Неверное кодовое слово
-                invalid_text = (
-                    "❌ Кодовое слово введено неверно. Попробуйте ещё раз."
-                )
-                
-                await message.answer(invalid_text)
+                await message.answer(INVALID_CODE_WORD)
                 
                 # Сохраняем состояние waiting_for_code_word (остаёмся в нём)
                 # Состояние уже установлено, ничего не меняем
@@ -810,7 +759,7 @@ class PrizeFlowHandler:
                     try:
                         await self.session_manager.save_bot_message(
                             session_id=session_id,
-                            message_text=invalid_text
+                            message_text=INVALID_CODE_WORD
                         )
                     except Exception as e:
                         logger.error(
@@ -839,12 +788,8 @@ class PrizeFlowHandler:
             
             else:
                 # Приз не найден (не должно происходить после валидации)
-                error_text = (
-                    "❌ Произошла ошибка при получении приза. Обратитесь в поддержку."
-                )
-                
                 await message.answer(
-                    error_text,
+                    PRIZE_ERROR_AFTER_VALIDATION,
                     reply_markup=get_main_menu_keyboard()
                 )
                 
@@ -856,7 +801,7 @@ class PrizeFlowHandler:
                     try:
                         await self.session_manager.save_bot_message(
                             session_id=session_id,
-                            message_text=error_text
+                            message_text=PRIZE_ERROR_AFTER_VALIDATION
                         )
                     except Exception as e:
                         logger.error(
@@ -908,12 +853,8 @@ class PrizeFlowHandler:
         
         except MissingPromoCodeError as e:
             # Отсутствует промокод для цифрового приза
-            error_text = (
-                "❌ Произошла ошибка. Обратитесь в поддержку."
-            )
-            
             await message.answer(
-                error_text,
+                MISSING_PROMO_CODE_ERROR,
                 reply_markup=get_main_menu_keyboard()
             )
             
@@ -925,7 +866,7 @@ class PrizeFlowHandler:
                 try:
                     await self.session_manager.save_bot_message(
                         session_id=session_id,
-                        message_text=error_text
+                        message_text=MISSING_PROMO_CODE_ERROR
                     )
                 except Exception as save_error:
                     logger.error(
@@ -977,12 +918,8 @@ class PrizeFlowHandler:
         
         # Дополнительная проверка наличия промокода
         if not prize_result.promo_code:
-            error_text = (
-                "❌ Произошла ошибка. Обратитесь в поддержку."
-            )
-            
             await message.answer(
-                error_text,
+                MISSING_PROMO_CODE_ERROR,
                 reply_markup=get_main_menu_keyboard()
             )
             
@@ -994,7 +931,7 @@ class PrizeFlowHandler:
                 try:
                     await self.session_manager.save_bot_message(
                         session_id=session_id,
-                        message_text=error_text
+                        message_text=MISSING_PROMO_CODE_ERROR
                     )
                 except Exception as e:
                     logger.error(
@@ -1010,9 +947,7 @@ class PrizeFlowHandler:
             return
         
         # Формируем поздравительное сообщение с промокодом
-        congratulations_text = (
-            f"🎉 Поздравляем! Ваш промокод: {prize_result.promo_code}"
-        )
+        congratulations_text = get_digital_prize_congratulations(prize_result.promo_code)
         
         # Логирование доступа к промокоду (Security Requirement 1, 3)
         logger.info(
@@ -1040,7 +975,7 @@ class PrizeFlowHandler:
                 )
         
         # Отправляем инструкцию по использованию
-        instructions_text = prize_result.instructions or "Используйте промокод при оформлении заказа"
+        instructions_text = prize_result.instructions or DIGITAL_PRIZE_DEFAULT_INSTRUCTIONS
         
         await message.answer(instructions_text)
         
@@ -1059,10 +994,8 @@ class PrizeFlowHandler:
                 )
         
         # Отображаем главное меню
-        menu_text = "Выберите действие:"
-        
         await message.answer(
-            menu_text,
+            DIGITAL_PRIZE_MENU_MESSAGE,
             reply_markup=get_main_menu_keyboard()
         )
         
@@ -1071,7 +1004,7 @@ class PrizeFlowHandler:
             try:
                 await self.session_manager.save_bot_message(
                     session_id=session_id,
-                    message_text=menu_text
+                    message_text=DIGITAL_PRIZE_MENU_MESSAGE
                 )
             except Exception as e:
                 logger.error(
@@ -1123,19 +1056,14 @@ class PrizeFlowHandler:
         )
         
         # Отправляем инструкцию по заполнению формы
-        instruction_text = (
-            "🎉 Поздравляем! Вы выиграли физический приз.\n\n"
-            "Пожалуйста, укажите данные для доставки, нажав на кнопку ниже."
-        )
-        
-        await message.answer(instruction_text)
+        await message.answer(PHYSICAL_PRIZE_INSTRUCTION)
         
         # Сохраняем инструкцию
         if self.session_manager and session_id:
             try:
                 await self.session_manager.save_bot_message(
                     session_id=session_id,
-                    message_text=instruction_text
+                    message_text=PHYSICAL_PRIZE_INSTRUCTION
                 )
             except Exception as e:
                 logger.error(
@@ -1155,10 +1083,8 @@ class PrizeFlowHandler:
             )]
         ])
         
-        button_text = "Нажмите кнопку для заполнения формы:"
-        
         await message.answer(
-            button_text,
+            PHYSICAL_PRIZE_BUTTON_TEXT,
             reply_markup=keyboard
         )
         
@@ -1167,7 +1093,7 @@ class PrizeFlowHandler:
             try:
                 await self.session_manager.save_bot_message(
                     session_id=session_id,
-                    message_text=button_text
+                    message_text=PHYSICAL_PRIZE_BUTTON_TEXT
                 )
             except Exception as e:
                 logger.error(

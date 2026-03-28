@@ -13,6 +13,14 @@ import structlog
 from services.support_service import SupportService
 from fsm.states import SupportStates
 from keyboards.reply_keyboards import get_support_end_keyboard
+from constants import (
+    SUPPORT_SESSION_STARTED,
+    SUPPORT_START_ERROR,
+    SUPPORT_NO_SESSION_ERROR,
+    SUPPORT_MESSAGE_SAVE_ERROR,
+    SUPPORT_SESSION_ENDED,
+    SUPPORT_END_ERROR
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -79,10 +87,8 @@ class SupportHandler:
             # Отправка подтверждения с inline кнопкой завершения
             keyboard = get_support_end_keyboard()
             
-            response_text = "Вы соединены с поддержкой. Опишите ваш вопрос"
-            
             await message.answer(
-                response_text,
+                SUPPORT_SESSION_STARTED,
                 reply_markup=keyboard
             )
             
@@ -91,7 +97,7 @@ class SupportHandler:
                 try:
                     await self.session_manager.save_bot_message(
                         session_id=session_id,
-                        message_text=response_text
+                        message_text=SUPPORT_SESSION_STARTED
                     )
                 except Exception as e:
                     logger.error(
@@ -113,15 +119,14 @@ class SupportHandler:
                 error=str(e),
                 exc_info=True
             )
-            error_text = "Произошла ошибка при подключении к поддержке. Пожалуйста, попробуйте позже."
-            await message.answer(error_text)
+            await message.answer(SUPPORT_START_ERROR)
             
             # Сохраняем ответ бота об ошибке
             if self.session_manager and session_id:
                 try:
                     await self.session_manager.save_bot_message(
                         session_id=session_id,
-                        message_text=error_text
+                        message_text=SUPPORT_START_ERROR
                     )
                 except Exception as save_error:
                     logger.error(
@@ -158,9 +163,7 @@ class SupportHandler:
                     "no_session_id_in_fsm",
                     telegram_id=telegram_id
                 )
-                await message.answer(
-                    "Произошла ошибка. Пожалуйста, начните диалог заново."
-                )
+                await message.answer(SUPPORT_NO_SESSION_ERROR)
                 await state.clear()
                 return
             
@@ -213,9 +216,7 @@ class SupportHandler:
                 error=str(e),
                 exc_info=True
             )
-            await message.answer(
-                "Произошла ошибка при сохранении сообщения. Пожалуйста, попробуйте ещё раз."
-            )
+            await message.answer(SUPPORT_MESSAGE_SAVE_ERROR)
     
     async def handle_support_end_callback(self, callback: CallbackQuery, state: FSMContext) -> None:
         """
@@ -256,15 +257,14 @@ class SupportHandler:
             await state.clear()
             
             # Отправка подтверждения
-            response_text = "Диалог завершён. Спасибо за обращение!"
-            await callback.message.answer(response_text)
+            await callback.message.answer(SUPPORT_SESSION_ENDED)
             
             # Сохраняем ответ бота
             if self.session_manager and session_id:
                 try:
                     await self.session_manager.save_bot_message(
                         session_id=session_id,
-                        message_text=response_text
+                        message_text=SUPPORT_SESSION_ENDED
                     )
                 except Exception as e:
                     logger.error(
@@ -288,15 +288,14 @@ class SupportHandler:
             # Всё равно очищаем состояние
             await state.clear()
             
-            error_text = "Диалог завершён."
-            await callback.message.answer(error_text)
+            await callback.message.answer(SUPPORT_END_ERROR)
             
             # Сохраняем ответ бота
             if self.session_manager and session_id:
                 try:
                     await self.session_manager.save_bot_message(
                         session_id=session_id,
-                        message_text=error_text
+                        message_text=SUPPORT_END_ERROR
                     )
                 except Exception as save_error:
                     logger.error(
@@ -347,15 +346,14 @@ class SupportHandler:
             await state.clear()
             
             # Отправка подтверждения
-            response_text = "Диалог завершён. Спасибо за обращение!"
-            await message.answer(response_text)
+            await message.answer(SUPPORT_SESSION_ENDED)
             
             # Сохраняем ответ бота
             if self.session_manager and session_id:
                 try:
                     await self.session_manager.save_bot_message(
                         session_id=session_id,
-                        message_text=response_text
+                        message_text=SUPPORT_SESSION_ENDED
                     )
                 except Exception as e:
                     logger.error(
@@ -379,15 +377,14 @@ class SupportHandler:
             # Всё равно очищаем состояние
             await state.clear()
             
-            error_text = "Диалог завершён."
-            await message.answer(error_text)
+            await message.answer(SUPPORT_END_ERROR)
             
             # Сохраняем ответ бота
             if self.session_manager and session_id:
                 try:
                     await self.session_manager.save_bot_message(
                         session_id=session_id,
-                        message_text=error_text
+                        message_text=SUPPORT_END_ERROR
                     )
                 except Exception as save_error:
                     logger.error(

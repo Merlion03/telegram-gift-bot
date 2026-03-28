@@ -16,6 +16,15 @@ from database.connection import get_database
 from utils.retry import retry_with_backoff
 from utils.logging_config import get_logger
 from keyboards.reply_keyboards import get_main_menu_keyboard
+from constants import (
+    ERROR_MISSING_PRIZE_ID,
+    ERROR_INVALID_PRIZE_ID,
+    ERROR_SERVICE_UNAVAILABLE,
+    ERROR_PRIZE_NOT_FOUND,
+    ERROR_SHEETS_SAVE_FAILED,
+    ERROR_PROCESSING_DATA,
+    ERROR_INVALID_JSON
+)
 
 logger = get_logger(__name__)
 
@@ -31,6 +40,7 @@ class DeliveryHandler:
         sheets_service: GoogleSheetsService,
         prize_repository: PrizeRepository,
         prize_service: PrizeService,
+        notification_service,
         session_manager=None
     ):
         """
@@ -40,11 +50,13 @@ class DeliveryHandler:
             sheets_service: Сервис для работы с Google Sheets
             prize_repository: Repository для работы с призами
             prize_service: Сервис для валидации prize_id
+            notification_service: Сервис для отправки уведомлений
             session_manager: Менеджер сессий для сохранения ответов бота (опционально)
         """
         self.sheets_service = sheets_service
         self.prize_repository = prize_repository
         self.prize_service = prize_service
+        self.notification_service = notification_service
         self.session_manager = session_manager
         
         logger.info("delivery_handler_initialized")
@@ -83,13 +95,7 @@ class DeliveryHandler:
             # Парсим JSON данные из WebApp
             data = json.loads(message.web_app_data.data)
             
-            logger.info(
-                "received_delivery_data",
-                telegram_id=telegram_id,
-                prize_id=data.get('prize_id')
-            )
-            
-            # Извлекаем prize_id и данные доставки
+            # Извлекаем prize_id
             prize_id = data.get('prize_id')
             if not prize_id:
                 logger.error(
@@ -98,11 +104,18 @@ class DeliveryHandler:
                 )
                 await self._send_error_message(
                     message,
-                    "Ошибка: отсутствует идентификатор приза",
+                    ERROR_MISSING_PRIZE_ID,
                     state,
                     session_id
                 )
                 return
+            
+            # Логируем получение запроса (Requirement 1.1, 5.1)
+            logger.info(
+                "request_received",
+                telegram_id=telegram_id,
+                prize_id=prize_id
+            )
             
             # Валидация prize_id - проверяем, что приз принадлежит пользователю
             try:
@@ -119,7 +132,7 @@ class DeliveryHandler:
                     )
                     await self._send_error_message(
                         message,
-                        "❌ Ошибка: недопустимый идентификатор приза",
+                        ERROR_INVALID_PRIZE_ID,
                         state,
                         session_id
                     )
@@ -134,7 +147,7 @@ class DeliveryHandler:
                 )
                 await self._send_error_message(
                     message,
-                    "⚠️ Сервис временно недоступен. Попробуйте позже.",
+                    ERROR_SERVICE_UNAVAILABLE,
                     state,
                     session_id
                 )
@@ -152,7 +165,7 @@ class DeliveryHandler:
                 )
                 await self._send_error_message(
                     message,
-                    "⚠️ Сервис временно недоступен. Попробуйте позже.",
+                    ERROR_SERVICE_UNAVAILABLE,
                     state,
                     session_id
                 )
@@ -166,7 +179,7 @@ class DeliveryHandler:
                 )
                 await self._send_error_message(
                     message,
-                    "Ошибка: приз не найден",
+                    ERROR_PRIZE_NOT_FOUND,
                     state,
                     session_id
                 )
@@ -203,7 +216,7 @@ class DeliveryHandler:
                 )
                 await self._send_error_message(
                     message,
-                    "Произошла техническая ошибка при сохранении данных. Пожалуйста, обратитесь в поддержку.",
+                    ERROR_SHEETS_SAVE_FAILED,
                     state,
                     session_id
                 )
@@ -225,29 +238,24 @@ class DeliveryHandler:
                     code_word=prize.code_word
                 )
             
-            # Отправляем подтверждение пользователю с главным меню
-            success_text = (
-                "✅ Спасибо! Ваши данные успешно сохранены.\n"
-                "Мы свяжемся с вами для уточнения деталей доставки."
+            # Отправляем уведомления через NotificationService (Requirement 1.2, 7.2, 7.3)
+            notification_result = await self.notification_service.send_delivery_notifications(
+                telegram_id=telegram_id,
+                prize_id=prize_id,
+                session_id=session_id
             )
-            keyboard = get_main_menu_keyboard()
-            await message.answer(success_text, reply_markup=keyboard)
             
-            # Сохраняем ответ бота
-            if self.session_manager and session_id:
-                try:
-                    await self.session_manager.save_bot_message(
-                        session_id=session_id,
-                        message_text=success_text
-                    )
-                except Exception as e:
-                    logger.error(
-                        "failed_to_save_bot_response",
-                        session_id=session_id,
-                        error=str(e)
-                    )
+            # Логируем результат отправки уведомлений (Requirement 5.1)
+            logger.info(
+                "delivery_notifications_sent",
+                telegram_id=telegram_id,
+                prize_id=prize_id,
+                confirmation_sent=notification_result.confirmation_sent,
+                main_menu_sent=notification_result.main_menu_sent,
+                both_sent=notification_result.both_sent
+            )
             
-            # Сбрасываем FSM состояние
+            # Сбрасываем FSM состояние (Requirement 7.4)
             await state.clear()
             
             logger.info(
@@ -272,7 +280,7 @@ class DeliveryHandler:
             )
             await self._send_error_message(
                 message,
-                "Ошибка обработки данных. Пожалуйста, попробуйте снова.",
+                ERROR_INVALID_JSON,
                 state,
                 session_id
             )
@@ -286,7 +294,7 @@ class DeliveryHandler:
             )
             await self._send_error_message(
                 message,
-                "Произошла ошибка при обработке данных. Пожалуйста, попробуйте позже.",
+                ERROR_PROCESSING_DATA,
                 state,
                 session_id
             )

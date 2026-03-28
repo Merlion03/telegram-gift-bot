@@ -16,6 +16,7 @@ from handlers.delivery_handler import DeliveryHandler
 from database.models.prize import Prize
 from services.google_sheets_service import GoogleSheetsService
 from services.prize_service import PrizeService
+from services.notification_service import NotificationService
 from database.repositories.prize_repository import PrizeRepository
 
 
@@ -95,7 +96,8 @@ async def test_property_8_round_trip_delivery_data_sync(
     handler = DeliveryHandler(
         sheets_service=mock_sheets_service,
         prize_repository=mock_prize_repository,
-        prize_service=AsyncMock(spec=PrizeService)
+        prize_service=AsyncMock(spec=PrizeService),
+        notification_service=AsyncMock(spec=NotificationService)
     )
     
     # Mock метод _find_prize_by_id
@@ -231,7 +233,8 @@ async def test_property_9_correct_sheets_write_location(
     handler = DeliveryHandler(
         sheets_service=mock_sheets_service,
         prize_repository=mock_prize_repository,
-        prize_service=AsyncMock(spec=PrizeService)
+        prize_service=AsyncMock(spec=PrizeService),
+        notification_service=AsyncMock(spec=NotificationService)
     )
     
     # Mock метод _find_prize_by_id
@@ -340,7 +343,8 @@ async def test_property_9_1_batch_update_all_fields(telegram_id, row_id):
     handler = DeliveryHandler(
         sheets_service=mock_sheets_service,
         prize_repository=mock_prize_repository,
-        prize_service=AsyncMock(spec=PrizeService)
+        prize_service=AsyncMock(spec=PrizeService),
+        notification_service=AsyncMock(spec=NotificationService)
     )
     
     # Mock метод _find_prize_by_id
@@ -472,7 +476,8 @@ async def test_property_17_delivery_data_persistence(
     handler = DeliveryHandler(
         sheets_service=mock_sheets_service,
         prize_repository=mock_prize_repository,
-        prize_service=AsyncMock(spec=PrizeService)
+        prize_service=AsyncMock(spec=PrizeService),
+        notification_service=AsyncMock(spec=NotificationService)
     )
     
     # Mock метод _find_prize_by_id

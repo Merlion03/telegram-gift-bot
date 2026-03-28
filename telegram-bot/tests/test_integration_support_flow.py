@@ -346,7 +346,6 @@ async def test_integration_full_support_cycle():
     assert mock_message_end.answer.called
     call_args = mock_message_end.answer.call_args[0]
     assert "Диалог завершён" in call_args[0]
-        "Клавиатура должна быть удалена"
 
 
 # ============================================================================

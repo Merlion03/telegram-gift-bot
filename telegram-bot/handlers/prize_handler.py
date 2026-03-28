@@ -11,6 +11,13 @@ from aiogram.filters import Command
 from services.prize_service import PrizeService, PrizeStatus, MissingPromoCodeError
 from config import get_config
 from utils.logging_config import get_logger
+from constants import (
+    PRIZE_NOT_FOUND_RESPONSE,
+    PRIZE_CHECK_ERROR,
+    PRIZE_MISSING_PROMO_CODE_SUPPORT,
+    get_digital_prize_message,
+    PHYSICAL_PRIZE_CONGRATULATIONS
+)
 
 logger = get_logger(__name__)
 
@@ -64,15 +71,14 @@ class PrizeHandler:
             prize_result = await self.prize_service.check_prize(telegram_id, code_word)
             
             if prize_result.status == PrizeStatus.NOT_FOUND:
-                response_text = "Вы ещё не победили в конкурсе"
-                await message.answer(response_text)
+                await message.answer(PRIZE_NOT_FOUND_RESPONSE)
                 
                 # Сохраняем ответ бота
                 if self.session_manager and session_id:
                     try:
                         await self.session_manager.save_bot_message(
                             session_id=session_id,
-                            message_text=response_text
+                            message_text=PRIZE_NOT_FOUND_RESPONSE
                         )
                     except Exception as e:
                         logger.error(
@@ -95,18 +101,14 @@ class PrizeHandler:
         
         except MissingPromoCodeError as e:
             # Уведомление пользователя о необходимости обратиться в поддержку
-            error_text = (
-                "К сожалению, произошла ошибка при получении вашего приза. "
-                "Пожалуйста, обратитесь в службу поддержки."
-            )
-            await message.answer(error_text)
+            await message.answer(PRIZE_MISSING_PROMO_CODE_SUPPORT)
             
             # Сохраняем ответ бота
             if self.session_manager and session_id:
                 try:
                     await self.session_manager.save_bot_message(
                         session_id=session_id,
-                        message_text=error_text
+                        message_text=PRIZE_MISSING_PROMO_CODE_SUPPORT
                     )
                 except Exception as save_error:
                     logger.error(
@@ -124,15 +126,14 @@ class PrizeHandler:
         
         except Exception as e:
             # Общая обработка ошибок
-            error_text = "Произошла ошибка при проверке приза. Пожалуйста, попробуйте позже."
-            await message.answer(error_text)
+            await message.answer(PRIZE_CHECK_ERROR)
             
             # Сохраняем ответ бота
             if self.session_manager and session_id:
                 try:
                     await self.session_manager.save_bot_message(
                         session_id=session_id,
-                        message_text=error_text
+                        message_text=PRIZE_CHECK_ERROR
                     )
                 except Exception as save_error:
                     logger.error(
@@ -158,10 +159,7 @@ class PrizeHandler:
             prize_result: Результат проверки приза с промокодом
             session_id: ID сессии из middleware (опционально)
         """
-        text = (
-            f"🎉 Поздравляем! Ваш промокод: {prize_result.promo_code}\n\n"
-            f"{prize_result.instructions}"
-        )
+        text = get_digital_prize_message(prize_result.promo_code, prize_result.instructions)
         
         await message.answer(text)
         
@@ -206,10 +204,8 @@ class PrizeHandler:
             )]
         ])
         
-        text = "🎉 Поздравляем! Укажите данные для доставки:"
-        
         await message.answer(
-            text,
+            PHYSICAL_PRIZE_CONGRATULATIONS,
             reply_markup=keyboard
         )
         
@@ -218,7 +214,7 @@ class PrizeHandler:
             try:
                 await self.session_manager.save_bot_message(
                     session_id=session_id,
-                    message_text=text
+                    message_text=PHYSICAL_PRIZE_CONGRATULATIONS
                 )
             except Exception as e:
                 logger.error(

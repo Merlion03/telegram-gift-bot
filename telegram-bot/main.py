@@ -137,6 +137,13 @@ class BotApplication:
         # Создание SessionManager для автоматического сохранения диалогов
         session_manager = SessionManager(support_repository)
         
+        # Создание NotificationService для отправки уведомлений
+        from services.notification_service import NotificationService
+        notification_service = NotificationService(
+            bot=self.bot,
+            session_manager=session_manager
+        )
+        
         # Создание handlers
         common_handler = CommonHandler(session_manager)
         prize_handler = PrizeHandler(
@@ -153,6 +160,7 @@ class BotApplication:
             sheets_service=google_sheets_service,
             prize_repository=prize_repository,
             prize_service=prize_service,
+            notification_service=notification_service,
             session_manager=session_manager
         )
         
@@ -266,9 +274,7 @@ class BotApplication:
         # Обработчик состояния waiting_for_delivery_data (WebApp данные)
         async def handle_delivery_flow_wrapper(message: Message, state: FSMContext, **kwargs):
             session_id = kwargs.get('session_id')
-            await delivery_handler.handle_delivery_data(message, session_id)
-            # После сохранения данных сбрасываем состояние
-            await state.clear()
+            await delivery_handler.handle_delivery_data(message, state, session_id)
         
         self.dp.message.register(
             handle_delivery_flow_wrapper,
@@ -315,10 +321,10 @@ class BotApplication:
         
         # Регистрация обработчика данных доставки из WebApp (только в default_state)
         # Срабатывает когда пользователь отправляет данные из WebApp вне Prize Flow
-        async def handle_delivery_data_wrapper(message: Message, **kwargs):
+        async def handle_delivery_data_wrapper(message: Message, state: FSMContext, **kwargs):
             """Обёртка для обработки данных доставки из WebApp"""
             session_id = kwargs.get('session_id')
-            await delivery_handler.handle_delivery_data(message, session_id)
+            await delivery_handler.handle_delivery_data(message, state, session_id)
         
         self.dp.message.register(
             handle_delivery_data_wrapper,

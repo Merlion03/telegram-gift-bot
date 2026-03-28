@@ -330,6 +330,34 @@ export async function POST(request: NextRequest) {
       }
 
       // Успешное сохранение
+      // Requirement: Отправка уведомлений в Telegram после сохранения данных
+      // Отправляем данные в Telegram бота для отправки уведомлений пользователю
+      try {
+        const botApiUrl = `${backendUrl}/bot/delivery-notification`;
+        const notificationResponse = await fetch(botApiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            telegram_id: telegramId,
+            prize_id: validatedData.prize_id,
+          }),
+        });
+
+        if (!notificationResponse.ok) {
+          console.error('Failed to send notification to bot:', {
+            status: notificationResponse.status,
+            telegram_id: telegramId,
+            prize_id: validatedData.prize_id,
+          });
+          // Не блокируем успешный ответ пользователю, если уведомление не отправилось
+        }
+      } catch (notificationError) {
+        console.error('Error sending notification to bot:', notificationError);
+        // Не блокируем успешный ответ пользователю
+      }
+
       return NextResponse.json(
         {
           success: true,

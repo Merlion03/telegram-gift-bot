@@ -355,14 +355,17 @@ async def test_delivery_handler_database_unavailable():
     # Arrange
     from services.google_sheets_service import GoogleSheetsService
     from database.repositories.prize_repository import PrizeRepository
+    from services.notification_service import NotificationService
     
     mock_sheets_service = MagicMock(spec=GoogleSheetsService)
     mock_prize_repository = AsyncMock(spec=PrizeRepository)
+    mock_notification_service = AsyncMock(spec=NotificationService)
     
     handler = DeliveryHandler(
         sheets_service=mock_sheets_service,
         prize_repository=mock_prize_repository,
         prize_service=AsyncMock(spec=PrizeService),
+        notification_service=mock_notification_service,
         session_manager=None
     )
     

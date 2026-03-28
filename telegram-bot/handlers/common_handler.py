@@ -9,6 +9,7 @@ from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import Command
 
 from utils.logging_config import get_logger
+from constants import get_welcome_message, HELP_MESSAGE
 
 logger = get_logger(__name__)
 
@@ -54,11 +55,7 @@ class CommonHandler:
             username=username
         )
         
-        welcome_text = (
-            f"Привет, {username}! 👋\n\n"
-            "Здесь вы можете проверить, выиграли ли вы приз в розыгрыше.\n\n"
-            "Нажмите кнопку ниже, чтобы начать."
-        )
+        welcome_text = get_welcome_message(username)
         
         keyboard = get_main_menu_keyboard()
         await message.answer(welcome_text, reply_markup=keyboard)
@@ -97,26 +94,14 @@ class CommonHandler:
             telegram_id=telegram_id
         )
         
-        help_text = (
-            "📋 Как пользоваться ботом:\n\n"
-            "1️⃣ Отправьте кодовое слово из розыгрыша\n"
-            "2️⃣ Бот проверит, выиграли ли вы приз\n"
-            "3️⃣ Если вы победитель:\n"
-            "   • Цифровой приз - получите промокод сразу\n"
-            "   • Физический приз - укажите данные для доставки\n\n"
-            "Команды:\n"
-            "/start - Начать работу с ботом\n"
-            "/help - Показать эту справку"
-        )
-        
-        await message.answer(help_text)
+        await message.answer(HELP_MESSAGE)
         
         # Сохраняем ответ бота, если есть session_manager и session_id
         if self.session_manager and session_id:
             try:
                 await self.session_manager.save_bot_message(
                     session_id=session_id,
-                    message_text=help_text
+                    message_text=HELP_MESSAGE
                 )
             except Exception as e:
                 logger.error(

@@ -210,6 +210,84 @@ async def health_check():
     return {"status": "ok", "service": "prize-backend-api"}
 
 
+class DeliveryNotificationRequest(BaseModel):
+    """Модель запроса на отправку уведомлений о доставке"""
+    telegram_id: int = Field(..., description="Telegram ID пользователя")
+    prize_id: int = Field(..., description="ID приза")
+
+
+@app.post(
+    "/bot/delivery-notification",
+    summary="Отправить уведомления о доставке",
+    description="Отправляет уведомления пользователю после сохранения данных доставки"
+)
+async def send_delivery_notification(request: DeliveryNotificationRequest):
+    """
+    Отправляет уведомления пользователю через NotificationService
+    
+    Args:
+        request: Данные запроса (telegram_id, prize_id)
+    
+    Returns:
+        dict: Результат отправки уведомлений
+    """
+    try:
+        # Импортируем необходимые модули
+        from aiogram import Bot
+        from services.notification_service import NotificationService
+        from config import get_config
+        
+        # Получаем конфигурацию
+        config = get_config()
+        
+        # Создаём бота
+        bot = Bot(token=config.bot.token)
+        
+        # Создаём NotificationService
+        notification_service = NotificationService(bot=bot, session_manager=None)
+        
+        # Отправляем уведомления
+        result = await notification_service.send_delivery_notifications(
+            telegram_id=request.telegram_id,
+            prize_id=request.prize_id,
+            session_id=None
+        )
+        
+        # Закрываем сессию бота
+        await bot.session.close()
+        
+        logger.info(
+            "delivery_notification_sent_via_api",
+            telegram_id=request.telegram_id,
+            prize_id=request.prize_id,
+            confirmation_sent=result.confirmation_sent,
+            main_menu_sent=result.main_menu_sent
+        )
+        
+        return {
+            "success": True,
+            "confirmation_sent": result.confirmation_sent,
+            "main_menu_sent": result.main_menu_sent,
+            "both_sent": result.both_sent
+        }
+    
+    except Exception as e:
+        logger.error(
+            "delivery_notification_api_error",
+            telegram_id=request.telegram_id,
+            prize_id=request.prize_id,
+            error=str(e),
+            exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "Failed to send notification",
+                "message": "Не удалось отправить уведомление"
+            }
+        )
+
+
 if __name__ == "__main__":
     import uvicorn
     

@@ -13,6 +13,36 @@ from database.models.prize import Prize
 from services.google_sheets_service import GoogleSheetsService
 from services.prize_service import PrizeService
 from database.repositories.prize_repository import PrizeRepository
+from services.notification_service import NotificationService, NotificationResult
+
+
+# ============================================================================
+# Вспомогательные функции
+# ============================================================================
+
+def create_mock_notification_service(
+    confirmation_sent=True,
+    main_menu_sent=True
+) -> AsyncMock:
+    """
+    Создаёт mock для NotificationService
+    
+    Args:
+        confirmation_sent: Успешно ли отправлено подтверждающее сообщение
+        main_menu_sent: Успешно ли отправлено сообщение с главным меню
+        
+    Returns:
+        Mock объект NotificationService
+    """
+    mock_service = AsyncMock(spec=NotificationService)
+    mock_service.send_delivery_notifications = AsyncMock(
+        return_value=NotificationResult(
+            confirmation_sent=confirmation_sent,
+            main_menu_sent=main_menu_sent,
+            both_sent=confirmation_sent and main_menu_sent
+        )
+    )
+    return mock_service
 
 
 # ============================================================================
@@ -54,6 +84,9 @@ async def test_successful_delivery_data_save():
     mock_prize_repository = AsyncMock(spec=PrizeRepository)
     mock_prize_repository.update_delivery_data = AsyncMock(return_value=True)
     
+    # Mock NotificationService - успешная отправка уведомлений
+    mock_notification_service = create_mock_notification_service()
+    
     # Mock Prize
     mock_prize = Mock(spec=Prize)
     mock_prize.telegram_id = telegram_id
@@ -66,7 +99,8 @@ async def test_successful_delivery_data_save():
     handler = DeliveryHandler(
         sheets_service=mock_sheets_service,
         prize_repository=mock_prize_repository,
-        prize_service=AsyncMock(spec=PrizeService)
+        prize_service=AsyncMock(spec=PrizeService),
+        notification_service=mock_notification_service
     )
     
     # Mock метод _find_prize_by_id
@@ -95,10 +129,8 @@ async def test_successful_delivery_data_save():
     # Assert - проверяем, что данные обновлены в PostgreSQL
     mock_prize_repository.update_delivery_data.assert_called_once()
     
-    # Assert - проверяем, что пользователь получил подтверждение
-    mock_message.answer.assert_called_once()
-    success_message = mock_message.answer.call_args[0][0]
-    assert "успешно сохранены" in success_message.lower()
+    # Assert - проверяем, что уведомления отправлены
+    mock_notification_service.send_delivery_notifications.assert_called_once()
 
 
 # ============================================================================
@@ -140,6 +172,9 @@ async def test_retry_logic_on_sheets_error():
     mock_prize_repository = AsyncMock(spec=PrizeRepository)
     mock_prize_repository.update_delivery_data = AsyncMock(return_value=True)
     
+    # Mock NotificationService
+    mock_notification_service = create_mock_notification_service()
+    
     # Mock Prize
     mock_prize = Mock(spec=Prize)
     mock_prize.telegram_id = telegram_id
@@ -152,7 +187,8 @@ async def test_retry_logic_on_sheets_error():
     handler = DeliveryHandler(
         sheets_service=mock_sheets_service,
         prize_repository=mock_prize_repository,
-        prize_service=AsyncMock(spec=PrizeService)
+        prize_service=AsyncMock(spec=PrizeService),
+        notification_service=mock_notification_service
     )
     
     # Mock метод _find_prize_by_id
@@ -224,10 +260,16 @@ async def test_postgres_update_after_sheets_success():
     mock_sheets_service.save_delivery_data = AsyncMock(return_value=True)
     
     # Mock PrizeRepository - успешное обновление
+    # Mock NotificationService
+    mock_notification_service = create_mock_notification_service()
+    
     mock_prize_repository = AsyncMock(spec=PrizeRepository)
     mock_prize_repository.update_delivery_data = AsyncMock(return_value=True)
     
     # Mock Prize
+    # Mock NotificationService
+    mock_notification_service = create_mock_notification_service()
+    
     mock_prize = Mock(spec=Prize)
     mock_prize.telegram_id = telegram_id
     mock_prize.code_word = code_word
@@ -239,7 +281,8 @@ async def test_postgres_update_after_sheets_success():
     handler = DeliveryHandler(
         sheets_service=mock_sheets_service,
         prize_repository=mock_prize_repository,
-        prize_service=AsyncMock(spec=PrizeService)
+        prize_service=AsyncMock(spec=PrizeService),
+        notification_service=mock_notification_service
     )
     
     # Mock метод _find_prize_by_id
@@ -315,13 +358,17 @@ async def test_user_notification_on_critical_error():
     mock_sheets_service = AsyncMock(spec=GoogleSheetsService)
     
     # Mock PrizeRepository
+    # Mock NotificationService
+    mock_notification_service = create_mock_notification_service()
+    
     mock_prize_repository = AsyncMock(spec=PrizeRepository)
     
     # Создаём handler
     handler = DeliveryHandler(
         sheets_service=mock_sheets_service,
         prize_repository=mock_prize_repository,
-        prize_service=AsyncMock(spec=PrizeService)
+        prize_service=AsyncMock(spec=PrizeService),
+        notification_service=mock_notification_service
     )
     
     # Mock метод _find_prize_by_id - приз не найден
@@ -377,13 +424,17 @@ async def test_invalid_json_from_webapp():
     mock_sheets_service = AsyncMock(spec=GoogleSheetsService)
     
     # Mock PrizeRepository
+    # Mock NotificationService
+    mock_notification_service = create_mock_notification_service()
+    
     mock_prize_repository = AsyncMock(spec=PrizeRepository)
     
     # Создаём handler
     handler = DeliveryHandler(
         sheets_service=mock_sheets_service,
         prize_repository=mock_prize_repository,
-        prize_service=AsyncMock(spec=PrizeService)
+        prize_service=AsyncMock(spec=PrizeService),
+        notification_service=mock_notification_service
     )
     
     # Mock Message с невалидным JSON
@@ -436,13 +487,17 @@ async def test_missing_prize_id():
     mock_sheets_service = AsyncMock(spec=GoogleSheetsService)
     
     # Mock PrizeRepository
+    # Mock NotificationService
+    mock_notification_service = create_mock_notification_service()
+    
     mock_prize_repository = AsyncMock(spec=PrizeRepository)
     
     # Создаём handler
     handler = DeliveryHandler(
         sheets_service=mock_sheets_service,
         prize_repository=mock_prize_repository,
-        prize_service=AsyncMock(spec=PrizeService)
+        prize_service=AsyncMock(spec=PrizeService),
+        notification_service=mock_notification_service
     )
     
     # Mock Message без prize_id
@@ -505,6 +560,9 @@ async def test_graceful_degradation_postgres_error():
     mock_prize_repository = AsyncMock(spec=PrizeRepository)
     mock_prize_repository.update_delivery_data = AsyncMock(return_value=False)
     
+    # Mock NotificationService
+    mock_notification_service = create_mock_notification_service()
+    
     # Mock Prize
     mock_prize = Mock(spec=Prize)
     mock_prize.telegram_id = telegram_id
@@ -517,7 +575,8 @@ async def test_graceful_degradation_postgres_error():
     handler = DeliveryHandler(
         sheets_service=mock_sheets_service,
         prize_repository=mock_prize_repository,
-        prize_service=AsyncMock(spec=PrizeService)
+        prize_service=AsyncMock(spec=PrizeService),
+        notification_service=mock_notification_service
     )
     
     # Mock метод _find_prize_by_id
@@ -546,11 +605,12 @@ async def test_graceful_degradation_postgres_error():
     # Assert - проверяем, что попытка обновления PostgreSQL была
     mock_prize_repository.update_delivery_data.assert_called_once()
     
-    # Assert - проверяем, что пользователь получил подтверждение
+    # Assert - проверяем, что уведомления были отправлены
     # (несмотря на ошибку PostgreSQL, данные сохранены в Sheets)
-    mock_message.answer.assert_called_once()
-    success_message = mock_message.answer.call_args[0][0]
-    assert "успешно" in success_message.lower()
+    mock_notification_service.send_delivery_notifications.assert_called_once()
+    
+    # Assert - проверяем, что FSM состояние сброшено
+    mock_state.clear.assert_called_once()
 
 
 # ============================================================================
@@ -596,6 +656,9 @@ async def test_main_menu_displayed_after_delivery_save():
     mock_prize_repository = AsyncMock(spec=PrizeRepository)
     mock_prize_repository.update_delivery_data = AsyncMock(return_value=True)
     
+    # Mock NotificationService
+    mock_notification_service = create_mock_notification_service()
+    
     # Mock Prize
     mock_prize = Mock(spec=Prize)
     mock_prize.telegram_id = telegram_id
@@ -608,7 +671,8 @@ async def test_main_menu_displayed_after_delivery_save():
     handler = DeliveryHandler(
         sheets_service=mock_sheets_service,
         prize_repository=mock_prize_repository,
-        prize_service=AsyncMock(spec=PrizeService)
+        prize_service=AsyncMock(spec=PrizeService),
+        notification_service=mock_notification_service
     )
     
     # Mock метод _find_prize_by_id
@@ -631,18 +695,11 @@ async def test_main_menu_displayed_after_delivery_save():
     # Act
     await handler.handle_delivery_data(mock_message, mock_state)
     
-    # Assert - проверяем, что answer был вызван с клавиатурой
-    mock_message.answer.assert_called_once()
-    call_kwargs = mock_message.answer.call_args[1]
+    # Assert - проверяем, что уведомления были отправлены через NotificationService
+    mock_notification_service.send_delivery_notifications.assert_called_once()
     
-    # Проверяем наличие reply_markup
-    assert 'reply_markup' in call_kwargs
-    keyboard = call_kwargs['reply_markup']
-    
-    # Проверяем, что это InlineKeyboardMarkup с кнопкой "Получить приз"
-    assert keyboard is not None
-    assert len(keyboard.inline_keyboard) > 0
-    assert keyboard.inline_keyboard[0][0].text == "🎁 Получить приз"
+    # Assert - проверяем, что FSM состояние сброшено
+    mock_state.clear.assert_called_once()
 
 
 # ============================================================================
@@ -681,10 +738,16 @@ async def test_fsm_state_cleared_after_delivery_save():
     mock_sheets_service.save_delivery_data = AsyncMock(return_value=True)
     
     # Mock PrizeRepository - успешное обновление
+    # Mock NotificationService
+    mock_notification_service = create_mock_notification_service()
+    
     mock_prize_repository = AsyncMock(spec=PrizeRepository)
     mock_prize_repository.update_delivery_data = AsyncMock(return_value=True)
     
     # Mock Prize
+    # Mock NotificationService
+    mock_notification_service = create_mock_notification_service()
+    
     mock_prize = Mock(spec=Prize)
     mock_prize.telegram_id = telegram_id
     mock_prize.code_word = code_word
@@ -696,7 +759,8 @@ async def test_fsm_state_cleared_after_delivery_save():
     handler = DeliveryHandler(
         sheets_service=mock_sheets_service,
         prize_repository=mock_prize_repository,
-        prize_service=AsyncMock(spec=PrizeService)
+        prize_service=AsyncMock(spec=PrizeService),
+        notification_service=mock_notification_service
     )
     
     # Mock метод _find_prize_by_id
@@ -767,6 +831,9 @@ async def test_confirmation_message_saved_via_session_manager():
     mock_session_manager = AsyncMock()
     mock_session_manager.save_bot_message = AsyncMock()
     
+    # Mock NotificationService
+    mock_notification_service = create_mock_notification_service()
+    
     # Mock Prize
     mock_prize = Mock(spec=Prize)
     mock_prize.telegram_id = telegram_id
@@ -780,6 +847,7 @@ async def test_confirmation_message_saved_via_session_manager():
         sheets_service=mock_sheets_service,
         prize_repository=mock_prize_repository,
         prize_service=AsyncMock(spec=PrizeService),
+        notification_service=mock_notification_service,
         session_manager=mock_session_manager
     )
     
@@ -803,13 +871,12 @@ async def test_confirmation_message_saved_via_session_manager():
     # Act
     await handler.handle_delivery_data(mock_message, mock_state, session_id=session_id)
     
-    # Assert - проверяем, что save_bot_message был вызван
-    mock_session_manager.save_bot_message.assert_called_once()
-    
-    # Проверяем параметры вызова
-    call_kwargs = mock_session_manager.save_bot_message.call_args[1]
+    # Assert - проверяем, что уведомления были отправлены с session_id
+    mock_notification_service.send_delivery_notifications.assert_called_once()
+    call_kwargs = mock_notification_service.send_delivery_notifications.call_args[1]
+    assert call_kwargs['telegram_id'] == telegram_id
+    assert call_kwargs['prize_id'] == prize_id
     assert call_kwargs['session_id'] == session_id
-    assert 'успешно сохранены' in call_kwargs['message_text'].lower()
 
 
 # ============================================================================
@@ -843,13 +910,17 @@ async def test_fsm_state_cleared_on_error():
     mock_sheets_service = AsyncMock(spec=GoogleSheetsService)
     
     # Mock PrizeRepository
+    # Mock NotificationService
+    mock_notification_service = create_mock_notification_service()
+    
     mock_prize_repository = AsyncMock(spec=PrizeRepository)
     
     # Создаём handler
     handler = DeliveryHandler(
         sheets_service=mock_sheets_service,
         prize_repository=mock_prize_repository,
-        prize_service=AsyncMock(spec=PrizeService)
+        prize_service=AsyncMock(spec=PrizeService),
+        notification_service=mock_notification_service
     )
     
     # Mock метод _find_prize_by_id - приз не найден
@@ -919,9 +990,15 @@ async def test_main_menu_displayed_on_sheets_error():
     mock_sheets_service.save_delivery_data = AsyncMock(return_value=False)
     
     # Mock PrizeRepository
+    # Mock NotificationService
+    mock_notification_service = create_mock_notification_service()
+    
     mock_prize_repository = AsyncMock(spec=PrizeRepository)
     
     # Mock Prize
+    # Mock NotificationService
+    mock_notification_service = create_mock_notification_service()
+    
     mock_prize = Mock(spec=Prize)
     mock_prize.telegram_id = telegram_id
     mock_prize.code_word = code_word
@@ -933,7 +1010,8 @@ async def test_main_menu_displayed_on_sheets_error():
     handler = DeliveryHandler(
         sheets_service=mock_sheets_service,
         prize_repository=mock_prize_repository,
-        prize_service=AsyncMock(spec=PrizeService)
+        prize_service=AsyncMock(spec=PrizeService),
+        notification_service=mock_notification_service
     )
     
     # Mock метод _find_prize_by_id
