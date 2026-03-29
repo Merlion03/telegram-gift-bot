@@ -227,6 +227,15 @@ services:
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}
+      
+      # JWT Authentication Configuration
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      SESSION_LIFETIME_HOURS: ${SESSION_LIFETIME_HOURS:-24}
+      
+      # Rate Limiting Configuration
+      RATE_LIMIT_MAX_ATTEMPTS: ${RATE_LIMIT_MAX_ATTEMPTS:-5}
+      RATE_LIMIT_WINDOW_MINUTES: ${RATE_LIMIT_WINDOW_MINUTES:-15}
     volumes:
       # Монтируем credentials для Google Sheets (read-only)
       - ${GOOGLE_CREDENTIALS_HOST_PATH:-./credentials/google-credentials.json}:/app/credentials/google-credentials.json:ro

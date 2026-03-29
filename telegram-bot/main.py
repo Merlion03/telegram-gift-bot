@@ -60,6 +60,7 @@ class BotApplication:
         self.update_queue_service = None
         self.shutdown_event = asyncio.Event()
         self.logger = None
+        self.notification_listener_task = None  # Task для LISTEN/NOTIFY
     
     async def setup(self):
         """Настраивает все компоненты бота"""
@@ -111,6 +112,15 @@ class BotApplication:
         await self.db_connection.create_tables()
         self.logger.info("database_connection_initialized")
         
+        # Инициализация asyncpg connection pool для LISTEN/NOTIFY
+        from database.asyncpg_connection import initialize_asyncpg_pool
+        await initialize_asyncpg_pool(
+            database_url=self.config.database.connection_url,
+            min_size=5,
+            max_size=20
+        )
+        self.logger.info("asyncpg_pool_initialized")
+        
         # Создание сервисов
         google_sheets_service = GoogleSheetsService(
             credentials_path=self.config.google_sheets.credentials_path,
@@ -144,8 +154,27 @@ class BotApplication:
             session_manager=session_manager
         )
         
+        # Создание AdminRepository для проверки администраторов
+        from database.repositories.admin_repository import AdminRepository
+        admin_repository = AdminRepository()
+        
+        # Создание AdminNotificationService для уведомлений новых администраторов
+        from services.admin_notification_service import AdminNotificationService
+        admin_notification_service = AdminNotificationService(
+            bot=self.bot,
+            webapp_url=self.config.app.webapp_url
+        )
+        
+        # Создание AdminStartHandler для обработки /start администраторов
+        from handlers.admin_start_handler import AdminStartHandler
+        admin_start_handler = AdminStartHandler(
+            admin_repository=admin_repository,
+            session_manager=session_manager,
+            webapp_url=self.config.app.webapp_url
+        )
+        
         # Создание handlers
-        common_handler = CommonHandler(session_manager)
+        common_handler = CommonHandler(session_manager, admin_start_handler)
         prize_handler = PrizeHandler(
             prize_service=prize_service,
             webapp_url=self.config.app.webapp_url,
@@ -179,6 +208,11 @@ class BotApplication:
         
         # Настройка обработчиков ошибок
         setup_error_handlers(self.dp)
+        
+        # Запуск PostgreSQL LISTEN/NOTIFY для уведомлений новых администраторов
+        self.notification_listener_task = asyncio.create_task(
+            self._start_notification_listener(admin_notification_service)
+        )
         
         self.logger.info("bot_setup_completed")
     
@@ -368,6 +402,106 @@ class BotApplication:
         
         self.logger.info("handlers_registered")
     
+    async def _start_notification_listener(self, admin_notification_service) -> None:
+        """
+        Запускает PostgreSQL LISTEN/NOTIFY listener для уведомлений новых администраторов
+        
+        Слушает канал 'new_admin_notification' и вызывает AdminNotificationService
+        при получении уведомления от триггера БД.
+        
+        Args:
+            admin_notification_service: Сервис для отправки уведомлений
+        
+        Validates: Requirements 5.1, 5.4
+        """
+        from database.asyncpg_connection import get_asyncpg_pool
+        import json
+        
+        while not self.shutdown_event.is_set():
+            try:
+                pool = get_asyncpg_pool().get_pool()
+                
+                async with pool.acquire() as conn:
+                    self.logger.info("notification_listener_started")
+                    
+                    # Подписываемся на канал
+                    await conn.add_listener('new_admin_notification', self._handle_notification)
+                    
+                    self.logger.info("listening_for_admin_notifications")
+                    
+                    # Сохраняем ссылку на сервис для использования в callback
+                    self._admin_notification_service = admin_notification_service
+                    
+                    # Ждём завершения работы бота
+                    await self.shutdown_event.wait()
+                    
+                    # Отписываемся от канала
+                    await conn.remove_listener('new_admin_notification', self._handle_notification)
+                    self.logger.info("notification_listener_stopped")
+                    break
+            
+            except Exception as e:
+                self.logger.error(
+                    "notification_listener_error",
+                    error=str(e),
+                    exc_info=True
+                )
+                
+                # Переподключение через 5 секунд
+                if not self.shutdown_event.is_set():
+                    self.logger.info("notification_listener_reconnecting_in_5s")
+                    await asyncio.sleep(5)
+    
+    async def _handle_notification(self, connection, pid, channel, payload):
+        """
+        Обрабатывает уведомление о новом администраторе
+        
+        Args:
+            connection: Подключение к БД
+            pid: Process ID отправителя
+            channel: Название канала
+            payload: JSON payload с данными администратора
+        
+        Validates: Requirements 5.1, 5.4
+        """
+        import json
+        
+        try:
+            # Парсим payload
+            data = json.loads(payload)
+            tg_id = data.get('tg_id')
+            username = data.get('username')
+            role = data.get('role')
+            
+            self.logger.info(
+                "new_admin_notification_received",
+                tg_id=tg_id,
+                username=username,
+                role=role
+            )
+            
+            # Отправляем уведомление через AdminNotificationService
+            await self._admin_notification_service.notify_new_admin(
+                tg_id=tg_id,
+                username=username,
+                role=role
+            )
+        
+        except json.JSONDecodeError as e:
+            self.logger.error(
+                "notification_payload_parse_error",
+                payload=payload,
+                error=str(e)
+            )
+        
+        except Exception as e:
+            self.logger.error(
+                "notification_handler_error",
+                payload=payload,
+                error=str(e),
+                exc_info=True
+            )
+    
     async def start(self):
         """Запускает бота"""
         self.logger.info("bot_starting")
@@ -400,6 +534,18 @@ class BotApplication:
         self.logger.info("bot_shutdown_started")
         
         try:
+            # Устанавливаем событие завершения для остановки listener
+            self.shutdown_event.set()
+            
+            # Ждём завершения notification listener
+            if self.notification_listener_task:
+                try:
+                    await asyncio.wait_for(self.notification_listener_task, timeout=5.0)
+                    self.logger.info("notification_listener_task_stopped")
+                except asyncio.TimeoutError:
+                    self.logger.warning("notification_listener_task_timeout")
+                    self.notification_listener_task.cancel()
+            
             # Остановка сервиса очереди обновлений
             if self.update_queue_service:
                 await self.update_queue_service.stop()
@@ -417,6 +563,11 @@ class BotApplication:
             if self.db_connection:
                 await self.db_connection.close()
                 self.logger.info("database_connection_closed")
+            
+            # Закрытие asyncpg connection pool
+            from database.asyncpg_connection import close_asyncpg_pool
+            await close_asyncpg_pool()
+            self.logger.info("asyncpg_pool_closed")
             
             # Закрытие сессии бота
             if self.bot:

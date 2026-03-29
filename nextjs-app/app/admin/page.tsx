@@ -6,7 +6,9 @@
 
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { getTelegramUserId, isTelegramWebApp, initTelegramWebApp } from '@/lib/utils/telegramWebApp';
 import { Header } from '@/components/admin/Header';
 import { Sidebar } from '@/components/admin/Sidebar';
 import { ChatWindow } from '@/components/admin/ChatWindow';
@@ -19,9 +21,87 @@ import type { SupportSession } from '@/types/support';
  * Requirements: 6.1, 6.3, 6.4, 7.1, 7.2, 7.3, 7.4, 7.5
  */
 export default function AdminPage() {
+  const router = useRouter();
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [selectedSession, setSelectedSession] = useState<SupportSession | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showUserPanel, setShowUserPanel] = useState(true);
+
+  /**
+   * Проверка аутентификации при загрузке страницы
+   */
+  useEffect(() => {
+    checkAuth();
+  }, []);
+
+  /**
+   * Проверяет аутентификацию и Telegram WebApp контекст
+   */
+  const checkAuth = async () => {
+    // Ждём загрузки Telegram WebApp SDK (максимум 3 секунды)
+    let attempts = 0;
+    const maxAttempts = 30; // 30 попыток по 100ms = 3 секунды
+    
+    while (!isTelegramWebApp() && attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      attempts++;
+    }
+
+    // Инициализируем Telegram WebApp API
+    initTelegramWebApp();
+
+    // Проверяем, что приложение открыто в Telegram
+    if (!isTelegramWebApp()) {
+      setError('Доступ разрешён только через Telegram WebApp');
+      setIsAuthenticated(false);
+      return;
+    }
+
+    // Логируем данные для диагностики
+    console.log('Telegram WebApp initDataUnsafe:', window.Telegram?.WebApp?.initDataUnsafe);
+    console.log('Telegram WebApp initData:', window.Telegram?.WebApp?.initData);
+
+    // Извлекаем tg_id из Telegram WebApp контекста
+    const tgId = getTelegramUserId();
+    
+    if (!tgId) {
+      setError('Не удалось получить Telegram User ID');
+      setIsAuthenticated(false);
+      return;
+    }
+
+    // Проверяем наличие JWT токена в cookie
+    const hasToken = document.cookie.split('; ').some(cookie => cookie.startsWith('admin-token='));
+    
+    if (!hasToken) {
+      // Нет токена - редиректим на логин
+      console.log('Токен не найден, редирект на /login');
+      setIsAuthenticated(false);
+      router.replace('/login?callbackUrl=/admin');
+      return;
+    }
+    
+    // Токен есть - проверяем его валидность через API
+    try {
+      const response = await fetch('/api/admin/check-auth', {
+        credentials: 'include',
+      });
+      
+      if (response.ok) {
+        setIsAuthenticated(true);
+      } else {
+        // Токен невалиден - редирект на логин
+        console.log('Токен невалиден, редирект на /login');
+        setIsAuthenticated(false);
+        router.replace('/login?callbackUrl=/admin');
+      }
+    } catch (error) {
+      console.error('Auth check error:', error);
+      setError('Ошибка проверки аутентификации');
+      setIsAuthenticated(false);
+    }
+  };
 
   /**
    * Обработчик выбора сессии
@@ -42,7 +122,12 @@ export default function AdminPage() {
    */
   const handleUserMenuAction = (action: string) => {
     console.log('Действие меню:', action);
-    // Здесь можно добавить логику для обработки действий меню
+    
+    if (action === 'logout') {
+      // Удаляем токен и редиректим на логин
+      document.cookie = 'admin-token=; path=/; max-age=0';
+      router.push('/login');
+    }
   };
 
   /**
@@ -109,6 +194,37 @@ export default function AdminPage() {
       },
     };
   }, [selectedSession]);
+
+  // Показываем загрузку пока проверяем аутентификацию
+  if (isAuthenticated === null) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-100">
+        <div className="text-gray-600">Проверка доступа...</div>
+      </div>
+    );
+  }
+
+  // Если не аутентифицирован, показываем загрузку (редирект в процессе)
+  if (isAuthenticated === false) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-100">
+        <div className="text-gray-600">Перенаправление...</div>
+      </div>
+    );
+  }
+
+  // Показываем ошибку если есть
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-100">
+        <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8">
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+            {error}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <ErrorBoundary>

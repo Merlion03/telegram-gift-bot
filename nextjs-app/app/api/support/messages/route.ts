@@ -5,8 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth/authOptions';
+import { resolveAdminRequestAuth } from '@/lib/auth/adminRequestAuth';
 import { getDb } from '@/lib/database/client';
 import { TelegramBotApi } from '@/lib/telegram/botApi';
 import type { SendReplyData } from '@/types/support';
@@ -33,9 +32,9 @@ const sendReplySchema = z.object({
 export async function GET(request: NextRequest) {
   try {
     // Проверка аутентификации
-    const session = await getServerSession(authOptions);
-    
-    if (!session) {
+    const adminAuth = await resolveAdminRequestAuth(request);
+
+    if (!adminAuth) {
       return NextResponse.json(
         { error: 'Unauthorized', message: 'Требуется авторизация' },
         { status: 401 }
@@ -120,9 +119,9 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     // Проверка аутентификации
-    const session = await getServerSession(authOptions);
-    
-    if (!session) {
+    const adminAuth = await resolveAdminRequestAuth(request);
+
+    if (!adminAuth) {
       return NextResponse.json(
         { error: 'Unauthorized', message: 'Требуется авторизация' },
         { status: 401 }
@@ -243,3 +242,4 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+

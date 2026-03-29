@@ -5,8 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth/authOptions';
+import { resolveAdminRequestAuth } from '@/lib/auth/adminRequestAuth';
 import { getDb } from '@/lib/database/client';
 import type { GetSessionsParams } from '@/types/support';
 
@@ -25,9 +24,9 @@ import type { GetSessionsParams } from '@/types/support';
 export async function GET(request: NextRequest) {
   try {
     // Проверка аутентификации (Requirements 8.1, 8.5)
-    const session = await getServerSession(authOptions);
-    
-    if (!session) {
+    const adminAuth = await resolveAdminRequestAuth(request);
+
+    if (!adminAuth) {
       return NextResponse.json(
         { error: 'Unauthorized', message: 'Требуется авторизация' },
         { status: 401 }
@@ -104,3 +103,4 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+

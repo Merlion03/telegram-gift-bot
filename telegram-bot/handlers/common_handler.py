@@ -20,19 +20,24 @@ router = Router()
 class CommonHandler:
     """Обработчик общих команд"""
     
-    def __init__(self, session_manager=None):
+    def __init__(self, session_manager=None, admin_start_handler=None):
         """
         Инициализирует обработчик общих команд
         
         Args:
             session_manager: Менеджер сессий для сохранения ответов бота (опционально)
+            admin_start_handler: Обработчик для проверки администраторов (опционально)
         """
         self.session_manager = session_manager
+        self.admin_start_handler = admin_start_handler
         logger.info("common_handler_initialized")
     
     async def handle_start(self, message: Message, session_id: Optional[int] = None) -> None:
         """
         Обрабатывает команду /start
+        
+        Сначала проверяет, является ли пользователь администратором.
+        Если да - отправляет админ-клавиатуру, если нет - запускает Standard Flow.
         
         Отображает главное меню с описанием функций и кнопкой "Получить приз".
         Текст приветствия не содержит слово "бот" согласно Requirements 1.4.
@@ -42,7 +47,7 @@ class CommonHandler:
             session_id: ID сессии из middleware (опционально)
             
         Validates:
-            Requirements 1.1, 1.2, 1.3, 1.4, 10.7, 10.8
+            Requirements 1.1, 1.2, 1.3, 1.4, 3.1, 4.1, 10.7, 10.8
         """
         from keyboards.reply_keyboards import get_main_menu_keyboard
         
@@ -55,24 +60,47 @@ class CommonHandler:
             username=username
         )
         
-        welcome_text = get_welcome_message(username)
+        # Проверяем, является ли пользователь администратором
+        should_run_standard_flow = True
         
-        keyboard = get_main_menu_keyboard()
-        await message.answer(welcome_text, reply_markup=keyboard)
-        
-        # Сохраняем ответ бота, если есть session_manager и session_id
-        if self.session_manager and session_id:
+        if self.admin_start_handler:
             try:
-                await self.session_manager.save_bot_message(
-                    session_id=session_id,
-                    message_text=welcome_text
-                )
+                is_admin = await self.admin_start_handler.handle_start(message, session_id)
+                if is_admin:
+                    # Администратор обработан, не запускаем Standard Flow
+                    should_run_standard_flow = False
+                    logger.info(
+                        "start_command_handled_as_admin",
+                        telegram_id=telegram_id
+                    )
             except Exception as e:
+                # При ошибке проверки администратора продолжаем Standard Flow
                 logger.error(
-                    "failed_to_save_bot_response",
-                    session_id=session_id,
+                    "admin_check_error_fallback_to_standard_flow",
+                    telegram_id=telegram_id,
                     error=str(e)
                 )
+        
+        # Standard Flow для обычных пользователей
+        if should_run_standard_flow:
+            welcome_text = get_welcome_message(username)
+            
+            keyboard = get_main_menu_keyboard()
+            await message.answer(welcome_text, reply_markup=keyboard)
+            
+            # Сохраняем ответ бота, если есть session_manager и session_id
+            if self.session_manager and session_id:
+                try:
+                    await self.session_manager.save_bot_message(
+                        session_id=session_id,
+                        message_text=welcome_text
+                    )
+                except Exception as e:
+                    logger.error(
+                        "failed_to_save_bot_response",
+                        session_id=session_id,
+                        error=str(e)
+                    )
         
         logger.info(
             "start_command_handled",

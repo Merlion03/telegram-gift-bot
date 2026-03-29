@@ -19,6 +19,7 @@ SECRET_KEYS = {
     'api_key',
     'api_secret',
     'password',
+    'password_hash',
     'secret',
     'credentials',
     'auth',
@@ -28,6 +29,8 @@ SECRET_KEYS = {
     'access_token',
     'refresh_token',
     'session_key',
+    'jwt',
+    'session_token',
 }
 
 

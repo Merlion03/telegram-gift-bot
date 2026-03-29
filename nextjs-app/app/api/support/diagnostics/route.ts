@@ -5,8 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth/authOptions';
+import { resolveAdminRequestAuth } from '@/lib/auth/adminRequestAuth';
 import { NetworkDiagnostics } from '@/lib/telegram/networkDiagnostics';
 import { TelegramBotApi } from '@/lib/telegram/botApi';
 
@@ -17,9 +16,9 @@ import { TelegramBotApi } from '@/lib/telegram/botApi';
 export async function GET(request: NextRequest) {
   try {
     // Проверка аутентификации
-    const session = await getServerSession(authOptions);
-    
-    if (!session) {
+    const adminAuth = await resolveAdminRequestAuth(request);
+
+    if (!adminAuth) {
       return NextResponse.json(
         { error: 'Unauthorized', message: 'Требуется авторизация' },
         { status: 401 }

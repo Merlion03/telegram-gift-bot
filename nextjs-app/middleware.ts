@@ -3,7 +3,7 @@
  * 
  * Функции:
  * - Добавляет Content Security Policy (CSP) заголовки для защиты от XSS-атак
- * - Проверяет аутентификацию для защищённых роутов (/admin, /api/support)
+ * - Проверяет JWT аутентификацию для защищённых роутов (/admin, /api/admin)
  * - Редиректит неавторизованных пользователей на страницу входа
  * 
  * Requirements: 11.1, 11.2, 12.4
@@ -11,7 +11,7 @@
 
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { getToken } from 'next-auth/jwt';
+import { JWTSessionService } from '@/lib/services/jwtSessionService';
 
 /**
  * Content Security Policy директивы
@@ -141,25 +141,47 @@ function buildWebAppCSPHeader(): string {
 }
 
 /**
+ * Извлекает JWT токен из cookie или Authorization header
+ * @param request - Next.js request
+ * @returns JWT токен или null
+ */
+function extractToken(request: NextRequest): string | null {
+  // Пытаемся получить токен из cookie 'admin-token'
+  const cookieToken = request.cookies.get('admin-token')?.value;
+  
+  if (cookieToken) {
+    return cookieToken;
+  }
+  
+  // Пытаемся получить токен из Authorization header
+  const authHeader = request.headers.get('authorization');
+  
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.substring(7);
+  }
+  
+  return null;
+}
+
+/**
  * Middleware функция
  * 
  * Выполняет:
- * 1. Проверку аутентификации для защищённых роутов
+ * 1. Проверку JWT аутентификации для защищённых роутов
  * 2. Добавление заголовков безопасности ко всем ответам
  */
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   
   // Проверка аутентификации для защищённых роутов (Requirements 11.1, 11.2)
-  const protectedPaths = ['/admin', '/api/support'];
+  // Для /admin не делаем редирект - страница сама проверит токен и редиректнет если нужно
+  // Это сохраняет контекст Telegram WebApp при редиректе
+  const protectedPaths = ['/api/admin', '/api/support'];
   const isProtectedPath = protectedPaths.some(path => pathname.startsWith(path));
   
   if (isProtectedPath) {
-    // Получаем токен из сессии
-    const token = await getToken({
-      req: request,
-      secret: process.env.NEXTAUTH_SECRET,
-    });
+    // Извлекаем JWT токен из cookie или Authorization header
+    const token = extractToken(request);
     
     // Если токен отсутствует - редирект на страницу входа (Requirement 11.2)
     if (!token) {
@@ -167,10 +189,68 @@ export async function middleware(request: NextRequest) {
       loginUrl.searchParams.set('callbackUrl', pathname);
       return NextResponse.redirect(loginUrl);
     }
+    
+    // Валидируем JWT токен
+    try {
+      const jwtSecret = process.env.JWT_SECRET;
+      
+      if (!jwtSecret) {
+        console.error('JWT_SECRET is not configured');
+        const loginUrl = new URL('/login', request.url);
+        return NextResponse.redirect(loginUrl);
+      }
+      
+      const jwtService = new JWTSessionService({
+        secretKey: jwtSecret,
+      });
+      
+      const claims = await jwtService.validateToken(token);
+      
+      // Если токен невалиден или истёк - редирект на страницу входа
+      if (!claims) {
+        const loginUrl = new URL('/login', request.url);
+        loginUrl.searchParams.set('callbackUrl', pathname);
+        return NextResponse.redirect(loginUrl);
+      }
+      
+      // Добавляем claims в request headers для использования в API routes
+      const requestHeaders = new Headers(request.headers);
+      requestHeaders.set('x-admin-tgid', claims.tgId.toString());
+      requestHeaders.set('x-admin-role', claims.role.toString());
+      
+      // Создаём response с обновлёнными headers
+      const response = NextResponse.next({
+        request: {
+          headers: requestHeaders,
+        },
+      });
+      
+      // Применяем CSP заголовки (см. ниже)
+      applyCspHeaders(response, pathname);
+      
+      return response;
+    } catch (error) {
+      console.error('Error validating JWT token in middleware:', error);
+      const loginUrl = new URL('/login', request.url);
+      return NextResponse.redirect(loginUrl);
+    }
   }
   
-  // Создаём response
+  // Создаём response для незащищённых роутов
   const response = NextResponse.next();
+  
+  // Применяем CSP заголовки
+  applyCspHeaders(response, pathname);
+  
+  return response;
+}
+
+/**
+ * Применяет CSP заголовки к response
+ * @param response - Next.js response
+ * @param pathname - Путь запроса
+ */
+function applyCspHeaders(response: NextResponse, pathname: string): void {
   
   // Применяем роут-специфичную CSP политику (Requirement 12.4)
   // Для /webapp, /login и /admin используем более мягкую политику с 'unsafe-inline'
@@ -208,8 +288,6 @@ export async function middleware(request: NextRequest) {
     'Permissions-Policy',
     'camera=(), microphone=(), geolocation=(), interest-cohort=()'
   );
-  
-  return response;
 }
 
 /**

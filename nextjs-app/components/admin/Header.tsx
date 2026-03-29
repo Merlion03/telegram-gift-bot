@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Users, Search, ChevronDown, LogOut, Settings, User } from 'lucide-react';
 import { WebSocketStatus } from './WebSocketStatus';
+import { useRouter } from 'next/navigation';
 
 /**
  * Интерфейс для пропсов компонента Header
@@ -18,10 +19,34 @@ interface HeaderProps {
   onUserMenuAction?: (action: string) => void;
   userName?: string;
   userAvatar?: string;
+  userRole?: number; // Роль администратора (0-3)
 }
 
 /**
+ * Получает название роли администратора на русском языке
+ * 
+ * @param role - Уровень роли (0-3)
+ * @returns Название роли
+ */
+const getRoleName = (role?: number): string => {
+  switch (role) {
+    case 0:
+      return 'Разработчик';
+    case 1:
+      return 'Помощник';
+    case 2:
+      return 'Администратор';
+    case 3:
+      return 'Оператор';
+    default:
+      return 'Администратор';
+  }
+};
+
+/**
  * Компонент Header - заголовок приложения с логотипом, поиском и меню пользователя
+ * 
+ * Отображает роль администратора и обрабатывает выход из системы.
  */
 export const Header: React.FC<HeaderProps> = ({
   stats = { total: 0, new: 0, active: 0 },
@@ -30,9 +55,11 @@ export const Header: React.FC<HeaderProps> = ({
   onUserMenuAction,
   userName = 'Администратор',
   userAvatar,
+  userRole,
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
   // Закрытие меню при клике вне его
   useEffect(() => {
@@ -52,6 +79,19 @@ export const Header: React.FC<HeaderProps> = ({
 
   const handleMenuAction = (action: string) => {
     setIsMenuOpen(false);
+    
+    // Обработка выхода из системы
+    if (action === 'logout') {
+      // Очищаем JWT cookie
+      document.cookie = 'admin-token=; path=/; max-age=0; SameSite=Strict';
+      
+      // Редирект на страницу входа
+      router.push('/login');
+      router.refresh();
+      return;
+    }
+    
+    // Остальные действия передаём родительскому компоненту
     onUserMenuAction?.(action);
   };
 
@@ -149,7 +189,7 @@ export const Header: React.FC<HeaderProps> = ({
                     {userName}
                   </p>
                   <p className="text-xs text-telegram-secondary">
-                    Administrator
+                    {getRoleName(userRole)}
                   </p>
                 </div>
 

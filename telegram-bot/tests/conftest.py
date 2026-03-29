@@ -122,7 +122,6 @@ def reset_structlog_cache():
     structlog.reset_defaults()
 
 
-
 @pytest.fixture(scope="function")
 async def db_session():
     """

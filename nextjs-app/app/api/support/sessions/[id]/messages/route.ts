@@ -5,8 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth/authOptions';
+import { resolveAdminRequestAuth } from '@/lib/auth/adminRequestAuth';
 import { getDb } from '@/lib/database/client';
 
 /**
@@ -37,9 +36,9 @@ export async function GET(
 ) {
   try {
     // Проверка аутентификации (Requirements 8.1, 8.5)
-    const session = await getServerSession(authOptions);
-    
-    if (!session) {
+    const adminAuth = await resolveAdminRequestAuth(request);
+
+    if (!adminAuth) {
       return NextResponse.json(
         { error: 'Unauthorized', message: 'Требуется авторизация' },
         { status: 401 }
@@ -183,9 +182,9 @@ export async function POST(
 ) {
   try {
     // Проверка аутентификации (Requirements 8.1, 8.5)
-    const session = await getServerSession(authOptions);
-    
-    if (!session) {
+    const adminAuth = await resolveAdminRequestAuth(request);
+
+    if (!adminAuth) {
       return NextResponse.json(
         { error: 'Unauthorized', message: 'Требуется авторизация' },
         { status: 401 }
@@ -271,7 +270,7 @@ export async function POST(
         session_id: sessionId,
         from: 'chat',
         to: 'support',
-        admin_id: session.user?.email || 'unknown',
+        admin_id: adminAuth.adminId,
         timestamp: new Date().toISOString(),
       });
     }
@@ -288,7 +287,7 @@ export async function POST(
     console.log('Admin message sent', {
       session_id: sessionId,
       message_id: savedMessage.id,
-      admin_id: session.user?.email || 'unknown',
+      admin_id: adminAuth.adminId,
       telegram_id,
       message_length: trimmedText.length,
       timestamp: new Date().toISOString(),
@@ -376,3 +375,4 @@ export async function POST(
     );
   }
 }
+
