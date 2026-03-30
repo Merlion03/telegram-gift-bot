@@ -237,7 +237,11 @@ export class DatabaseClient {
           message_text,
           file_id,
           created_at,
-          delivered
+          delivered,
+          media_type,
+          file_path,
+          caption,
+          file_size
         FROM support_messages
         WHERE session_id = $1
         ORDER BY created_at ASC
@@ -254,6 +258,10 @@ export class DatabaseClient {
         file_id: row.file_id || undefined,
         created_at: row.created_at.toISOString(),
         delivered: row.delivered,
+        media_type: row.media_type || 'text',
+        file_path: row.file_path || undefined,
+        caption: row.caption || undefined,
+        file_size: row.file_size || undefined,
       }));
     } catch (error) {
       console.error('Error fetching messages:', error);
@@ -291,9 +299,13 @@ export class DatabaseClient {
           message_type,
           message_text,
           file_id,
-          delivered
+          delivered,
+          media_type,
+          file_path,
+          caption,
+          file_size
         )
-        VALUES ($1, $2, $3, $4, $5, $6)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         RETURNING 
           id,
           session_id,
@@ -302,7 +314,11 @@ export class DatabaseClient {
           message_text,
           file_id,
           created_at,
-          delivered
+          delivered,
+          media_type,
+          file_path,
+          caption,
+          file_size
       `;
 
       // Сообщения от поддержки изначально не доставлены
@@ -315,6 +331,10 @@ export class DatabaseClient {
         message_text,
         file_id || null,
         delivered,
+        'text', // media_type по умолчанию
+        null,   // file_path
+        null,   // caption
+        null,   // file_size
       ]);
 
       const row = result.rows[0];
@@ -328,6 +348,10 @@ export class DatabaseClient {
         file_id: row.file_id || undefined,
         created_at: row.created_at.toISOString(),
         delivered: row.delivered,
+        media_type: row.media_type || 'text',
+        file_path: row.file_path || undefined,
+        caption: row.caption || undefined,
+        file_size: row.file_size || undefined,
       };
     } catch (error) {
       console.error('Error saving message:', error);

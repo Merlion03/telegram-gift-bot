@@ -172,6 +172,7 @@ class SupportMessage(Base):
     Модель сообщения в рамках сессии поддержки
     
     Хранит сообщения от пользователя и от службы поддержки
+    Поддерживает медиа-контент: фото, видео, анимации, стикеры, голосовые, документы
     """
     __tablename__ = 'support_messages'
     
@@ -209,6 +210,24 @@ class SupportMessage(Base):
     # Флаг доставки сообщения
     delivered: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     
+    # НОВЫЕ ПОЛЯ для медиа-контента
+    # Тип медиа: text, photo, video, animation, sticker, voice, document
+    media_type: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default='text',
+        index=True
+    )
+    
+    # Путь к файлу на сервере (относительно telegram-bot/media)
+    file_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    
+    # Текстовое описание медиафайла (caption)
+    caption: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    
+    # Размер файла в байтах
+    file_size: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    
     # Связь с сессией (многие к одному)
     session: Mapped["SupportSession"] = relationship(
         "SupportSession",
@@ -224,6 +243,10 @@ class SupportMessage(Base):
         file_id: Optional[str] = None,
         created_at: Optional[datetime] = None,
         delivered: bool = False,
+        media_type: str = 'text',  # NEW
+        file_path: Optional[str] = None,  # NEW
+        caption: Optional[str] = None,  # NEW
+        file_size: Optional[int] = None,  # NEW
         **kwargs
     ):
         """
@@ -237,6 +260,10 @@ class SupportMessage(Base):
             file_id: ID файла для медиа (опционально)
             created_at: Время создания (по умолчанию текущее время UTC)
             delivered: Флаг доставки (по умолчанию False)
+            media_type: Тип медиа-контента (по умолчанию 'text')
+            file_path: Путь к файлу на сервере (опционально)
+            caption: Текстовое описание медиа (опционально)
+            file_size: Размер файла в байтах (опционально)
         """
         super().__init__(**kwargs)
         self.session_id = session_id
@@ -246,6 +273,10 @@ class SupportMessage(Base):
         self.file_id = file_id
         self.created_at = created_at if created_at is not None else datetime.now(timezone.utc)
         self.delivered = delivered
+        self.media_type = media_type
+        self.file_path = file_path
+        self.caption = caption
+        self.file_size = file_size
     
     def __repr__(self) -> str:
         return (
@@ -270,3 +301,11 @@ class SupportMessage(Base):
     def mark_delivered(self) -> None:
         """Отмечает сообщение как доставленное"""
         self.delivered = True
+    
+    def is_media_message(self) -> bool:
+        """Проверяет, является ли сообщение медиа-контентом"""
+        return self.media_type != 'text'
+    
+    def has_caption(self) -> bool:
+        """Проверяет, есть ли у медиа caption"""
+        return self.caption is not None and len(self.caption) > 0

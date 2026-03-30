@@ -84,17 +84,25 @@ class SupportService:
         telegram_id: int,
         message_type: str,
         message_text: str,
-        file_id: Optional[str] = None
+        file_id: Optional[str] = None,
+        media_type: str = 'text',
+        file_path: Optional[str] = None,
+        caption: Optional[str] = None,
+        file_size: Optional[int] = None
     ) -> int:
         """
-        Сохраняет сообщение в БД
+        Сохраняет сообщение в БД с поддержкой медиа-контента
         
         Args:
             session_id: ID сессии поддержки
             telegram_id: Telegram ID отправителя
-            message_type: Тип сообщения ('from_user' или 'from_support')
+            message_type: Тип сообщения ('from_user', 'from_support', 'from_bot')
             message_text: Текст сообщения
             file_id: ID файла для медиа-контента (опционально)
+            media_type: Тип медиа ('text', 'photo', 'video', 'animation', 'sticker', 'voice', 'document')
+            file_path: Путь к файлу на сервере (опционально)
+            caption: Текстовое описание медиа (опционально)
+            file_size: Размер файла в байтах (опционально)
         
         Returns:
             ID созданного сообщения
@@ -108,7 +116,9 @@ class SupportService:
             session_id=session_id,
             telegram_id=telegram_id,
             message_type=message_type,
-            has_file=bool(file_id)
+            media_type=media_type,
+            has_file=bool(file_path),
+            has_caption=bool(caption)
         )
         
         try:
@@ -117,14 +127,19 @@ class SupportService:
                 telegram_id=telegram_id,
                 message_type=message_type,
                 message_text=message_text,
-                file_id=file_id
+                file_id=file_id,
+                media_type=media_type,
+                file_path=file_path,
+                caption=caption,
+                file_size=file_size
             )
             
             logger.info(
                 "support_message_saved",
                 message_id=message_id,
                 session_id=session_id,
-                message_type=message_type
+                message_type=message_type,
+                media_type=media_type
             )
             
             return message_id
@@ -141,7 +156,8 @@ class SupportService:
                 "failed_to_save_support_message",
                 error=str(e),
                 session_id=session_id,
-                telegram_id=telegram_id
+                telegram_id=telegram_id,
+                media_type=media_type
             )
             raise
     

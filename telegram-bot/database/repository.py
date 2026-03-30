@@ -101,17 +101,25 @@ class SupportRepository(BaseRepository):
         telegram_id: int,
         message_type: str,
         message_text: str,
-        file_id: Optional[str] = None
+        file_id: Optional[str] = None,
+        media_type: str = 'text',
+        file_path: Optional[str] = None,
+        caption: Optional[str] = None,
+        file_size: Optional[int] = None
     ) -> int:
         """
-        Сохраняет сообщение в базу данных
+        Сохраняет сообщение в базу данных с поддержкой медиа-контента
         
         Args:
             session_id: ID сессии поддержки
             telegram_id: Telegram ID отправителя
-            message_type: Тип сообщения ('from_user' или 'from_support')
+            message_type: Тип сообщения ('from_user', 'from_support', 'from_bot')
             message_text: Текст сообщения
             file_id: ID файла для медиа-контента (опционально)
+            media_type: Тип медиа ('text', 'photo', 'video', 'animation', 'sticker', 'voice', 'document')
+            file_path: Путь к файлу на сервере (опционально)
+            caption: Текстовое описание медиа (опционально)
+            file_size: Размер файла в байтах (опционально)
         
         Returns:
             int: ID созданного сообщения
@@ -141,13 +149,19 @@ class SupportRepository(BaseRepository):
             # Санитизация текста от NUL bytes для совместимости с PostgreSQL
             sanitized_text = sanitize_text(message_text)
             sanitized_file_id = sanitize_text(file_id) if file_id else None
+            sanitized_caption = sanitize_text(caption) if caption else None
+            sanitized_file_path = sanitize_text(file_path) if file_path else None
             
             new_message = SupportMessage(
                 session_id=session_id,
                 telegram_id=telegram_id,
                 message_type=message_type,
                 message_text=sanitized_text,
-                file_id=sanitized_file_id
+                file_id=sanitized_file_id,
+                media_type=media_type,
+                file_path=sanitized_file_path,
+                caption=sanitized_caption,
+                file_size=file_size
             )
             
             async with self._get_session_context() as session:
@@ -160,7 +174,9 @@ class SupportRepository(BaseRepository):
                 "message_saved",
                 message_id=message_id,
                 session_id=session_id,
-                message_type=message_type
+                message_type=message_type,
+                media_type=media_type,
+                has_file=bool(file_path)
             )
             return message_id
             
@@ -170,6 +186,7 @@ class SupportRepository(BaseRepository):
                 session_id=session_id,
                 telegram_id=telegram_id,
                 message_type=message_type,
+                media_type=media_type,
                 error=str(e),
                 exc_info=True
             )

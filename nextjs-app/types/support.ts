@@ -11,6 +11,16 @@ export type SessionType = 'chat' | 'support';
 // Тип сообщения
 export type MessageType = 'from_user' | 'from_support' | 'from_bot';
 
+// Тип медиа-контента
+export type MediaType = 
+  | 'text' 
+  | 'photo' 
+  | 'video' 
+  | 'animation' 
+  | 'sticker' 
+  | 'voice' 
+  | 'document';
+
 // Сессия поддержки
 export interface SupportSession {
   id: number;
@@ -39,6 +49,12 @@ export interface SupportMessage {
   file_id?: string; // ID медиа-контента в Telegram
   created_at: string; // ISO 8601 timestamp
   delivered: boolean; // Доставлено ли сообщение пользователю
+  
+  // Поля для медиа-контента
+  media_type: MediaType; // Тип медиа-контента
+  file_path?: string; // Путь к файлу на сервере (относительно telegram-bot/media)
+  caption?: string; // Текстовое описание медиафайла
+  file_size?: number; // Размер файла в байтах
 }
 
 // Данные для создания нового сообщения

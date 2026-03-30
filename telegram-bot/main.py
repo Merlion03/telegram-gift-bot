@@ -147,6 +147,24 @@ class BotApplication:
         # Создание SessionManager для автоматического сохранения диалогов
         session_manager = SessionManager(support_repository)
         
+        # Создание FileDownloader для скачивания медиафайлов
+        from services.file_downloader import FileDownloader
+        import os
+        base_media_path = os.path.join(os.path.dirname(__file__), 'media')
+        file_downloader = FileDownloader(bot=self.bot, base_media_path=base_media_path)
+        
+        # Создание StickerConverter для конвертации стикеров
+        from services.sticker_converter import StickerConverter
+        sticker_converter = StickerConverter()
+        
+        # Создание MediaHandler для обработки медиа-сообщений
+        from handlers.media_handler import MediaHandler
+        media_handler = MediaHandler(
+            file_downloader=file_downloader,
+            sticker_converter=sticker_converter,
+            support_service=support_service
+        )
+        
         # Создание NotificationService для отправки уведомлений
         from services.notification_service import NotificationService
         notification_service = NotificationService(
@@ -180,7 +198,7 @@ class BotApplication:
             webapp_url=self.config.app.webapp_url,
             session_manager=session_manager
         )
-        support_handler = SupportHandler(support_service, session_manager)
+        support_handler = SupportHandler(support_service, media_handler, session_manager)
         
         # Создание DeliveryHandler для обработки данных доставки из WebApp
         from database.repositories.prize_repository import PrizeRepository
@@ -339,19 +357,10 @@ class BotApplication:
             StateFilter(SupportStates.in_support)
         )
         
-        # Обёртка для обработки кодовых слов (нужна для async вызова)
-        async def handle_code_word_wrapper(message: Message, **kwargs):
-            """Обёртка для вызова handle_code_word с await"""
-            session_id = kwargs.get('session_id')
-            await prize_handler.handle_code_word(message, message.text, session_id)
-        
-        # Регистрация обработчика кодовых слов (все остальные текстовые сообщения)
-        # Этот обработчик срабатывает только вне режима поддержки
-        self.dp.message.register(
-            handle_code_word_wrapper,
-            lambda message: message.text is not None,
-            StateFilter(default_state)
-        )
+        # Обработчик кодовых слов УДАЛЁН
+        # Причина: Бот не должен проверять каждое сообщение как кодовое слово
+        # Кодовые слова теперь вводятся только через Prize Flow (после нажатия кнопки "Получить приз")
+        # См. PrizeFlowHandler.handle_code_word_input() для обработки кодовых слов
         
         # Регистрация обработчика данных доставки из WebApp (только в default_state)
         # Срабатывает когда пользователь отправляет данные из WebApp вне Prize Flow

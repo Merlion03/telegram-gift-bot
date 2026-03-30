@@ -13,6 +13,7 @@ import structlog
 from services.support_service import SupportService
 from fsm.states import SupportStates
 from keyboards.reply_keyboards import get_support_end_keyboard
+from handlers.media_handler import MediaHandler
 from constants import (
     SUPPORT_SESSION_STARTED,
     SUPPORT_START_ERROR,
@@ -31,15 +32,17 @@ router = Router()
 class SupportHandler:
     """Обработчик режима поддержки"""
     
-    def __init__(self, support_service: SupportService, session_manager=None):
+    def __init__(self, support_service: SupportService, media_handler: MediaHandler, session_manager=None):
         """
         Инициализирует обработчик поддержки
         
         Args:
             support_service: Сервис для работы с поддержкой
+            media_handler: Обработчик медиа-сообщений
             session_manager: Менеджер сессий для сохранения ответов бота (опционально)
         """
         self.support_service = support_service
+        self.media_handler = media_handler
         self.session_manager = session_manager
         logger.info("support_handler_initialized")
     
@@ -142,6 +145,7 @@ class SupportHandler:
         Args:
             message: Сообщение от пользователя
             state: FSM контекст
+            session_id: ID сессии из middleware (опционально)
         """
         telegram_id = message.from_user.id
         
@@ -150,7 +154,11 @@ class SupportHandler:
             telegram_id=telegram_id,
             has_text=bool(message.text),
             has_photo=bool(message.photo),
-            has_document=bool(message.document)
+            has_document=bool(message.document),
+            has_video=bool(message.video),
+            has_animation=bool(message.animation),
+            has_sticker=bool(message.sticker),
+            has_voice=bool(message.voice)
         )
         
         try:
@@ -167,46 +175,17 @@ class SupportHandler:
                 await state.clear()
                 return
             
-            # Определение текста сообщения
-            message_text = message.text or message.caption or ""
-            
-            # Определение file_id для медиа-контента
-            file_id = None
-            if message.photo:
-                # Берём фото с наибольшим разрешением
-                file_id = message.photo[-1].file_id
-            elif message.document:
-                file_id = message.document.file_id
-            elif message.video:
-                file_id = message.video.file_id
-            elif message.audio:
-                file_id = message.audio.file_id
-            elif message.voice:
-                file_id = message.voice.file_id
-            
-            # Если нет ни текста, ни медиа, игнорируем
-            if not message_text and not file_id:
-                logger.warning(
-                    "empty_support_message",
-                    telegram_id=telegram_id,
-                    session_id=session_id
-                )
-                return
-            
-            # Сохранение сообщения
-            await self.support_service.save_message(
-                session_id=session_id,
-                telegram_id=telegram_id,
-                message_type='from_user',
-                message_text=message_text,
-                file_id=file_id
+            # Делегируем обработку MediaHandler
+            await self.media_handler.handle_media_message(
+                message=message,
+                state=state,
+                session_id=session_id
             )
             
             logger.info(
-                "support_message_saved",
+                "support_message_handled",
                 telegram_id=telegram_id,
-                session_id=session_id,
-                has_file=bool(file_id)
+                session_id=session_id
             )
         
         except Exception as e:

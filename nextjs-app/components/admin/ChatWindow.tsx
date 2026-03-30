@@ -19,6 +19,7 @@ import {
   createTelegramGradient,
   getMessageAnimationClass,
 } from '@/lib/telegram-utils';
+import { MediaRenderer } from '@/components/MediaRenderer';
 
 interface ChatWindowProps {
   session: SupportSession;
@@ -99,6 +100,10 @@ export function ChatWindow({ session }: ChatWindowProps) {
               message_text: serverMessage.data.message_text,
               created_at: serverMessage.data.created_at,
               delivered: serverMessage.data.is_read || false,
+              media_type: (serverMessage.data as any).media_type || 'text',
+              file_path: (serverMessage.data as any).file_path,
+              caption: (serverMessage.data as any).caption,
+              file_size: (serverMessage.data as any).file_size,
             };
             
             // Добавляем новое сообщение в список
@@ -531,10 +536,13 @@ export function ChatWindow({ session }: ChatWindowProps) {
                           </div>
                         )}
 
-                        {/* Текст сообщения */}
-                        <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">
-                          {message.message_text}
-                        </p>
+                        {/* Рендеринг медиа-контента через MediaRenderer (Requirements 6.1-6.8) */}
+                        <MediaRenderer
+                          mediaType={message.media_type}
+                          filePath={message.file_path}
+                          caption={message.caption}
+                          messageText={message.message_text}
+                        />
 
                         {/* Метаданные сообщения */}
                         <div
