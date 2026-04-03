@@ -1,7 +1,9 @@
 /**
  * Property-Based тесты для Delivery API
  * 
- * Validates: Requirements 2.1, 2.2, 2.5, 6.4, 7.5, 9.2, 9.3, 9.5
+ * Property 6: Валидация длины строковых полей
+ * 
+ * Validates: Requirements 9.1, 9.2
  */
 
 import { describe, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -9,20 +11,13 @@ import { fc, test } from '@fast-check/vitest';
 import { NextRequest } from 'next/server';
 
 // Моки модулей - ДОЛЖНЫ быть ДО импортов
+vi.mock('@/lib/telegram/initDataValidator');
 vi.mock('@/lib/api/prizeClient');
-vi.mock('@/lib/google/sheetsClient');
-vi.mock('@/lib/telegram/initDataValidator', () => ({
-  InitDataValidator: vi.fn().mockImplementation(() => ({
-    validate: vi.fn(),
-    extractUserData: vi.fn().mockReturnValue({ id: 12345 }),
-  })),
-}));
 
 // Импорты после моков
 import { POST } from '../route';
+import { InitDataValidator } from '@/lib/telegram/initDataValidator';
 import { PrizeClient } from '@/lib/api/prizeClient';
-import { GoogleSheetsClient } from '@/lib/google/sheetsClient';
-import { SheetNotFoundError, SheetAccessDeniedError } from '@/lib/types/sheet';
 
 // Генераторы для property-based тестов
 const validSheetNameArbitrary = fc.string({ minLength: 1, maxLength: 100 })
@@ -38,9 +33,11 @@ const rowIdArbitrary = fc.integer({ min: 1, max: 10000 });
 const telegramIdArbitrary = fc.integer({ min: 1, max: 999999999 });
 
 // Генератор валидных строк (не только пробелы)
+// ВАЖНО: генерируем строки только из букв и цифр, чтобы гарантировать прохождение валидации
 const validStringArbitrary = (minLength: number, maxLength: number) =>
-  fc.string({ minLength, maxLength })
-    .filter(s => s.trim().length >= minLength);
+  fc
+    .stringMatching(/^[a-zA-Z0-9]+$/)
+    .filter(s => s.length >= minLength && s.length <= maxLength);
 
 // Генератор валидного телефона
 const validPhoneArbitrary = fc.string({ minLength: 10, maxLength: 15 })
@@ -61,14 +58,17 @@ const validDeliveryDataArbitrary = fc.record({
 });
 
 describe('Delivery API - Property Tests', () => {
+  // Mock fetch глобально
+  const mockFetch = vi.fn();
+  global.fetch = mockFetch;
+
   beforeEach(() => {
     // Настройка переменных окружения
     process.env.BOT_TOKEN = 'test-bot-token';
-    process.env.GOOGLE_CREDENTIALS_PATH = '/path/to/credentials.json';
-    process.env.SPREADSHEET_ID = 'test-spreadsheet-id';
-    process.env.BACKEND_API_URL = 'http://localhost:5000';
+    process.env.BACKEND_API_URL = 'http://localhost:8000';
 
     vi.clearAllMocks();
+    mockFetch.mockClear();
   });
 
   afterEach(() => {
@@ -76,165 +76,29 @@ describe('Delivery API - Property Tests', () => {
   });
 
   /**
-   * Feature: google-sheets-dynamic-worksheet-selection, Property 4:
-   * Delivery API получает sheet_name из Backend
+   * Property 6: Валидация длины строковых полей
    * 
-   * Validates: Requirements 2.1, 9.2
+   * Validates: Requirements 9.1, 9.2
    */
-  test.prop([prizeIdArbitrary, validSheetNameArbitrary, rowIdArbitrary, validDeliveryDataArbitrary])(
-    'Property 4: должен получать sheet_name из Backend для любого валидного prize_id',
-    async (prizeId, sheetName, rowId, deliveryData) => {
-      // Arrange
-      const mockGetPrizeInfo = vi.fn().mockResolvedValue({
-        sheet_name: sheetName,
-        row_id: rowId,
-        code_word: 'TEST123',
-      });
+  test.prop([
+    fc.string({ minLength: 0, maxLength: 1 }), // Короткая country (< 2)
+    validStringArbitrary(3, 20), // Валидный postal_code
+    validDeliveryDataArbitrary,
+  ], { numRuns: 100 })(
+    'Property 6: должен отклонять country короче 2 символов',
+    async (shortCountry, postalCode, deliveryData) => {
+      // Arrange - настройка моков
+      vi.mocked(InitDataValidator).mockImplementation(function(this: any) {
+        this.validate = vi.fn();
+        this.extractUserData = vi.fn().mockReturnValue({ id: 12345 });
+        return this;
+      } as any);
       
-      vi.mocked(PrizeClient).mockImplementation(() => ({
-        getPrizeInfo: mockGetPrizeInfo,
-      } as any));
-
-      vi.mocked(GoogleSheetsClient).mockImplementation(() => ({
-        saveDeliveryData: vi.fn().mockResolvedValue(true),
-      } as any));
-
       const requestBody = {
         ...deliveryData,
-        prize_id: prizeId,
-        initData: 'valid-init-data',
-      };
-
-      const request = new NextRequest('http://localhost:3000/api/delivery', {
-        method: 'POST',
-        body: JSON.stringify(requestBody),
-      });
-
-      // Act
-      await POST(request);
-
-      // Assert: PrizeClient.getPrizeInfo должен быть вызван с prize_id
-      expect(mockGetPrizeInfo).toHaveBeenCalledWith(prizeId);
-    }
-  );
-
-  /**
-   * Feature: google-sheets-dynamic-worksheet-selection, Property 5:
-   * Delivery API передает sheet_name в GoogleSheetsClient
-   * 
-   * Validates: Requirements 2.2, 9.5
-   */
-  test.prop([prizeIdArbitrary, validSheetNameArbitrary, rowIdArbitrary, validDeliveryDataArbitrary])(
-    'Property 5: должен передавать sheet_name в GoogleSheetsClient.saveDeliveryData',
-    async (prizeId, sheetName, rowId, deliveryData) => {
-      // Arrange
-      vi.mocked(PrizeClient).mockImplementation(() => ({
-        getPrizeInfo: vi.fn().mockResolvedValue({
-          sheet_name: sheetName,
-          row_id: rowId,
-          code_word: 'TEST123',
-        }),
-      } as any));
-
-      const mockSaveDeliveryData = vi.fn().mockResolvedValue(true);
-      vi.mocked(GoogleSheetsClient).mockImplementation(() => ({
-        saveDeliveryData: mockSaveDeliveryData,
-      } as any));
-
-      const requestBody = {
-        ...deliveryData,
-        prize_id: prizeId,
-        initData: 'valid-init-data',
-      };
-
-      const request = new NextRequest('http://localhost:3000/api/delivery', {
-        method: 'POST',
-        body: JSON.stringify(requestBody),
-      });
-
-      // Act
-      await POST(request);
-
-      // Assert: saveDeliveryData должен быть вызван с sheet_name
-      expect(mockSaveDeliveryData).toHaveBeenCalled();
-      const callArgs = mockSaveDeliveryData.mock.calls[0];
-      expect(callArgs[0]).toBe(rowId); // row_id
-      expect(callArgs[2]).toBe(sheetName); // sheet_name (третий параметр)
-    }
-  );
-
-  /**
-   * Feature: google-sheets-dynamic-worksheet-selection, Property 6:
-   * Delivery API логирует sheet_name
-   * 
-   * Validates: Requirements 2.5, 7.5
-   */
-  test.prop([prizeIdArbitrary, validSheetNameArbitrary, rowIdArbitrary, validDeliveryDataArbitrary])(
-    'Property 6: должен логировать sheet_name для любого успешного запроса',
-    async (prizeId, sheetName, rowId, deliveryData) => {
-      // Arrange
-      const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-
-      vi.mocked(PrizeClient).mockImplementation(() => ({
-        getPrizeInfo: vi.fn().mockResolvedValue({
-          sheet_name: sheetName,
-          row_id: rowId,
-          code_word: 'TEST123',
-        }),
-      } as any));
-
-      vi.mocked(GoogleSheetsClient).mockImplementation(() => ({
-        saveDeliveryData: vi.fn().mockResolvedValue(true),
-      } as any));
-
-      const requestBody = {
-        ...deliveryData,
-        prize_id: prizeId,
-        initData: 'valid-init-data',
-      };
-
-      const request = new NextRequest('http://localhost:3000/api/delivery', {
-        method: 'POST',
-        body: JSON.stringify(requestBody),
-      });
-
-      // Act
-      await POST(request);
-
-      // Assert: должен быть лог с sheet_name и prize_id
-      expect(consoleLogSpy).toHaveBeenCalledWith(
-        expect.stringContaining(`Using sheet: ${sheetName} for prize ${prizeId}`)
-      );
-
-      consoleLogSpy.mockRestore();
-    }
-  );
-
-  /**
-   * Feature: google-sheets-dynamic-worksheet-selection, Property 16:
-   * Delivery API обрабатывает ошибки GoogleSheetsClient
-   * 
-   * Validates: Requirements 6.4
-   */
-  test.prop([prizeIdArbitrary, validSheetNameArbitrary, rowIdArbitrary, validDeliveryDataArbitrary])(
-    'Property 16: должен обрабатывать SheetNotFoundError и возвращать HTTP 500',
-    async (prizeId, sheetName, rowId, deliveryData) => {
-      // Arrange
-      vi.mocked(PrizeClient).mockImplementation(() => ({
-        getPrizeInfo: vi.fn().mockResolvedValue({
-          sheet_name: sheetName,
-          row_id: rowId,
-          code_word: 'TEST123',
-        }),
-      } as any));
-
-      vi.mocked(GoogleSheetsClient).mockImplementation(() => ({
-        saveDeliveryData: vi.fn().mockRejectedValue(new SheetNotFoundError(sheetName)),
-      } as any));
-
-      const requestBody = {
-        ...deliveryData,
-        prize_id: prizeId,
+        country: shortCountry,
+        postal_code: postalCode,
+        prize_id: 1,
         initData: 'valid-init-data',
       };
 
@@ -248,31 +112,33 @@ describe('Delivery API - Property Tests', () => {
       const responseData = await response.json();
 
       // Assert
-      expect(response.status).toBe(500);
-      expect(responseData.error).toBe('Sheet not found');
-      expect(responseData.message).toBe('Лист не найден в таблице');
+      expect(response.status).toBe(400);
+      expect(responseData.error).toBe('Validation error');
+      expect(responseData.details.some((d: any) => 
+        d.field === 'country' && d.message.includes('минимум 2')
+      )).toBe(true);
     }
   );
 
-  test.prop([prizeIdArbitrary, validSheetNameArbitrary, rowIdArbitrary, validDeliveryDataArbitrary])(
-    'Property 16: должен обрабатывать SheetAccessDeniedError и возвращать HTTP 500',
-    async (prizeId, sheetName, rowId, deliveryData) => {
-      // Arrange
-      vi.mocked(PrizeClient).mockImplementation(() => ({
-        getPrizeInfo: vi.fn().mockResolvedValue({
-          sheet_name: sheetName,
-          row_id: rowId,
-          code_word: 'TEST123',
-        }),
-      } as any));
-
-      vi.mocked(GoogleSheetsClient).mockImplementation(() => ({
-        saveDeliveryData: vi.fn().mockRejectedValue(new SheetAccessDeniedError(sheetName)),
-      } as any));
-
+  test.prop([
+    fc.string({ minLength: 101, maxLength: 150 }), // Длинная country (> 100)
+    validStringArbitrary(3, 20), // Валидный postal_code
+    validDeliveryDataArbitrary,
+  ], { numRuns: 100 })(
+    'Property 6: должен отклонять country длиннее 100 символов',
+    async (longCountry, postalCode, deliveryData) => {
+      // Arrange - настройка моков
+      vi.mocked(InitDataValidator).mockImplementation(function(this: any) {
+        this.validate = vi.fn();
+        this.extractUserData = vi.fn().mockReturnValue({ id: 12345 });
+        return this;
+      } as any);
+      
       const requestBody = {
         ...deliveryData,
-        prize_id: prizeId,
+        country: longCountry,
+        postal_code: postalCode,
+        prize_id: 1,
         initData: 'valid-init-data',
       };
 
@@ -286,42 +152,33 @@ describe('Delivery API - Property Tests', () => {
       const responseData = await response.json();
 
       // Assert
-      expect(response.status).toBe(500);
-      expect(responseData.error).toBe('Access denied');
-      expect(responseData.message).toBe('Нет доступа к листу');
+      expect(response.status).toBe(400);
+      expect(responseData.error).toBe('Validation error');
+      expect(responseData.details.some((d: any) => 
+        d.field === 'country' && d.message.includes('100')
+      )).toBe(true);
     }
   );
 
-  /**
-   * Feature: google-sheets-dynamic-worksheet-selection, Property 20:
-   * Delivery API парсит JSON ответ Backend
-   * 
-   * Validates: Requirements 9.3
-   */
-  test.prop([prizeIdArbitrary, validSheetNameArbitrary, rowIdArbitrary, validDeliveryDataArbitrary])(
-    'Property 20: должен корректно парсить JSON ответ от Backend с полем sheet_name',
-    async (prizeId, sheetName, rowId, deliveryData) => {
-      // Arrange
-      const backendResponse = {
-        sheet_name: sheetName,
-        row_id: rowId,
-        code_word: 'TEST123',
-      };
-
-      const mockGetPrizeInfo = vi.fn().mockResolvedValue(backendResponse);
+  test.prop([
+    validStringArbitrary(2, 100), // Валидная country
+    fc.string({ minLength: 0, maxLength: 2 }), // Короткий postal_code (< 3)
+    validDeliveryDataArbitrary,
+  ], { numRuns: 100 })(
+    'Property 6: должен отклонять postal_code короче 3 символов',
+    async (country, shortPostalCode, deliveryData) => {
+      // Arrange - настройка моков
+      vi.mocked(InitDataValidator).mockImplementation(function(this: any) {
+        this.validate = vi.fn();
+        this.extractUserData = vi.fn().mockReturnValue({ id: 12345 });
+        return this;
+      } as any);
       
-      vi.mocked(PrizeClient).mockImplementation(() => ({
-        getPrizeInfo: mockGetPrizeInfo,
-      } as any));
-
-      const mockSaveDeliveryData = vi.fn().mockResolvedValue(true);
-      vi.mocked(GoogleSheetsClient).mockImplementation(() => ({
-        saveDeliveryData: mockSaveDeliveryData,
-      } as any));
-
       const requestBody = {
         ...deliveryData,
-        prize_id: prizeId,
+        country: country,
+        postal_code: shortPostalCode,
+        prize_id: 1,
         initData: 'valid-init-data',
       };
 
@@ -331,12 +188,114 @@ describe('Delivery API - Property Tests', () => {
       });
 
       // Act
-      await POST(request);
+      const response = await POST(request);
+      const responseData = await response.json();
 
-      // Assert: sheet_name из ответа Backend должен быть передан в saveDeliveryData
-      expect(mockSaveDeliveryData).toHaveBeenCalled();
-      const callArgs = mockSaveDeliveryData.mock.calls[0];
-      expect(callArgs[2]).toBe(sheetName); // Проверяем, что sheet_name корректно извлечен
+      // Assert
+      expect(response.status).toBe(400);
+      expect(responseData.error).toBe('Validation error');
+      expect(responseData.details.some((d: any) => 
+        d.field === 'postal_code' && d.message.includes('минимум 3')
+      )).toBe(true);
+    }
+  );
+
+  test.prop([
+    validStringArbitrary(2, 100), // Валидная country
+    fc.string({ minLength: 21, maxLength: 50 }), // Длинный postal_code (> 20)
+    validDeliveryDataArbitrary,
+  ], { numRuns: 100 })(
+    'Property 6: должен отклонять postal_code длиннее 20 символов',
+    async (country, longPostalCode, deliveryData) => {
+      // Arrange - настройка моков
+      vi.mocked(InitDataValidator).mockImplementation(function(this: any) {
+        this.validate = vi.fn();
+        this.extractUserData = vi.fn().mockReturnValue({ id: 12345 });
+        return this;
+      } as any);
+      
+      const requestBody = {
+        ...deliveryData,
+        country: country,
+        postal_code: longPostalCode,
+        prize_id: 1,
+        initData: 'valid-init-data',
+      };
+
+      const request = new NextRequest('http://localhost:3000/api/delivery', {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+      });
+
+      // Act
+      const response = await POST(request);
+      const responseData = await response.json();
+
+      // Assert
+      expect(response.status).toBe(400);
+      expect(responseData.error).toBe('Validation error');
+      expect(responseData.details.some((d: any) => 
+        d.field === 'postal_code' && d.message.includes('20')
+      )).toBe(true);
+    }
+  );
+
+  test.prop([
+    validStringArbitrary(2, 100), // Валидная country
+    validStringArbitrary(3, 20), // Валидный postal_code
+    validDeliveryDataArbitrary,
+  ], { numRuns: 100 })(
+    'Property 6: должен принимать валидные country и postal_code',
+    async (country, postalCode, deliveryData) => {
+      // Arrange - настройка моков
+      vi.mocked(InitDataValidator).mockImplementation(function(this: any) {
+        this.validate = vi.fn();
+        this.extractUserData = vi.fn().mockReturnValue({ id: 12345 });
+        return this;
+      } as any);
+      
+      vi.mocked(PrizeClient).mockImplementation(function(this: any) {
+        this.getPrizeInfo = vi.fn().mockResolvedValue({
+          sheet_name: 'Sheet1',
+          row_id: 10,
+          code_word: 'TEST123',
+        });
+        return this;
+      } as any);
+
+      // Mock Backend API response
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true }),
+      } as Response);
+
+      // Mock notification response
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+      } as Response);
+
+      const requestBody = {
+        ...deliveryData,
+        country: country,
+        postal_code: postalCode,
+        prize_id: 1,
+        initData: 'valid-init-data',
+      };
+
+      const request = new NextRequest('http://localhost:3000/api/delivery', {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+      });
+
+      // Act
+      const response = await POST(request);
+      const responseData = await response.json();
+
+      // Assert
+      expect(response.status).toBe(200);
+      expect(responseData.success).toBe(true);
     }
   );
 });

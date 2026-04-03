@@ -3,24 +3,44 @@
  * 
  * POST /api/delivery
  * 
- * Выполняет:
- * 1. Валидацию схемы данных с помощью Zod
- * 2. Криптографическую проверку InitData от Telegram
- * 3. Сохранение данных доставки в Google Sheets
- * 4. Обработку всех типов ошибок (400, 403, 500)
+ * АРХИТЕКТУРА:
+ * Данные доставки сохраняются напрямую в PostgreSQL через Backend API,
+ * а затем асинхронно синхронизируются в Google Sheets через Sync_Worker.
+ * Это обеспечивает быстрый ответ пользователю без задержек от Google Sheets API.
  * 
- * Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.7, 15.2
+ * ПРОЦЕСС ОБРАБОТКИ:
+ * 1. Валидация схемы данных с помощью Zod (country, postal_code и другие поля)
+ * 2. Криптографическая проверка InitData от Telegram
+ * 3. Получение информации о призе из Backend API
+ * 4. Валидация владения призом (prize_id принадлежит telegram_id)
+ * 5. Сохранение данных доставки в PostgreSQL через Backend API endpoint /api/delivery/update
+ * 6. Возврат успешного ответа пользователю
+ * 
+ * ПРОИЗВОДИТЕЛЬНОСТЬ:
+ * Ожидаемое время ответа: < 500 мс (вместо 3 секунд при прямом сохранении в Google Sheets)
+ * 
+ * КОДЫ ОШИБОК:
+ * - 400: Ошибка валидации данных (невалидная схема, некорректные поля)
+ * - 403: Доступ запрещён (невалидная подпись InitData или приз не принадлежит пользователю)
+ * - 404: Приз не найден в PostgreSQL
+ * - 500: Внутренняя ошибка сервера (конфигурация, невалидный sheet_name)
+ * - 503: База данных PostgreSQL или Backend API временно недоступны
+ * 
+ * ЗАВИСИМОСТИ:
+ * - Backend API endpoint /api/delivery/update для сохранения данных в PostgreSQL
+ * - Telegram Bot API для валидации InitData
+ * - НЕ зависит от Google Sheets API (синхронизация выполняется асинхронно)
+ * 
+ * Requirements: 1.1, 1.5, 2.1, 2.2, 2.3, 2.4, 2.5, 7.1, 7.2, 7.3, 13.1, 13.2, 13.3, 13.4, 13.5, 16.1, 16.2, 16.3, 16.4
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { InitDataValidator } from '@/lib/telegram/initDataValidator';
-import { GoogleSheetsClient } from '@/lib/google/sheetsClient';
 import { sanitizeDeliveryData } from '@/lib/utils/sanitize';
 import { PrizeClient, PrizeNotFoundError, BackendUnavailableError } from '@/lib/api/prizeClient';
 import type { PrizeInfo } from '@/lib/types/prize';
 import { validateSheetName } from '@/lib/utils/sheetNameValidator';
-import { SheetNotFoundError, SheetAccessDeniedError } from '@/lib/types/sheet';
 
 /**
  * Схема валидации данных доставки
@@ -155,34 +175,10 @@ export async function POST(request: NextRequest) {
 
     // Проверка наличия необходимых переменных окружения
     const botToken = process.env.BOT_TOKEN;
-    const credentialsPath = process.env.GOOGLE_CREDENTIALS_PATH;
-    const spreadsheetId = process.env.SPREADSHEET_ID;
     const backendUrl = process.env.BACKEND_API_URL;
 
     if (!botToken) {
       console.error('BOT_TOKEN environment variable is not set');
-      return NextResponse.json(
-        {
-          error: 'Configuration error',
-          message: 'Сервер неправильно настроен',
-        },
-        { status: 500 }
-      );
-    }
-
-    if (!credentialsPath && !process.env.GOOGLE_CREDENTIALS_JSON) {
-      console.error('Google credentials not configured');
-      return NextResponse.json(
-        {
-          error: 'Configuration error',
-          message: 'Сервер неправильно настроен',
-        },
-        { status: 500 }
-      );
-    }
-
-    if (!spreadsheetId) {
-      console.error('SPREADSHEET_ID environment variable is not set');
       return NextResponse.json(
         {
           error: 'Configuration error',
@@ -311,26 +307,102 @@ export async function POST(request: NextRequest) {
       telegram_id: telegramId,
     });
 
-    // Сохранение данных в Google Sheets (Requirement 4.5)
-    const sheetsClient = new GoogleSheetsClient(
-      credentialsPath || '',
-      spreadsheetId
-    );
-
+    // Сохранение данных в PostgreSQL через Backend API (Requirement 1.1, 7.1, 7.2, 7.3)
+    const startTime = Date.now();
+    
     try {
-      // Requirement 2.2, 9.5: Передача sheet_name в GoogleSheetsClient
-      const success = await sheetsClient.saveDeliveryData(
-        prizeInfo.row_id,
-        sanitizedData,
-        prizeInfo.sheet_name
-      );
+      const backendResponse = await fetch(`${backendUrl}/api/delivery/update`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prize_id: validatedData.prize_id,
+          telegram_id: telegramId,
+          delivery_data: {
+            last_name: sanitizedData.last_name,
+            first_name: sanitizedData.first_name,
+            patronymic: sanitizedData.patronymic || undefined,
+            country: sanitizedData.country,
+            postal_code: sanitizedData.postal_code,
+            city: sanitizedData.city,
+            street: sanitizedData.street,
+            house: sanitizedData.house,
+            apartment: sanitizedData.apartment || undefined,
+            phone: sanitizedData.phone,
+            comment: sanitizedData.comment || undefined,
+          },
+        }),
+      });
 
-      if (!success) {
-        throw new Error('saveDeliveryData returned false');
+      const elapsedTime = Date.now() - startTime;
+      console.log(`Backend API request completed in ${elapsedTime}ms`);
+
+      // Обработка ответов Backend API (Requirement 7.2, 7.3)
+      if (backendResponse.status === 403) {
+        // Доступ запрещён - приз не принадлежит пользователю
+        console.error('Access denied from backend:', {
+          prize_id: validatedData.prize_id,
+          telegram_id: telegramId,
+        });
+        return NextResponse.json(
+          {
+            error: 'Access denied',
+            message: 'Доступ запрещён',
+          },
+          { status: 403 }
+        );
       }
 
-      // Успешное сохранение
-      // Requirement: Отправка уведомлений в Telegram после сохранения данных
+      if (backendResponse.status === 404) {
+        // Приз не найден
+        console.error('Prize not found in backend:', {
+          prize_id: validatedData.prize_id,
+          telegram_id: telegramId,
+        });
+        return NextResponse.json(
+          {
+            error: 'Prize not found',
+            message: 'Приз не найден',
+          },
+          { status: 404 }
+        );
+      }
+
+      if (backendResponse.status === 503) {
+        // База данных недоступна (Requirement 7.1)
+        console.error('Database unavailable from backend:', {
+          prize_id: validatedData.prize_id,
+          telegram_id: telegramId,
+        });
+        return NextResponse.json(
+          {
+            error: 'Database unavailable',
+            message: 'База данных временно недоступна',
+          },
+          { status: 503 }
+        );
+      }
+
+      if (!backendResponse.ok) {
+        // Другие ошибки Backend API
+        const errorText = await backendResponse.text();
+        console.error('Backend API error:', {
+          status: backendResponse.status,
+          error: errorText,
+          prize_id: validatedData.prize_id,
+          telegram_id: telegramId,
+        });
+        return NextResponse.json(
+          {
+            error: 'Backend error',
+            message: 'Не удалось сохранить данные доставки. Попробуйте позже.',
+          },
+          { status: 500 }
+        );
+      }
+
+      // Успешное сохранение (Requirement 1.5)
       // Отправляем данные в Telegram бота для отправки уведомлений пользователю
       try {
         const botApiUrl = `${backendUrl}/bot/delivery-notification`;
@@ -366,45 +438,13 @@ export async function POST(request: NextRequest) {
         { status: 200 }
       );
     } catch (error) {
-      // Requirement 6.4: Обработка ошибок GoogleSheetsClient
-      if (error instanceof SheetNotFoundError) {
-        console.error('Sheet not found:', {
-          sheet_name: prizeInfo.sheet_name,
-          prize_id: validatedData.prize_id,
-          telegram_id: telegramId,
-          error: error.message,
-        });
-        return NextResponse.json(
-          {
-            error: 'Sheet not found',
-            message: 'Лист не найден в таблице',
-          },
-          { status: 500 }
-        );
-      }
-      
-      if (error instanceof SheetAccessDeniedError) {
-        console.error('Access denied to sheet:', {
-          sheet_name: prizeInfo.sheet_name,
-          prize_id: validatedData.prize_id,
-          telegram_id: telegramId,
-          error: error.message,
-        });
-        return NextResponse.json(
-          {
-            error: 'Access denied',
-            message: 'Нет доступа к листу',
-          },
-          { status: 500 }
-        );
-      }
-      
-      // Requirement 4.7, 6.3, 7.4: Обработка общих ошибок с контекстом
+      // Обработка ошибок сети или таймаутов
+      const elapsedTime = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       
-      console.error('Failed to save delivery data to Google Sheets:', {
+      console.error('Failed to connect to Backend API:', {
         error: errorMessage,
-        sheet_name: prizeInfo.sheet_name,
+        elapsed_time: elapsedTime,
         prize_id: validatedData.prize_id,
         telegram_id: telegramId,
         stack: error instanceof Error ? error.stack : undefined,
@@ -412,10 +452,10 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json(
         {
-          error: 'Failed to save delivery data',
-          message: 'Не удалось сохранить данные доставки. Попробуйте позже.',
+          error: 'Backend unavailable',
+          message: 'Сервис временно недоступен. Попробуйте позже.',
         },
-        { status: 500 }
+        { status: 503 }
       );
     }
   } catch (error) {

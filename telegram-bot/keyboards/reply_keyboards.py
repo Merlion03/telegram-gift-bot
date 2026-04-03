@@ -3,7 +3,7 @@
 Содержит функции для генерации клавиатур главного меню, согласия GDPR и других.
 """
 
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 
 
 def get_main_menu_keyboard() -> InlineKeyboardMarkup:
@@ -60,6 +60,33 @@ def get_support_end_keyboard() -> InlineKeyboardMarkup:
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="Завершить диалог", callback_data="support_end")]
+        ]
+    )
+    return keyboard
+
+
+
+def get_delivery_actions_keyboard(prize_id: int, webapp_url: str) -> InlineKeyboardMarkup:
+    """
+    Создаёт inline клавиатуру для действий с уже заполненными данными доставки.
+    
+    Клавиатура содержит кнопки для получения приза или изменения данных доставки.
+    Используется когда пользователь уже заполнил форму доставки и вводит кодовое слово снова.
+    
+    Args:
+        prize_id: ID приза для передачи в callback_data
+        webapp_url: Базовый URL WebApp для формы доставки
+    
+    Returns:
+        InlineKeyboardMarkup: Клавиатура с кнопками "Получить приз" и "Изменить данные"
+    """
+    # Формируем URL для WebApp с prize_id
+    form_url = f"{webapp_url.rstrip('/')}/webapp?prize_id={prize_id}"
+    
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="◀️ Назад", callback_data=f"confirm_delivery:{prize_id}")],
+            [InlineKeyboardButton(text="✏️ Изменить данные", web_app=WebAppInfo(url=form_url))]
         ]
     )
     return keyboard

@@ -13,6 +13,7 @@ from datetime import datetime, timezone, timedelta
 from services.google_sheets_service import GoogleSheetsService
 from services.update_queue_service import UpdateQueueService
 from database.repositories.prize_repository import PrizeRepository, DatabaseUnavailableError
+from database.repositories.gdpr_consent_repository import GdprConsentRepository
 from database.models.prize import Prize
 from config import get_config
 from utils.logging_config import get_logger
@@ -49,7 +50,8 @@ class PrizeService:
         self, 
         sheets_service: GoogleSheetsService,
         prize_repository: Optional[PrizeRepository] = None,
-        update_queue_service: Optional[UpdateQueueService] = None
+        update_queue_service: Optional[UpdateQueueService] = None,
+        gdpr_consent_repository: Optional[GdprConsentRepository] = None
     ):
         """
         Инициализирует сервис призов
@@ -58,9 +60,11 @@ class PrizeService:
             sheets_service: Сервис для работы с Google Sheets
             prize_repository: Repository для работы с PostgreSQL (опционально)
             update_queue_service: Сервис очереди обновлений (опционально)
+            gdpr_consent_repository: Repository для работы с GDPR согласиями (опционально)
         """
         self.sheets_service = sheets_service
         self.prize_repository = prize_repository or PrizeRepository()
+        self.gdpr_consent_repository = gdpr_consent_repository or GdprConsentRepository()
         self.update_queue_service = update_queue_service
         self.config = get_config()
         logger.info(
@@ -70,7 +74,7 @@ class PrizeService:
     
     async def check_user_exists(self, telegram_id: int) -> bool:
         """
-        Проверяет наличие пользователя в таблице призов
+        Проверяет наличие пользователя в таблице призов независимо от статуса получения приза (claimed_at)
         
         Validates: Requirements 2.1, 2.2
         
@@ -128,14 +132,12 @@ class PrizeService:
         )
         
         try:
-            consent_date = await self.prize_repository.get_gdpr_consent_date(telegram_id)
-            has_consent = consent_date is not None
+            has_consent = await self.gdpr_consent_repository.check_consent_exists(telegram_id)
             
             logger.info(
                 "gdpr_consent_check_completed",
                 telegram_id=telegram_id,
-                has_consent=has_consent,
-                consent_date=consent_date.isoformat() if consent_date else None
+                has_consent=has_consent
             )
             
             return has_consent
@@ -169,7 +171,7 @@ class PrizeService:
         )
         
         try:
-            await self.prize_repository.update_gdpr_consent(telegram_id, consent_date)
+            await self.gdpr_consent_repository.save_consent(telegram_id, consent_date)
             
             logger.info(
                 "gdpr_consent_saved",
@@ -450,13 +452,28 @@ class PrizeService:
                 has_promo_code=True
             )
             
-            # Отметка о получении приза (асинхронно)
-            await self._mark_prize_claimed_async(
-                telegram_id=telegram_id,
-                code_word=code_word,
-                row_id=prize.row_id,
-                sheet_name=prize.sheet_name
-            )
+            # Отметка о получении приза (асинхронно) только если приз еще не получен
+            if prize.claimed_at is None:
+                await self._mark_prize_claimed_async(
+                    telegram_id=telegram_id,
+                    code_word=code_word,
+                    row_id=prize.row_id,
+                    sheet_name=prize.sheet_name
+                )
+                logger.info(
+                    "prize_marked_as_claimed",
+                    telegram_id=telegram_id,
+                    code_word=code_word,
+                    prize_id=prize.id
+                )
+            else:
+                logger.info(
+                    "prize_already_claimed_idempotent_return",
+                    telegram_id=telegram_id,
+                    code_word=code_word,
+                    prize_id=prize.id,
+                    claimed_at=prize.claimed_at
+                )
             
             logger.info(
                 "digital_prize_found_postgres",
@@ -474,13 +491,9 @@ class PrizeService:
         
         # Обработка физического приза
         elif prize.is_physical():
-            # Отметка о получении приза (асинхронно)
-            await self._mark_prize_claimed_async(
-                telegram_id=telegram_id,
-                code_word=code_word,
-                row_id=prize.row_id,
-                sheet_name=prize.sheet_name
-            )
+            # Для физического приза НЕ устанавливаем claimed_at здесь
+            # claimed_at будет установлен после заполнения формы доставки
+            # в handle_delivery_data()
             
             logger.info(
                 "physical_prize_found_postgres",
@@ -562,13 +575,66 @@ class PrizeService:
                 has_promo_code=True
             )
             
-            # Отметка о получении приза (асинхронно)
-            await self._mark_prize_claimed_async(
-                telegram_id=telegram_id,
-                code_word=code_word,
-                row_id=prize_data.get('row_id'),
-                sheet_name=code_word
-            )
+            # Проверяем, не получен ли уже приз (через PostgreSQL)
+            # Это необходимо для идемпотентности при использовании Google Sheets режима
+            try:
+                prize_in_db = await self.prize_repository.find_prize(
+                    telegram_id=telegram_id,
+                    code_word=code_word,
+                    timeout_ms=500
+                )
+                
+                # Отметка о получении приза (асинхронно) только если приз еще не получен
+                if prize_in_db and prize_in_db.claimed_at is None:
+                    await self._mark_prize_claimed_async(
+                        telegram_id=telegram_id,
+                        code_word=code_word,
+                        row_id=prize_data.get('row_id'),
+                        sheet_name=code_word
+                    )
+                    logger.info(
+                        "prize_marked_as_claimed_sheets",
+                        telegram_id=telegram_id,
+                        code_word=code_word,
+                        row_id=prize_data.get('row_id')
+                    )
+                elif prize_in_db and prize_in_db.claimed_at is not None:
+                    logger.info(
+                        "prize_already_claimed_idempotent_return_sheets",
+                        telegram_id=telegram_id,
+                        code_word=code_word,
+                        row_id=prize_data.get('row_id'),
+                        claimed_at=prize_in_db.claimed_at
+                    )
+                else:
+                    # Приз не найден в БД, но найден в Sheets - это нормально при первой синхронизации
+                    await self._mark_prize_claimed_async(
+                        telegram_id=telegram_id,
+                        code_word=code_word,
+                        row_id=prize_data.get('row_id'),
+                        sheet_name=code_word
+                    )
+                    logger.info(
+                        "prize_marked_as_claimed_sheets_first_sync",
+                        telegram_id=telegram_id,
+                        code_word=code_word,
+                        row_id=prize_data.get('row_id')
+                    )
+            except Exception as e:
+                # Если не удалось проверить БД, всё равно отмечаем приз как полученный
+                # (fallback для обратной совместимости)
+                logger.warning(
+                    "failed_to_check_claimed_status_fallback_to_mark",
+                    telegram_id=telegram_id,
+                    code_word=code_word,
+                    error=str(e)
+                )
+                await self._mark_prize_claimed_async(
+                    telegram_id=telegram_id,
+                    code_word=code_word,
+                    row_id=prize_data.get('row_id'),
+                    sheet_name=code_word
+                )
             
             logger.info(
                 "digital_prize_found",
@@ -584,13 +650,9 @@ class PrizeService:
             )
         
         elif prize_type == 'physical':
-            # Отметка о получении приза (асинхронно)
-            await self._mark_prize_claimed_async(
-                telegram_id=telegram_id,
-                code_word=code_word,
-                row_id=prize_data.get('row_id'),
-                sheet_name=code_word
-            )
+            # Для физического приза НЕ устанавливаем claimed_at здесь
+            # claimed_at будет установлен после заполнения формы доставки
+            # в handle_delivery_data()
             
             logger.info(
                 "physical_prize_found",
@@ -622,7 +684,7 @@ class PrizeService:
         sheet_name: str
     ) -> None:
         """
-        Отмечает приз как полученный через асинхронную очередь
+        Отмечает приз как полученный через асинхронную очередь и обновляет PostgreSQL
 
         Args:
             telegram_id: Telegram ID пользователя
@@ -634,7 +696,31 @@ class PrizeService:
             # Получаем текущее время в МСК (UTC+3)
             from datetime import timedelta
             msk_tz = timezone(timedelta(hours=3))
-            claimed_at = datetime.now(msk_tz).strftime('%d.%m.%Y %H:%M:%S')
+            claimed_at_str = datetime.now(msk_tz).strftime('%d.%m.%Y %H:%M:%S')
+            claimed_at_dt = datetime.now(timezone.utc)
+
+            # Обновляем claimed_at в PostgreSQL
+            try:
+                await self.prize_repository.mark_prize_claimed(
+                    telegram_id=telegram_id,
+                    code_word=code_word,
+                    claimed_at=claimed_at_dt
+                )
+                logger.info(
+                    "prize_claimed_updated_in_postgres",
+                    telegram_id=telegram_id,
+                    code_word=code_word,
+                    claimed_at=claimed_at_dt.isoformat()
+                )
+            except Exception as db_error:
+                logger.error(
+                    "failed_to_update_claimed_at_in_postgres",
+                    telegram_id=telegram_id,
+                    code_word=code_word,
+                    error=str(db_error),
+                    exc_info=True
+                )
+                # Продолжаем выполнение, так как это не критично
 
             # Если есть сервис очереди - используем его (асинхронно)
             if self.update_queue_service:
@@ -643,7 +729,7 @@ class PrizeService:
                     code_word=code_word,
                     sheet_name=sheet_name,
                     row_id=row_id,
-                    claimed_at=claimed_at
+                    claimed_at=claimed_at_str
                 )
 
                 logger.info(
@@ -651,7 +737,7 @@ class PrizeService:
                     telegram_id=telegram_id,
                     code_word=code_word,
                     row_id=row_id,
-                    claimed_at=claimed_at
+                    claimed_at=claimed_at_str
                 )
             else:
                 # Fallback: синхронное обновление (старая логика)
@@ -742,5 +828,55 @@ class PrizeService:
                 "sync_mark_prize_claimed_error",
                 error=str(e),
                 row_id=row_id
+            )
+            raise
+
+
+    async def check_delivery_data_filled(
+        self,
+        telegram_id: int,
+        code_word: str
+    ) -> bool:
+        """
+        Проверяет, заполнил ли пользователь данные доставки для физического приза
+        
+        Args:
+            telegram_id: Telegram ID пользователя
+            code_word: Кодовое слово
+            
+        Returns:
+            True если данные доставки заполнены (claimed_at установлен), False иначе
+            
+        Raises:
+            DatabaseUnavailableError: Если БД недоступна
+        """
+        try:
+            prize = await self.prize_repository.find_prize(
+                telegram_id=telegram_id,
+                code_word=code_word,
+                timeout_ms=500
+            )
+            
+            if not prize:
+                return False
+            
+            # Проверяем, установлен ли claimed_at (форма заполнена)
+            is_filled = prize.claimed_at is not None
+            
+            logger.info(
+                "delivery_data_filled_check",
+                telegram_id=telegram_id,
+                code_word=code_word,
+                is_filled=is_filled,
+                claimed_at=prize.claimed_at.isoformat() if prize.claimed_at else None
+            )
+            
+            return is_filled
+            
+        except DatabaseUnavailableError:
+            logger.error(
+                "database_unavailable_during_delivery_check",
+                telegram_id=telegram_id,
+                code_word=code_word
             )
             raise

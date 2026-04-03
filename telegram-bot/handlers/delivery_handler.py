@@ -5,6 +5,7 @@
 
 import json
 from typing import Optional
+from datetime import datetime
 from aiogram import Router
 from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
@@ -237,6 +238,31 @@ class DeliveryHandler:
                     telegram_id=telegram_id,
                     code_word=prize.code_word
                 )
+            
+            # Устанавливаем claimed_at для физического приза после успешного сохранения данных доставки
+            try:
+                from datetime import timezone
+                claimed_at = datetime.now(timezone.utc)
+                await self.prize_repository.mark_prize_claimed(
+                    telegram_id=telegram_id,
+                    code_word=prize.code_word,
+                    claimed_at=claimed_at
+                )
+                logger.info(
+                    "physical_prize_claimed_at_set",
+                    telegram_id=telegram_id,
+                    code_word=prize.code_word,
+                    claimed_at=claimed_at.isoformat()
+                )
+            except Exception as e:
+                logger.error(
+                    "failed_to_set_claimed_at_for_physical_prize",
+                    telegram_id=telegram_id,
+                    code_word=prize.code_word,
+                    error=str(e),
+                    exc_info=True
+                )
+                # Не блокируем пользователя, данные уже сохранены
             
             # Отправляем уведомления через NotificationService (Requirement 1.2, 7.2, 7.3)
             notification_result = await self.notification_service.send_delivery_notifications(

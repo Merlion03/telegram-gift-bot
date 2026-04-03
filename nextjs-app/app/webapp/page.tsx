@@ -1,5 +1,6 @@
 'use client';
 
+import './telegram-theme.css';
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { DeliveryForm } from '@/components/webapp/DeliveryForm';
@@ -46,10 +47,13 @@ function WebAppContent() {
     return (
       <div 
         className="min-h-screen flex items-center justify-center p-4"
-        style={{ backgroundColor: 'var(--tg-theme-bg-color, #ffffff)' }}
+        style={{ backgroundColor: 'var(--tg-theme-secondary-bg-color, #efeff4)' }}
       >
         <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+          <div 
+            className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 mb-4"
+            style={{ borderColor: 'var(--tg-theme-button-color, #3390ec)' }}
+          ></div>
           <p style={{ color: 'var(--tg-theme-text-color, #000000)' }}>Инициализация...</p>
         </div>
       </div>
@@ -60,15 +64,19 @@ function WebAppContent() {
     return (
       <div 
         className="min-h-screen flex items-center justify-center p-4"
-        style={{ backgroundColor: 'var(--tg-theme-bg-color, #ffffff)' }}
+        style={{ backgroundColor: 'var(--tg-theme-secondary-bg-color, #efeff4)' }}
       >
         <div 
-          className="max-w-md w-full rounded-lg shadow-md p-6"
-          style={{ backgroundColor: 'var(--tg-theme-secondary-bg-color, #f1f1f1)' }}
+          className="max-w-md w-full rounded-xl shadow-lg p-6 mx-4"
+          style={{ backgroundColor: 'var(--tg-theme-bg-color, #ffffff)' }}
         >
-          <div className="flex items-center justify-center w-12 h-12 mx-auto bg-red-100 rounded-full mb-4">
+          <div 
+            className="flex items-center justify-center w-12 h-12 mx-auto rounded-full mb-4"
+            style={{ backgroundColor: 'rgba(255, 59, 48, 0.1)' }}
+          >
             <svg
-              className="w-6 h-6 text-red-600"
+              className="w-6 h-6"
+              style={{ color: 'var(--tg-theme-destructive-text-color, #ff3b30)' }}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -88,8 +96,8 @@ function WebAppContent() {
             Ошибка
           </h2>
           <p 
-            className="text-center"
-            style={{ color: 'var(--tg-theme-hint-color, #999999)' }}
+            className="text-center text-sm"
+            style={{ color: 'var(--tg-theme-subtitle-text-color, var(--tg-theme-hint-color, #8e8e93))' }}
           >{error}</p>
         </div>
       </div>
@@ -100,10 +108,13 @@ function WebAppContent() {
     return (
       <div 
         className="min-h-screen flex items-center justify-center p-4"
-        style={{ backgroundColor: 'var(--tg-theme-bg-color, #ffffff)' }}
+        style={{ backgroundColor: 'var(--tg-theme-secondary-bg-color, #efeff4)' }}
       >
         <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+          <div 
+            className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 mb-4"
+            style={{ borderColor: 'var(--tg-theme-button-color, #3390ec)' }}
+          ></div>
           <p style={{ color: 'var(--tg-theme-text-color, #000000)' }}>Загрузка...</p>
         </div>
       </div>
@@ -112,22 +123,10 @@ function WebAppContent() {
 
   return (
     <div 
-      className="min-h-screen py-8"
-      style={{ backgroundColor: 'var(--tg-theme-bg-color, #ffffff)' }}
+      className="min-h-screen"
+      style={{ backgroundColor: 'var(--tg-theme-secondary-bg-color, #efeff4)' }}
     >
-      <div className="max-w-md mx-auto">
-        <div 
-          className="rounded-lg shadow-md overflow-hidden"
-          style={{ backgroundColor: 'var(--tg-theme-secondary-bg-color, #f1f1f1)' }}
-        >
-          <div className="bg-blue-600 px-6 py-4">
-            <h1 className="text-xl font-bold text-white text-center">
-              📦 Данные для доставки приза
-            </h1>
-          </div>
-          <DeliveryForm prizeId={prizeId} />
-        </div>
-      </div>
+      <DeliveryForm prizeId={prizeId} />
     </div>
   );
 }
@@ -139,10 +138,13 @@ export default function WebAppPage() {
         fallback={
           <div 
             className="min-h-screen flex items-center justify-center p-4"
-            style={{ backgroundColor: 'var(--tg-theme-bg-color, #ffffff)' }}
+            style={{ backgroundColor: 'var(--tg-theme-secondary-bg-color, #efeff4)' }}
           >
             <div className="text-center">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+              <div 
+                className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 mb-4"
+                style={{ borderColor: 'var(--tg-theme-button-color, #3390ec)' }}
+              ></div>
               <p style={{ color: 'var(--tg-theme-text-color, #000000)' }}>Загрузка...</p>
             </div>
           </div>

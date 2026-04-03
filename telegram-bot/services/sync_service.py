@@ -14,6 +14,7 @@ from google.oauth2.service_account import Credentials
 
 from config import SyncConfig, GoogleSheetsConfig
 from database.repositories.prize_repository import PrizeRepository, DatabaseUnavailableError
+from database.models.prize import Prize
 from utils.retry import retry_with_backoff
 from utils.logging_config import get_logger
 
@@ -63,10 +64,10 @@ class SyncService:
             Авторизованный клиент gspread
         """
         try:
-            # Определяем необходимые scopes для работы с Google Sheets
+            # Определяем необходимые scopes для чтения и записи в Google Sheets
             scopes = [
-                'https://www.googleapis.com/auth/spreadsheets.readonly',
-                'https://www.googleapis.com/auth/drive.readonly'
+                'https://www.googleapis.com/auth/spreadsheets',
+                'https://www.googleapis.com/auth/drive'
             ]
             
             # Загружаем credentials из файла
@@ -674,3 +675,343 @@ class SyncService:
             raise DatabaseUnavailableError(
                 f"Критическая ошибка при batch upsert: {str(e)}"
             ) from e
+
+    async def sync_delivery_data_to_sheets(self) -> Dict[str, Any]:
+        """
+        Синхронизирует данные доставки из PostgreSQL в Google Sheets (обратная синхронизация)
+        
+        НАЗНАЧЕНИЕ:
+        Метод выполняет обратную синхронизацию данных доставки из PostgreSQL в Google Sheets.
+        Вызывается периодически из Sync_Worker после прямой синхронизации (Google Sheets → PostgreSQL).
+        Обеспечивает актуальность данных в Google Sheets после сохранения через Delivery_API.
+        
+        ЛОГИКА РАБОТЫ:
+        1. Запрашивает из PostgreSQL все записи с claimed_at IS NOT NULL
+           (записи с заполненными данными доставки)
+        2. Группирует записи по sheet_name для batch операций (оптимизация)
+        3. Для каждого листа формирует batch update запрос к Google Sheets API
+        4. Обновляет столбцы E-O (данные доставки) и столбец P (claimed_at)
+        5. Логирует статистику и обрабатывает ошибки gracefully
+        
+        ОБНОВЛЯЕМЫЕ СТОЛБЦЫ В GOOGLE SHEETS:
+        - E: last_name (Фамилия)
+        - F: first_name (Имя)
+        - G: patronymic (Отчество)
+        - H: city (Город)
+        - I: street (Улица)
+        - J: house (Дом)
+        - K: apartment (Квартира)
+        - L: phone (Телефон)
+        - M: comment (Комментарий)
+        - N: country (Страна)
+        - O: postal_code (Почтовый индекс)
+        - P: claimed_at (Дата получения приза)
+        
+        ОБРАБОТКА ОШИБОК GOOGLE SHEETS API:
+        - Ошибки для конкретного листа не блокируют синхронизацию других листов
+        - Все ошибки логируются с полным контекстом (sheet_name, error, stack trace)
+        - Rate limiting (429): автоматически обрабатывается через exponential backoff
+        - Недоступность API (503): логируется и продолжается синхронизация других листов
+        - Невалидный sheet_name: логируется как ошибка, синхронизация продолжается
+        - Недостаточно прав доступа: логируется как критическая ошибка
+        
+        GRACEFUL DEGRADATION:
+        - Ошибка синхронизации одного листа не останавливает синхронизацию других
+        - Ошибка БД возвращает статистику с описанием проблемы
+        - Критические ошибки логируются, но не прерывают работу Sync_Worker
+        
+        ОПТИМИЗАЦИЯ:
+        - Использует batch update для минимизации количества запросов к Google Sheets API
+        - Группирует записи по sheet_name для эффективной обработки
+        - TODO: Инкрементальная синхронизация (updated_at > last_sync_timestamp)
+        
+        ПРОИЗВОДИТЕЛЬНОСТЬ:
+        - Обрабатывает до 1000 записей за один запуск
+        - Batch update: до 100 строк за один запрос к Google Sheets API
+        - Ожидаемое время выполнения: 2-5 секунд для 100 записей
+        
+        Returns:
+            Dict[str, Any]: Статистика синхронизации со следующими полями:
+                - records_processed (int): Количество записей из PostgreSQL
+                - records_updated (int): Количество успешно обновлённых записей
+                - sheets_updated (int): Количество обновлённых листов
+                - errors (List[Dict]): Список ошибок с деталями (sheet_name, error, error_type)
+                - elapsed_seconds (float): Время выполнения в секундах
+        
+        Raises:
+            Метод не выбрасывает исключения, все ошибки обрабатываются внутри
+            и возвращаются в поле 'errors' статистики.
+        
+        Example:
+            >>> stats = await sync_service.sync_delivery_data_to_sheets()
+            >>> print(stats)
+            {
+                'records_processed': 150,
+                'records_updated': 148,
+                'sheets_updated': 3,
+                'errors': [
+                    {
+                        'sheet_name': 'Sheet2',
+                        'error': 'Rate limit exceeded',
+                        'error_type': 'GoogleSheetsAPIError'
+                    }
+                ],
+                'elapsed_seconds': 3.45
+            }
+        
+        Validates: Requirements 5.1, 5.2, 5.3, 5.4, 5.5, 10.4, 10.5, 18.1
+        """
+        start_time = time.time()
+        stats = {
+            'records_processed': 0,
+            'records_updated': 0,
+            'sheets_updated': 0,
+            'errors': []
+        }
+        
+        try:
+            logger.info("backward_sync_started")
+            
+            # Получаем записи с данными доставки для синхронизации
+            # TODO: Реализовать хранение last_sync_timestamp для инкрементальной синхронизации
+            # Пока используем полную синхронизацию (last_sync_timestamp=None)
+            try:
+                prizes = await self.prize_repository.get_claimed_prizes_for_sync(
+                    last_sync_timestamp=None
+                )
+                stats['records_processed'] = len(prizes)
+                
+                logger.info(
+                    "claimed_prizes_retrieved_for_sync",
+                    count=len(prizes)
+                )
+                
+                if not prizes:
+                    logger.info("no_prizes_to_sync")
+                    stats['elapsed_seconds'] = round(time.time() - start_time, 2)
+                    return stats
+                    
+            except DatabaseUnavailableError as e:
+                # Критическая ошибка БД
+                logger.error(
+                    "database_unavailable_during_backward_sync",
+                    error=str(e),
+                    exc_info=True
+                )
+                stats['errors'].append({
+                    'stage': 'database_query',
+                    'error': str(e),
+                    'error_type': 'DatabaseUnavailableError'
+                })
+                stats['elapsed_seconds'] = round(time.time() - start_time, 2)
+                return stats
+            
+            # Группируем записи по sheet_name для batch операций
+            prizes_by_sheet = {}
+            for prize in prizes:
+                if prize.sheet_name not in prizes_by_sheet:
+                    prizes_by_sheet[prize.sheet_name] = []
+                prizes_by_sheet[prize.sheet_name].append(prize)
+            
+            logger.info(
+                "prizes_grouped_by_sheet",
+                sheets_count=len(prizes_by_sheet),
+                sheet_names=list(prizes_by_sheet.keys())
+            )
+            
+            # Синхронизируем каждый лист
+            for sheet_name, sheet_prizes in prizes_by_sheet.items():
+                try:
+                    updated_count = await self._sync_sheet_delivery_data(
+                        sheet_name,
+                        sheet_prizes
+                    )
+                    
+                    stats['records_updated'] += updated_count
+                    stats['sheets_updated'] += 1
+                    
+                    logger.info(
+                        "sheet_backward_sync_completed",
+                        sheet_name=sheet_name,
+                        records_updated=updated_count
+                    )
+                    
+                except gspread.exceptions.APIError as e:
+                    # Ошибка Google Sheets API для конкретного листа - не блокируем другие листы
+                    logger.error(
+                        "google_sheets_api_error_backward_sync",
+                        sheet_name=sheet_name,
+                        error=str(e),
+                        exc_info=True
+                    )
+                    stats['errors'].append({
+                        'sheet_name': sheet_name,
+                        'error': str(e),
+                        'error_type': 'GoogleSheetsAPIError'
+                    })
+                    # Продолжаем синхронизацию других листов
+                    continue
+                    
+                except Exception as e:
+                    # Неожиданная ошибка для конкретного листа
+                    logger.error(
+                        "unexpected_error_backward_sync_sheet",
+                        sheet_name=sheet_name,
+                        error=str(e),
+                        exc_info=True
+                    )
+                    stats['errors'].append({
+                        'sheet_name': sheet_name,
+                        'error': str(e),
+                        'error_type': type(e).__name__
+                    })
+                    # Продолжаем синхронизацию других листов
+                    continue
+            
+            # Финальная статистика
+            elapsed_time = time.time() - start_time
+            stats['elapsed_seconds'] = round(elapsed_time, 2)
+            
+            logger.info(
+                "backward_sync_completed",
+                **stats
+            )
+            
+            return stats
+            
+        except Exception as e:
+            elapsed_time = time.time() - start_time
+            logger.error(
+                "backward_sync_critical_failure",
+                error=str(e),
+                elapsed_seconds=round(elapsed_time, 2),
+                exc_info=True
+            )
+            stats['errors'].append({
+                'stage': 'backward_sync',
+                'error': str(e),
+                'error_type': type(e).__name__
+            })
+            stats['elapsed_seconds'] = round(elapsed_time, 2)
+            return stats
+    
+    async def _sync_sheet_delivery_data(
+        self,
+        sheet_name: str,
+        prizes: List[Prize]
+    ) -> int:
+        """
+        Синхронизирует данные доставки для одного листа Google Sheets
+        
+        Использует batch update для эффективности. Обновляет столбцы E-P:
+        - E-G: last_name, first_name, patronymic
+        - H-L: city, street, house, apartment, phone
+        - M: comment
+        - N-O: country, postal_code
+        - P: claimed_at
+        
+        Args:
+            sheet_name: Название листа
+            prizes: Список призов для синхронизации
+        
+        Returns:
+            int: Количество обновлённых записей
+        
+        Raises:
+            gspread.exceptions.APIError: При ошибках Google Sheets API
+        """
+        if not prizes:
+            return 0
+        
+        try:
+            logger.info(
+                "sheet_backward_sync_started",
+                sheet_name=sheet_name,
+                records_count=len(prizes)
+            )
+            
+            # Открываем лист
+            loop = asyncio.get_event_loop()
+            spreadsheet = await loop.run_in_executor(
+                None,
+                self.client.open_by_key,
+                self.google_sheets_config.spreadsheet_id
+            )
+            worksheet = await loop.run_in_executor(
+                None,
+                spreadsheet.worksheet,
+                sheet_name
+            )
+            
+            # Формируем batch update запрос
+            # Структура столбцов:
+            # E (5): last_name
+            # F (6): first_name
+            # G (7): patronymic
+            # H (8): city
+            # I (9): street
+            # J (10): house
+            # K (11): apartment
+            # L (12): phone
+            # M (13): comment
+            # N (14): country
+            # O (15): postal_code
+            # P (16): claimed_at
+            
+            batch_data = []
+            for prize in prizes:
+                # Формируем строку данных для обновления
+                row_data = [
+                    prize.last_name or '',
+                    prize.first_name or '',
+                    prize.patronymic or '',
+                    prize.city or '',
+                    prize.street or '',
+                    prize.house or '',
+                    prize.apartment or '',
+                    prize.phone or '',
+                    prize.comment or '',
+                    prize.country or '',
+                    prize.postal_code or '',
+                    prize.claimed_at.isoformat() if prize.claimed_at else ''
+                ]
+                
+                # Диапазон для обновления: E{row_id}:P{row_id}
+                cell_range = f'E{prize.row_id}:P{prize.row_id}'
+                
+                batch_data.append({
+                    'range': cell_range,
+                    'values': [row_data]
+                })
+            
+            # Выполняем batch update
+            await loop.run_in_executor(
+                None,
+                worksheet.batch_update,
+                batch_data
+            )
+            
+            logger.info(
+                "sheet_backward_sync_batch_update_completed",
+                sheet_name=sheet_name,
+                records_updated=len(prizes)
+            )
+            
+            return len(prizes)
+            
+        except gspread.exceptions.WorksheetNotFound:
+            logger.error(
+                "worksheet_not_found_backward_sync",
+                sheet_name=sheet_name
+            )
+            # Пробрасываем исключение дальше для обработки в sync_delivery_data_to_sheets
+            raise
+            
+        except Exception as e:
+            logger.error(
+                "sheet_backward_sync_error",
+                sheet_name=sheet_name,
+                error=str(e),
+                exc_info=True
+            )
+            raise

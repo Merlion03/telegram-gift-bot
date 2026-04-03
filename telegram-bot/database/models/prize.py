@@ -20,6 +20,8 @@ class Prize(Base):
     
     Поля:
         gdpr_consent_date: Дата и время согласия пользователя на обработку персональных данных (GDPR)
+        country: Страна доставки физического приза (добавлено для полноты адреса)
+        postal_code: Почтовый индекс для доставки физического приза (добавлено для полноты адреса)
     """
     __tablename__ = 'prizes'
     
@@ -43,6 +45,8 @@ class Prize(Base):
     last_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     first_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     patronymic: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    country: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, comment="Страна доставки физического приза")
+    postal_code: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, comment="Почтовый индекс для доставки физического приза")
     city: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     street: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     house: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
@@ -75,6 +79,13 @@ class Prize(Base):
         comment="Дата и время согласия на обработку персональных данных"
     )
     
+    # Дата получения приза (когда пользователь ввел правильное кодовое слово)
+    claimed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Дата и время получения приза пользователем"
+    )
+    
     # Индексы для производительности
     __table_args__ = (
         # Уникальный составной индекс для предотвращения дублирования
@@ -89,6 +100,9 @@ class Prize(Base):
         
         # Индекс для быстрого поиска по GDPR согласию
         Index('idx_prizes_gdpr_consent', 'telegram_id', 'gdpr_consent_date'),
+        
+        # Индекс для быстрого поиска неполученных призов
+        Index('idx_prizes_unclaimed', 'telegram_id', 'claimed_at'),
     )
     
     def __repr__(self) -> str:

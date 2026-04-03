@@ -12,8 +12,9 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./telegram-bot/database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
-      - ./telegram-bot/database/migrations/005_realtime_triggers.sql:/docker-entrypoint-initdb.d/02-realtime-triggers.sql
-      - ./telegram-bot/database/migrations/006_add_last_activity.sql:/docker-entrypoint-initdb.d/03-add-last-activity.sql
+      - ./telegram-bot/database/migrations/011_create_prizes_table.sql:/docker-entrypoint-initdb.d/02-create-prizes.sql
+      - ./telegram-bot/database/migrations/005_realtime_triggers.sql:/docker-entrypoint-initdb.d/03-realtime-triggers.sql
+      - ./telegram-bot/database/migrations/006_add_last_activity.sql:/docker-entrypoint-initdb.d/04-add-last-activity.sql
     ports:
       - "5433:5432"
     healthcheck:

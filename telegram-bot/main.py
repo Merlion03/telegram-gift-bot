@@ -214,6 +214,7 @@ class BotApplication:
         # Создание PrizeFlowHandler для управления процессом получения приза
         prize_flow_handler = PrizeFlowHandler(
             prize_service=prize_service,
+            notification_service=notification_service,
             session_manager=session_manager,
             webapp_url=self.config.app.webapp_url
         )
@@ -377,14 +378,17 @@ class BotApplication:
         
         # Регистрация callback обработчиков
         # Callback для кнопки "🎁 Получить приз"
+        # Обрабатывается в любом состоянии, чтобы старые кнопки в чате тоже работали
         async def get_prize_callback_wrapper(callback: CallbackQuery, state: FSMContext, **kwargs):
             session_id = kwargs.get('session_id')
+            # Сбрасываем состояние перед началом нового Prize Flow
+            await state.clear()
             await prize_flow_handler.handle_get_prize_callback(callback, state, session_id)
         
         self.dp.callback_query.register(
             get_prize_callback_wrapper,
-            F.data == "get_prize",
-            StateFilter(default_state)
+            F.data == "get_prize"
+            # Убрали StateFilter, чтобы обрабатывать callback в любом состоянии
         )
         
         # Callback для кнопок согласия GDPR
@@ -396,6 +400,18 @@ class BotApplication:
             consent_callback_wrapper,
             F.data.in_(["consent_agree", "consent_back"]),
             StateFilter(PrizeFlowStates.waiting_for_consent)
+        )
+        
+        # Callback для кнопок действий с заполненной формой доставки
+        async def confirm_delivery_callback_wrapper(callback: CallbackQuery, state: FSMContext, **kwargs):
+            session_id = kwargs.get('session_id')
+            # Извлекаем prize_id из callback_data
+            prize_id = int(callback.data.split(':')[1])
+            await prize_flow_handler.handle_confirm_delivery_callback(callback, state, prize_id, session_id)
+        
+        self.dp.callback_query.register(
+            confirm_delivery_callback_wrapper,
+            F.data.startswith("confirm_delivery:")
         )
         
         # Callback для кнопки "Завершить диалог" в поддержке

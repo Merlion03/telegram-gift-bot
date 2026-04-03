@@ -1,0 +1,218 @@
+/**
+ * Глобальные стили для Telegram Mini Apps
+ * Использует CSS-переменные темы Telegram для адаптации интерфейса
+ */
+
+/* Применяем тему Telegram к body */
+body {
+  background-color: var(--tg-theme-secondary-bg-color, #efeff4);
+  color: var(--tg-theme-text-color, #000000);
+}
+
+/* Стили для скроллбара в стиле iOS/Telegram */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--tg-theme-hint-color, #c7c7cc);
+  border-radius: 3px;
+  opacity: 0.5;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--tg-theme-hint-color, #8e8e93);
+}
+
+/* Стили для фокуса в стиле Telegram */
+*:focus-visible {
+  outline: 2px solid var(--tg-theme-link-color, #3390ec);
+  outline-offset: 2px;
+}
+
+/* Анимация нажатия для кнопок */
+button:active:not(:disabled) {
+  transform: scale(0.98);
+  transition: transform 0.1s ease;
+}
+
+/* Стили для disabled элементов */
+button:disabled,
+input:disabled,
+textarea:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Плавные переходы для интерактивных элементов */
+button,
+input,
+textarea,
+a {
+  transition: all 0.2s ease;
+}
+
+/* Убираем стандартные стили для input и textarea */
+input,
+textarea {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+/* Стили для placeholder */
+::placeholder {
+  color: var(--tg-theme-hint-color, #8e8e93) !important;
+  opacity: 1;
+}
+
+:-ms-input-placeholder {
+  color: var(--tg-theme-hint-color, #8e8e93) !important;
+}
+
+::-ms-input-placeholder {
+  color: var(--tg-theme-hint-color, #8e8e93) !important;
+}
+
+/* Убираем автозаполнение браузера, которое может менять цвета */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus,
+textarea:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--tg-theme-text-color, #000000) !important;
+  -webkit-box-shadow: 0 0 0 30px var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #ffffff)) inset !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* Принудительно устанавливаем цвет текста для всех input и textarea */
+input,
+textarea {
+  color: var(--tg-theme-text-color, #000000) !important;
+}
+
+/* Адаптация под safe area (вырезы экрана) */
+@supports (padding: max(0px)) {
+  body {
+    padding-left: max(0px, env(safe-area-inset-left));
+    padding-right: max(0px, env(safe-area-inset-right));
+  }
+}
+
+/* Стили для секций в стиле Telegram */
+.tg-section {
+  background-color: var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #ffffff));
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.tg-section-header {
+  color: var(--tg-theme-section-header-text-color, var(--tg-theme-hint-color, #8e8e93));
+  font-size: 13px;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tg-separator {
+  height: 1px;
+  background-color: var(--tg-theme-section-separator-color, #c8c7cc);
+  margin: 0 16px;
+}
+
+/* Стили для кнопок в стиле Telegram */
+.tg-button {
+  background-color: var(--tg-theme-button-color, #3390ec);
+  color: var(--tg-theme-button-text-color, #ffffff);
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  font-size: 16px;
+}
+
+.tg-button-secondary {
+  background-color: var(--tg-theme-section-bg-color, #f2f2f7);
+  color: var(--tg-theme-text-color, #000000);
+}
+
+.tg-button-destructive {
+  background-color: var(--tg-theme-destructive-text-color, #ff3b30);
+  color: #ffffff;
+}
+
+/* Стили для ссылок */
+a {
+  color: var(--tg-theme-link-color, #3390ec);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Стили для акцентного текста */
+.tg-accent-text {
+  color: var(--tg-theme-accent-text-color, var(--tg-theme-link-color, #3390ec));
+}
+
+/* Стили для subtitle текста */
+.tg-subtitle-text {
+  color: var(--tg-theme-subtitle-text-color, var(--tg-theme-hint-color, #8e8e93));
+}
+
+/* Стили для деструктивного текста */
+.tg-destructive-text {
+  color: var(--tg-theme-destructive-text-color, #ff3b30);
+}
+
+/* Анимация появления снизу (для модальных окон) */
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.slide-up {
+  animation: slideUp 0.3s ease-out;
+}
+
+/* Анимация fade in */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* Стили для header в стиле Telegram */
+.tg-header {
+  background-color: var(--tg-theme-header-bg-color, var(--tg-theme-bg-color, #ffffff));
+  color: var(--tg-theme-text-color, #000000);
+}
+
+/* Стили для bottom bar */
+.tg-bottom-bar {
+  background-color: var(--tg-theme-bottom-bar-bg-color, var(--tg-theme-bg-color, #ffffff));
+}

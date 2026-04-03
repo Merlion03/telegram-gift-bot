@@ -71,6 +71,7 @@ class PrizeFlowHandler:
     def __init__(
         self,
         prize_service: PrizeService,
+        notification_service,
         session_manager=None,
         webapp_url: str = None
     ):
@@ -79,10 +80,12 @@ class PrizeFlowHandler:
         
         Args:
             prize_service: Сервис для работы с призами
+            notification_service: Сервис для отправки уведомлений
             session_manager: Менеджер сессий для сохранения ответов бота (опционально)
             webapp_url: URL WebApp (если None, загружается из конфигурации)
         """
         self.prize_service = prize_service
+        self.notification_service = notification_service
         self.session_manager = session_manager
         
         # Загружаем webapp_url из конфигурации или используем переданный
@@ -783,8 +786,49 @@ class PrizeFlowHandler:
                 await self._send_digital_prize(message, prize_result, state, session_id)
             
             elif prize_result.status == PrizeStatus.PHYSICAL:
-                # Физический приз
-                await self._send_physical_prize_form(message, prize_result, state, session_id)
+                # Физический приз - проверяем, заполнена ли форма доставки
+                is_delivery_filled = await self.prize_service.check_delivery_data_filled(
+                    telegram_id=telegram_id,
+                    code_word=code_word
+                )
+                
+                if is_delivery_filled:
+                    # Форма уже заполнена - показываем кнопки действий
+                    from keyboards.reply_keyboards import get_delivery_actions_keyboard
+                    from constants import DELIVERY_DATA_ALREADY_FILLED
+                    
+                    keyboard = get_delivery_actions_keyboard(prize_result.prize_id, self.webapp_url)
+                    await message.answer(
+                        DELIVERY_DATA_ALREADY_FILLED,
+                        reply_markup=keyboard
+                    )
+                    
+                    # Сбрасываем состояние
+                    await state.clear()
+                    
+                    # Сохраняем ответ бота
+                    if self.session_manager and session_id:
+                        try:
+                            await self.session_manager.save_bot_message(
+                                session_id=session_id,
+                                message_text=DELIVERY_DATA_ALREADY_FILLED
+                            )
+                        except Exception as e:
+                            logger.error(
+                                "failed_to_save_bot_response",
+                                session_id=session_id,
+                                error=str(e)
+                            )
+                    
+                    logger.info(
+                        "delivery_data_already_filled_shown",
+                        telegram_id=telegram_id,
+                        code_word=code_word,
+                        prize_id=prize_result.prize_id
+                    )
+                else:
+                    # Форма не заполнена - отправляем форму
+                    await self._send_physical_prize_form(message, prize_result, state, session_id)
             
             else:
                 # Приз не найден (не должно происходить после валидации)
@@ -1073,7 +1117,7 @@ class PrizeFlowHandler:
                 )
         
         # Формируем URL для WebApp с prize_id
-        webapp_url = f"{self.webapp_url}?prize_id={prize_result.prize_id}"
+        webapp_url = f"{self.webapp_url.rstrip('/')}/webapp?prize_id={prize_result.prize_id}"
         
         # Создаём Inline-кнопку с WebApp
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -1111,3 +1155,50 @@ class PrizeFlowHandler:
             prize_id=prize_result.prize_id,
             webapp_url=webapp_url
         )
+
+
+    async def handle_confirm_delivery_callback(
+        self,
+        callback: CallbackQuery,
+        state: FSMContext,
+        prize_id: int,
+        session_id: Optional[int] = None
+    ) -> None:
+        """
+        Обрабатывает нажатие на кнопку "Получить приз" для уже заполненной формы.
+        
+        Отправляет подтверждающее сообщение и главное меню.
+        
+        Args:
+            callback: Callback от inline кнопки
+            state: FSM контекст
+            prize_id: ID приза
+            session_id: ID сессии из middleware (опционально)
+        """
+        telegram_id = callback.from_user.id
+        
+        logger.info(
+            "confirm_delivery_callback",
+            telegram_id=telegram_id,
+            prize_id=prize_id,
+            session_id=session_id
+        )
+        
+        # Отправляем уведомления через NotificationService
+        notification_result = await self.notification_service.send_delivery_notifications(
+            telegram_id=telegram_id,
+            prize_id=prize_id,
+            session_id=session_id
+        )
+        
+        logger.info(
+            "delivery_confirmation_resent",
+            telegram_id=telegram_id,
+            prize_id=prize_id,
+            confirmation_sent=notification_result.confirmation_sent,
+            main_menu_sent=notification_result.main_menu_sent
+        )
+        
+        # Подтверждаем callback
+        await callback.answer("Данные отправлены!")
+

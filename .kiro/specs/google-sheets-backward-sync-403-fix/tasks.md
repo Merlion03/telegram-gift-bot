@@ -1,0 +1,83 @@
+# Implementation Plan
+
+- [x] 1. Написать exploratory тест для bug condition (ПЕРЕД исправлением)
+  - **Property 1: Bug Condition** - Backward Sync 403 Error on Readonly Scopes
+  - **КРИТИЧЕСКИ ВАЖНО**: Написать этот property-based тест ДО внесения исправления
+  - **ЦЕЛЬ**: Продемонстрировать баг и получить counterexamples, подтверждающие существование проблемы
+  - **ВАЖНО**: Этот тест ДОЛЖЕН УПАСТЬ на неисправленном коде - падение подтверждает наличие бага
+  - **НЕ ПЫТАТЬСЯ исправить тест или код когда он упадёт**
+  - **ПРИМЕЧАНИЕ**: Этот тест кодирует ожидаемое поведение - он будет валидировать исправление, когда пройдёт после реализации
+  - **Scoped PBT подход**: Для детерминистичного бага ограничить property конкретными падающими случаями для воспроизводимости
+  - Тест должен проверять, что при попытке обратной синхронизации (PostgreSQL → Google Sheets) с readonly scopes возникает ошибка 403
+  - Проверить условие из Bug Condition в design: `input.operation_type == 'BACKWARD_SYNC' AND input.method == 'batch_update' AND input.client_scopes CONTAINS 'spreadsheets.readonly'`
+  - Тестовые утверждения должны соответствовать Expected Behavior Properties из design: операция batch_update должна выполниться успешно с кодом 200, данные должны быть записаны в столбцы E-P
+  - Запустить тест на НЕИСПРАВЛЕННОМ коде
+  - **ОЖИДАЕМЫЙ РЕЗУЛЬТАТ**: Тест УПАДЁТ с ошибкой `APIError: [403]: Request had insufficient authentication scopes` (это правильно - доказывает существование бага)
+  - Задокументировать найденные counterexamples для понимания первопричины
+  - Отметить задачу выполненной когда тест написан, запущен и падение задокументировано
+  - _Requirements: 1.1, 1.2, 1.3_
+
+- [x] 2. Написать preservation property тесты (ПЕРЕД исправлением)
+  - **Property 2: Preservation** - Forward Sync and Read Operations Unchanged
+  - **ВАЖНО**: Следовать методологии observation-first
+  - Наблюдать поведение на НЕИСПРАВЛЕННОМ коде для операций чтения и прямой синхронизации (Google Sheets → PostgreSQL)
+  - Написать property-based тесты, захватывающие наблюдаемые паттерны поведения из Preservation Requirements
+  - Property-based тестирование генерирует множество тестовых случаев для более сильных гарантий
+  - Проверить, что `sync_all_sheets()` корректно читает данные из Google Sheets и записывает в PostgreSQL
+  - Проверить, что `_read_sheet_data()` корректно читает все строки из листа
+  - Проверить, что `_get_all_sheet_names()` возвращает корректный список листов
+  - Проверить, что `_convert_sheet_data_to_prizes()` корректно преобразует данные
+  - Проверить, что `_batch_upsert_prizes()` корректно выполняет batch upsert в PostgreSQL
+  - Запустить тесты на НЕИСПРАВЛЕННОМ коде
+  - **ОЖИДАЕМЫЙ РЕЗУЛЬТАТ**: Тесты ПРОХОДЯТ (подтверждает baseline поведение для сохранения)
+  - Отметить задачу выполненной когда тесты написаны, запущены и проходят на неисправленном коде
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6_
+
+- [x] 3. Исправление для Google Sheets API 403 ошибки при обратной синхронизации
+
+  - [x] 3.1 Реализовать исправление в методе `_init_client()`
+    - Открыть файл `telegram-bot/services/sync_service.py`
+    - Найти метод `_init_client()` (приблизительно строки 68-69)
+    - Заменить readonly scopes на полные scopes:
+      - Было: `'https://www.googleapis.com/auth/spreadsheets.readonly'`
+      - Стало: `'https://www.googleapis.com/auth/spreadsheets'`
+      - Было: `'https://www.googleapis.com/auth/drive.readonly'`
+      - Стало: `'https://www.googleapis.com/auth/drive'`
+    - Обновить комментарий в методе для отражения использования scopes для чтения И записи
+    - Убедиться, что service account в `credentials/google-credentials.json` имеет права Editor или Owner на целевую Google Sheets таблицу
+    - _Bug_Condition: isBugCondition(input) где input.operation_type == 'BACKWARD_SYNC' AND input.method == 'batch_update' AND input.client_scopes CONTAINS 'spreadsheets.readonly'_
+    - _Expected_Behavior: операция batch_update выполняется успешно с кодом 200, данные записываются в столбцы E-P, логируется sheet_backward_sync_batch_update_completed_
+    - _Preservation: Прямая синхронизация (Google Sheets → PostgreSQL), операции чтения, получение списка листов, преобразование данных, batch upsert в PostgreSQL - всё должно работать идентично_
+    - _Requirements: 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6_
+
+  - [x] 3.2 Проверить, что bug condition exploration тест теперь проходит
+    - **Property 1: Expected Behavior** - Backward Sync Succeeds with Full Scopes
+    - **ВАЖНО**: Перезапустить ТОТ ЖЕ тест из задачи 1 - НЕ писать новый тест
+    - Тест из задачи 1 кодирует ожидаемое поведение
+    - Когда этот тест проходит, это подтверждает, что ожидаемое поведение достигнуто
+    - Запустить bug condition exploration тест из шага 1
+    - **ОЖИДАЕМЫЙ РЕЗУЛЬТАТ**: Тест ПРОХОДИТ (подтверждает, что баг исправлен)
+    - Проверить, что ошибка 403 больше не возникает
+    - Проверить, что `worksheet.batch_update()` выполняется успешно
+    - Проверить, что данные доставки корректно записываются в столбцы E-P
+    - Проверить, что логируется `sheet_backward_sync_batch_update_completed` с корректным количеством обновлённых записей
+    - _Requirements: Expected Behavior Properties из design (2.1, 2.2, 2.3)_
+
+  - [x] 3.3 Проверить, что preservation тесты всё ещё проходят
+    - **Property 2: Preservation** - Forward Sync and Read Operations Still Work
+    - **ВАЖНО**: Перезапустить ТЕ ЖЕ тесты из задачи 2 - НЕ писать новые тесты
+    - Запустить preservation property тесты из шага 2
+    - **ОЖИДАЕМЫЙ РЕЗУЛЬТАТ**: Тесты ПРОХОДЯТ (подтверждает отсутствие регрессий)
+    - Подтвердить, что все тесты всё ещё проходят после исправления (нет регрессий)
+    - Проверить, что прямая синхронизация работает идентично
+    - Проверить, что операции чтения работают идентично
+    - Проверить, что получение списка листов работает идентично
+    - Проверить, что преобразование данных работает идентично
+    - Проверить, что batch upsert в PostgreSQL работает идентично
+
+- [x] 4. Checkpoint - Убедиться, что все тесты проходят
+  - Запустить все тесты (bug condition exploration + preservation)
+  - Проверить, что нет ошибок 403 при обратной синхронизации
+  - Проверить, что данные корректно синхронизируются между PostgreSQL и Google Sheets
+  - Проверить, что прямая синхронизация продолжает работать без изменений
+  - Если возникают вопросы, спросить пользователя

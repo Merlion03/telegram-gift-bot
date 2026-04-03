@@ -223,35 +223,71 @@ class SyncWorker:
         """
         Внутренний метод для выполнения синхронизации
         
-        Вызывает SyncService.sync_all_sheets() и обрабатывает результат.
+        Выполняет полный цикл синхронизации:
+        1. Прямая синхронизация: Google Sheets → PostgreSQL
+        2. Обратная синхронизация: PostgreSQL → Google Sheets
         """
         try:
             logger.info("sync_job_started")
             
-            # Выполняем синхронизацию
-            stats = await self.sync_service.sync_all_sheets()
+            # Прямая синхронизация: Google Sheets → PostgreSQL
+            forward_stats = await self.sync_service.sync_all_sheets()
             
-            # Логируем результаты
+            # Логируем результаты прямой синхронизации
             logger.info(
-                "sync_job_completed",
-                sheets_processed=stats['sheets_processed'],
-                sheets_failed=stats['sheets_failed'],
-                total_records=stats['total_records'],
-                new_records=stats['new_records'],
-                updated_records=stats['updated_records'],
-                errors_count=len(stats['errors']),
-                elapsed_seconds=stats['elapsed_seconds']
+                "forward_sync_completed",
+                sheets_processed=forward_stats['sheets_processed'],
+                sheets_failed=forward_stats['sheets_failed'],
+                total_records=forward_stats['total_records'],
+                new_records=forward_stats['new_records'],
+                updated_records=forward_stats['updated_records'],
+                errors_count=len(forward_stats['errors']),
+                elapsed_seconds=forward_stats['elapsed_seconds']
             )
             
-            # Если были ошибки, логируем их детали
-            if stats['errors']:
-                for error_info in stats['errors']:
+            # Если были ошибки в прямой синхронизации, логируем их детали
+            if forward_stats['errors']:
+                for error_info in forward_stats['errors']:
                     logger.warning(
-                        "sync_sheet_error_detail",
+                        "forward_sync_sheet_error_detail",
                         sheet_name=error_info['sheet_name'],
                         error_type=error_info['error_type'],
                         error=error_info['error']
                     )
+            
+            # Обратная синхронизация: PostgreSQL → Google Sheets
+            try:
+                backward_stats = await self.sync_service.sync_delivery_data_to_sheets()
+                
+                # Логируем результаты обратной синхронизации
+                logger.info(
+                    "backward_sync_completed",
+                    records_processed=backward_stats['records_processed'],
+                    records_updated=backward_stats['records_updated'],
+                    sheets_updated=backward_stats['sheets_updated'],
+                    errors_count=len(backward_stats['errors']),
+                    elapsed_seconds=backward_stats['elapsed_seconds']
+                )
+                
+                # Если были ошибки в обратной синхронизации, логируем их детали
+                if backward_stats['errors']:
+                    for error_info in backward_stats['errors']:
+                        logger.warning(
+                            "backward_sync_error_detail",
+                            sheet_name=error_info.get('sheet_name', 'unknown'),
+                            error_type=error_info.get('error_type', 'unknown'),
+                            error=error_info.get('error', 'unknown')
+                        )
+                        
+            except Exception as e:
+                # Ошибка обратной синхронизации не блокирует работу worker
+                logger.error(
+                    "backward_sync_failed",
+                    error=str(e),
+                    exc_info=True
+                )
+            
+            logger.info("sync_job_completed")
             
         except Exception as e:
             logger.error(

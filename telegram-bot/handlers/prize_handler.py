@@ -194,7 +194,7 @@ class PrizeHandler:
             session_id: ID сессии из middleware (опционально)
         """
         # Формируем URL для WebApp с prize_id
-        webapp_url = f"{self.webapp_url}?prize_id={prize_result.prize_id}"
+        webapp_url = f"{self.webapp_url.rstrip('/')}/webapp?prize_id={prize_result.prize_id}"
         
         # Создаём Inline-кнопку с WebApp
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
