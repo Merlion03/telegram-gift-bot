@@ -86,6 +86,14 @@ class Prize(Base):
         comment="Дата и время получения приза пользователем"
     )
     
+    # Маркер архивной записи (удалена из Google Sheets, но данные доставки сохранены)
+    is_archived: Mapped[bool] = mapped_column(
+        nullable=False,
+        default=False,
+        server_default='false',
+        comment="Маркер архивной записи (удалена из Google Sheets, но данные доставки сохранены)"
+    )
+    
     # Индексы для производительности
     __table_args__ = (
         # Уникальный составной индекс для предотвращения дублирования
@@ -103,6 +111,9 @@ class Prize(Base):
         
         # Индекс для быстрого поиска неполученных призов
         Index('idx_prizes_unclaimed', 'telegram_id', 'claimed_at'),
+        
+        # Индекс для быстрого поиска архивных записей
+        Index('idx_prizes_archived', 'is_archived', postgresql_where='is_archived = TRUE'),
     )
     
     def __repr__(self) -> str:

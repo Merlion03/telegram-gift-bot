@@ -21,7 +21,12 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
     """
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🎁 Получить приз", callback_data="get_prize")]
+            [InlineKeyboardButton(
+                text="Получить приз", 
+                callback_data="get_prize",
+                icon_custom_emoji_id="5341654051555677887",
+                style="primary"
+            )]
         ]
     )
     return keyboard
@@ -35,7 +40,7 @@ def get_consent_keyboard() -> InlineKeyboardMarkup:
     персональных данных или возврата в главное меню.
     
     Returns:
-        InlineKeyboardMarkup: Клавиатура с кнопками "✅ Согласен" и "◀️ Назад"
+        InlineKeyboardMarkup: Клавиатура с кнопками "✅ Согласен" (зелёная) и "◀️ Назад" (красная)
         
     Validates:
         Requirements 3.2 - Запрос согласия должен содержать кнопки "Согласен" и "Назад"
@@ -43,8 +48,18 @@ def get_consent_keyboard() -> InlineKeyboardMarkup:
     """
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="✅ Согласен", callback_data="consent_agree")],
-            [InlineKeyboardButton(text="◀️ Назад", callback_data="consent_back")]
+            [InlineKeyboardButton(
+                text="Согласен", 
+                callback_data="consent_agree",
+                style="success",
+                icon_custom_emoji_id="5379890388750330965"
+            )],
+            [InlineKeyboardButton(
+                text="Назад", 
+                callback_data="consent_back",
+                style="danger",
+                icon_custom_emoji_id="5316911646906541152"
+            )]
         ]
     )
     return keyboard

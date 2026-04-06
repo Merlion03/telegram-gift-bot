@@ -934,23 +934,27 @@ class PrizeFlowHandler:
         session_id: Optional[int] = None
     ) -> None:
         """
-        Выдаёт цифровой приз (промокод).
+        Выдаёт цифровой приз (один или несколько промокодов).
         
-        Validates: Requirements 6.1, 6.2, 6.3, 6.4, 6.5, 11.1, 11.2
+        Validates: Requirements 3.1-3.7, 4.1-4.4, 5.1, 6.1-6.5, 7.4, 11.1, 11.2
         
         Логика:
-        1. Отправляет поздравление с промокодом
-        2. Отправляет инструкцию по использованию
-        3. Отмечает приз как полученный (claimed_at)
-        4. Отображает главное меню
-        5. Сбрасывает FSM состояние
+        1. Парсит промокоды и инструкции из базы данных
+        2. Форматирует сообщение с промокодами
+        3. Отправляет сообщение(я) пользователю
+        4. Отмечает приз как полученный (claimed_at)
+        5. Отображает главное меню
+        6. Сбрасывает FSM состояние
         
         Args:
             message: Сообщение пользователя
-            prize_result: Результат проверки приза с промокодом
+            prize_result: Результат проверки приза с промокодом(ами)
             state: FSM контекст для управления состояниями
             session_id: ID сессии из middleware (опционально)
         """
+        from utils.promo_parser import PromoCodeParser
+        from utils.message_formatter import MessageFormatter
+        
         telegram_id = message.from_user.id
         
         logger.info(
@@ -960,8 +964,37 @@ class PrizeFlowHandler:
             session_id=session_id
         )
         
-        # Дополнительная проверка наличия промокода
-        if not prize_result.promo_code:
+        # Логирование сырых данных из базы для отладки
+        logger.info(
+            "raw_prize_data_from_db",
+            telegram_id=telegram_id,
+            promo_code_raw=prize_result.promo_code,
+            instructions_raw=prize_result.instructions,
+            promo_code_type=type(prize_result.promo_code).__name__,
+            instructions_type=type(prize_result.instructions).__name__
+        )
+        
+        # Парсинг промокодов и инструкций
+        promo_codes = PromoCodeParser.parse_promo_codes(prize_result.promo_code)
+        instructions = PromoCodeParser.parse_instructions(prize_result.instructions)
+        
+        # Логирование распарсенных данных
+        logger.info(
+            "parsed_promo_data",
+            telegram_id=telegram_id,
+            promo_codes_count=len(promo_codes),
+            instructions_count=len(instructions),
+            promo_codes=promo_codes,
+            instructions=instructions
+        )
+        
+        # Обработка случая отсутствия промокодов
+        if not promo_codes:
+            logger.error(
+                "no_promo_codes_after_parsing",
+                telegram_id=telegram_id,
+                prize_id=getattr(prize_result, 'prize_id', None)
+            )
             await message.answer(
                 MISSING_PROMO_CODE_ERROR,
                 reply_markup=get_main_menu_keyboard()
@@ -983,87 +1016,69 @@ class PrizeFlowHandler:
                         session_id=session_id,
                         error=str(e)
                     )
-            
-            logger.error(
-                "missing_promo_code_in_send_digital_prize",
-                telegram_id=telegram_id
-            )
             return
         
-        # Формируем поздравительное сообщение с промокодом
-        congratulations_text = get_digital_prize_congratulations(prize_result.promo_code)
-        
-        # Логирование доступа к промокоду (Security Requirement 1, 3)
-        logger.info(
-            "promo_code_access",
+        # Объединение данных
+        promo_data_list = PromoCodeParser.combine_promo_data(
+            promo_codes=promo_codes,
+            instructions=instructions,
             telegram_id=telegram_id,
-            promo_code=prize_result.promo_code,
-            session_id=session_id,
-            access_type="legitimate"
+            prize_id=getattr(prize_result, 'prize_id', None)
         )
         
-        await message.answer(congratulations_text)
+        # Логирование доступа к промокодам (Security Requirement 1, 3)
+        for promo_code in promo_codes:
+            logger.info(
+                "promo_code_access",
+                telegram_id=telegram_id,
+                promo_code=promo_code,
+                session_id=session_id,
+                access_type="legitimate"
+            )
         
-        # Сохраняем поздравление
-        if self.session_manager and session_id:
-            try:
-                await self.session_manager.save_bot_message(
-                    session_id=session_id,
-                    message_text=congratulations_text
-                )
-            except Exception as e:
-                logger.error(
-                    "failed_to_save_bot_response",
-                    session_id=session_id,
-                    error=str(e)
-                )
-        
-        # Отправляем инструкцию по использованию
-        instructions_text = prize_result.instructions or DIGITAL_PRIZE_DEFAULT_INSTRUCTIONS
-        
-        await message.answer(instructions_text)
-        
-        # Сохраняем инструкцию
-        if self.session_manager and session_id:
-            try:
-                await self.session_manager.save_bot_message(
-                    session_id=session_id,
-                    message_text=instructions_text
-                )
-            except Exception as e:
-                logger.error(
-                    "failed_to_save_bot_response",
-                    session_id=session_id,
-                    error=str(e)
-                )
-        
-        # Отображаем главное меню
-        await message.answer(
-            DIGITAL_PRIZE_MENU_MESSAGE,
-            reply_markup=get_main_menu_keyboard()
+        # Форматирование сообщения
+        text = MessageFormatter.format_multiple_promos(
+            promo_data_list=promo_data_list,
+            telegram_id=telegram_id
         )
         
-        # Сохраняем сообщение с меню
-        if self.session_manager and session_id:
-            try:
-                await self.session_manager.save_bot_message(
-                    session_id=session_id,
-                    message_text=DIGITAL_PRIZE_MENU_MESSAGE
-                )
-            except Exception as e:
-                logger.error(
-                    "failed_to_save_bot_response",
-                    session_id=session_id,
-                    error=str(e)
-                )
+        # Разделение сообщения если необходимо
+        message_parts = MessageFormatter.split_message_if_needed(text, telegram_id)
+        
+        # Отправка сообщения(й)
+        for i, part in enumerate(message_parts):
+            # Кнопка только в последнем сообщении
+            keyboard = get_main_menu_keyboard() if i == len(message_parts) - 1 else None
+            
+            await message.answer(
+                part,
+                parse_mode="HTML",
+                reply_markup=keyboard,
+                disable_web_page_preview=True
+            )
+            
+            # Сохранение ответа бота
+            if self.session_manager and session_id:
+                try:
+                    await self.session_manager.save_bot_message(
+                        session_id=session_id,
+                        message_text=part
+                    )
+                except Exception as e:
+                    logger.error(
+                        "failed_to_save_bot_response",
+                        session_id=session_id,
+                        error=str(e)
+                    )
         
         # Сбрасываем FSM состояние
         await state.clear()
         
         logger.info(
-            "digital_prize_sent_successfully",
+            "digital_prize_sent",
             telegram_id=telegram_id,
-            promo_code=prize_result.promo_code
+            promo_count=len(promo_codes),
+            message_parts=len(message_parts)
         )
 
     async def _send_physical_prize_form(

@@ -41,13 +41,16 @@ EXCEPTION
 END;
 $$ LANGUAGE plpgsql;
 
--- Создаём триггер на INSERT в таблицу support_messages
+-- Удаляем старый триггер если существует (игнорируем ошибки)
 DROP TRIGGER IF EXISTS trigger_notify_new_message ON support_messages;
+
+-- Создаём триггер на INSERT в таблицу support_messages
 CREATE TRIGGER trigger_notify_new_message
     AFTER INSERT ON support_messages
     FOR EACH ROW
     EXECUTE FUNCTION notify_new_message();
 
+-- Комментарии
 COMMENT ON FUNCTION notify_new_message() IS 'Функция для отправки уведомлений о новых сообщениях через PostgreSQL NOTIFY';
 COMMENT ON TRIGGER trigger_notify_new_message ON support_messages IS 'Триггер для автоматической отправки уведомлений при добавлении новых сообщений';
 
@@ -94,13 +97,16 @@ EXCEPTION
 END;
 $$ LANGUAGE plpgsql;
 
--- Создаём триггер на UPDATE в таблицу support_sessions
+-- Удаляем старый триггер если существует (игнорируем ошибки)
 DROP TRIGGER IF EXISTS trigger_notify_session_status_change ON support_sessions;
+
+-- Создаём триггер на UPDATE в таблицу support_sessions
 CREATE TRIGGER trigger_notify_session_status_change
     AFTER UPDATE ON support_sessions
     FOR EACH ROW
     EXECUTE FUNCTION notify_session_status_change();
 
+-- Комментарии
 COMMENT ON FUNCTION notify_session_status_change() IS 'Функция для отправки уведомлений об изменении статуса сессии через PostgreSQL NOTIFY';
 COMMENT ON TRIGGER trigger_notify_session_status_change ON support_sessions IS 'Триггер для автоматической отправки уведомлений при изменении статуса сессии';
 
@@ -147,13 +153,16 @@ EXCEPTION
 END;
 $$ LANGUAGE plpgsql;
 
--- Создаём триггер на UPDATE в таблицу support_sessions
+-- Удаляем старый триггер если существует (игнорируем ошибки)
 DROP TRIGGER IF EXISTS trigger_notify_session_type_change ON support_sessions;
+
+-- Создаём триггер на UPDATE в таблицу support_sessions
 CREATE TRIGGER trigger_notify_session_type_change
     AFTER UPDATE ON support_sessions
     FOR EACH ROW
     EXECUTE FUNCTION notify_session_type_change();
 
+-- Комментарии
 COMMENT ON FUNCTION notify_session_type_change() IS 'Функция для отправки уведомлений об изменении типа сессии через PostgreSQL NOTIFY';
 COMMENT ON TRIGGER trigger_notify_session_type_change ON support_sessions IS 'Триггер для автоматической отправки уведомлений при изменении типа сессии';
 

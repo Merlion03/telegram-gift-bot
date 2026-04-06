@@ -79,10 +79,12 @@ class PrizeRepository(BaseRepository):
                 # Используем контекст менеджер для правильного управления сессиями
                 async with self._get_session_context() as session:
                     # Запрос с использованием составного индекса
+                    # Исключаем архивные записи (удалённые из Google Sheets)
                     query = select(Prize).where(
                         and_(
                             Prize.telegram_id == telegram_id,
-                            Prize.code_word == code_word
+                            Prize.code_word == code_word,
+                            Prize.is_archived == False
                         )
                     )
                     
@@ -257,7 +259,7 @@ class PrizeRepository(BaseRepository):
     async def batch_upsert_prizes(
         self,
         prizes_data: List[Dict[str, Any]]
-    ) -> int:
+    ) -> Dict[str, int]:
         """
         Batch upsert для списка призов (эффективная массовая операция)
         
@@ -272,17 +274,18 @@ class PrizeRepository(BaseRepository):
             prizes_data: Список данных призов
         
         Returns:
-            int: Количество обработанных записей
+            Dict[str, int]: Статистика операции {'new_records': N, 'updated_records': M}
         
         Raises:
             DatabaseUnavailableError: Если БД недоступна
         """
         if not prizes_data:
             logger.warning("batch_upsert_called_with_empty_list")
-            return 0
+            return {'new_records': 0, 'updated_records': 0}
         
         start_time = time.time()
-        processed_count = 0
+        new_records = 0
+        updated_records = 0
         protected_count = 0  # Счётчик защищённых записей
         
         # Поля данных доставки, которые защищены от перезаписи
@@ -304,14 +307,26 @@ class PrizeRepository(BaseRepository):
                     if 'created_at' not in prize_data:
                         prize_data['created_at'] = now
                 
+                # Получаем существующие ключи для определения новых vs обновлённых
+                existing_keys_query = select(
+                    Prize.telegram_id, 
+                    Prize.code_word
+                ).where(
+                    tuple_(Prize.telegram_id, Prize.code_word).in_(
+                        [(p['telegram_id'], p['code_word']) for p in prizes_data]
+                    )
+                )
+                result = await session.execute(existing_keys_query)
+                existing_keys = set(result.all())
+                
                 # Выполняем upsert для каждой записи в рамках внешней транзакции
                 for prize_data in prizes_data:
+                    key = (prize_data['telegram_id'], prize_data['code_word'])
+                    is_new = key not in existing_keys
+                    
                     stmt = insert(Prize).values(**prize_data)
                     
                     # При конфликте обновляем поля с учётом защиты данных доставки
-                    # Используем CASE WHEN для условного обновления:
-                    # - Если claimed_at IS NULL, обновляем все поля
-                    # - Если claimed_at IS NOT NULL, НЕ обновляем поля данных доставки
                     update_dict = {}
                     for col in Prize.__table__.columns:
                         col_name = col.name
@@ -322,8 +337,6 @@ class PrizeRepository(BaseRepository):
                         
                         # Для полей данных доставки используем условное обновление
                         if col_name in DELIVERY_DATA_FIELDS:
-                            # Обновляем только если claimed_at IS NULL
-                            # Иначе сохраняем существующее значение
                             update_dict[col_name] = case(
                                 (Prize.claimed_at.is_(None), getattr(stmt.excluded, col_name)),
                                 else_=getattr(Prize, col_name)
@@ -338,9 +351,13 @@ class PrizeRepository(BaseRepository):
                     )
                     
                     await session.execute(stmt)
+                    
+                    if is_new:
+                        new_records += 1
+                    else:
+                        updated_records += 1
                 
                 # Commit должен быть вызван внешним кодом
-                processed_count = len(prizes_data)
                 
             else:
                 # Используем контекст менеджер - автоматическое управление транзакциями
@@ -352,14 +369,26 @@ class PrizeRepository(BaseRepository):
                         if 'created_at' not in prize_data:
                             prize_data['created_at'] = now
                     
+                    # Получаем существующие ключи для определения новых vs обновлённых
+                    existing_keys_query = select(
+                        Prize.telegram_id, 
+                        Prize.code_word
+                    ).where(
+                        tuple_(Prize.telegram_id, Prize.code_word).in_(
+                            [(p['telegram_id'], p['code_word']) for p in prizes_data]
+                        )
+                    )
+                    result = await session.execute(existing_keys_query)
+                    existing_keys = set(result.all())
+                    
                     # Выполняем upsert для каждой записи в рамках одной транзакции
                     for prize_data in prizes_data:
+                        key = (prize_data['telegram_id'], prize_data['code_word'])
+                        is_new = key not in existing_keys
+                        
                         stmt = insert(Prize).values(**prize_data)
                         
                         # При конфликте обновляем поля с учётом защиты данных доставки
-                        # Используем CASE WHEN для условного обновления:
-                        # - Если claimed_at IS NULL, обновляем все поля
-                        # - Если claimed_at IS NOT NULL, НЕ обновляем поля данных доставки
                         update_dict = {}
                         for col in Prize.__table__.columns:
                             col_name = col.name
@@ -370,8 +399,6 @@ class PrizeRepository(BaseRepository):
                             
                             # Для полей данных доставки используем условное обновление
                             if col_name in DELIVERY_DATA_FIELDS:
-                                # Обновляем только если claimed_at IS NULL
-                                # Иначе сохраняем существующее значение
                                 update_dict[col_name] = case(
                                     (Prize.claimed_at.is_(None), getattr(stmt.excluded, col_name)),
                                     else_=getattr(Prize, col_name)
@@ -386,12 +413,16 @@ class PrizeRepository(BaseRepository):
                         )
                         
                         await session.execute(stmt)
+                        
+                        if is_new:
+                            new_records += 1
+                        else:
+                            updated_records += 1
                     
                     # Commit выполняется автоматически в контексте менеджере
-                    processed_count = len(prizes_data)
                     
                     # Подсчитываем количество защищённых записей для логирования
-                    result = await session.execute(
+                    protected_result = await session.execute(
                         select(func.count()).select_from(Prize).where(
                             Prize.claimed_at.isnot(None)
                         ).where(
@@ -400,17 +431,18 @@ class PrizeRepository(BaseRepository):
                             )
                         )
                     )
-                    protected_count = result.scalar() or 0
+                    protected_count = protected_result.scalar() or 0
             
             # Логирование времени выполнения
             elapsed_ms = (time.time() - start_time) * 1000
             
             logger.info(
                 "batch_upsert_completed",
-                records_count=processed_count,
+                new_records=new_records,
+                updated_records=updated_records,
                 protected_records=protected_count,
                 elapsed_ms=round(elapsed_ms, 2),
-                records_per_second=round(processed_count / (elapsed_ms / 1000), 2)
+                records_per_second=round((new_records + updated_records) / (elapsed_ms / 1000), 2)
             )
             
             if protected_count > 0:
@@ -420,14 +452,18 @@ class PrizeRepository(BaseRepository):
                     message="Данные доставки защищены от перезаписи для записей с claimed_at IS NOT NULL"
                 )
             
-            return processed_count
+            return {
+                'new_records': new_records,
+                'updated_records': updated_records
+            }
             
         except Exception as e:
             elapsed_ms = (time.time() - start_time) * 1000
             logger.error(
                 "batch_upsert_error",
                 records_count=len(prizes_data),
-                processed_count=processed_count,
+                new_records=new_records,
+                updated_records=updated_records,
                 error=str(e),
                 elapsed_ms=round(elapsed_ms, 2),
                 exc_info=True
@@ -734,7 +770,13 @@ class PrizeRepository(BaseRepository):
         
         try:
             async with self._get_session_context() as session:
-                query = select(Prize).where(Prize.id == prize_id)
+                # Исключаем архивные записи (удалённые из Google Sheets)
+                query = select(Prize).where(
+                    and_(
+                        Prize.id == prize_id,
+                        Prize.is_archived == False
+                    )
+                )
                 
                 result = await session.execute(query)
                 prize = result.scalar_one_or_none()
@@ -962,7 +1004,13 @@ class PrizeRepository(BaseRepository):
         try:
             async with self._get_session_context() as session:
                 # Базовый запрос: все записи с claimed_at IS NOT NULL
-                query = select(Prize).where(Prize.claimed_at.isnot(None))
+                # Исключаем архивные записи (удалённые из Google Sheets)
+                query = select(Prize).where(
+                    and_(
+                        Prize.claimed_at.isnot(None),
+                        Prize.is_archived == False
+                    )
+                )
                 
                 # Инкрементальная синхронизация: только обновлённые записи
                 if last_sync_timestamp is not None:
@@ -999,4 +1047,212 @@ class PrizeRepository(BaseRepository):
             
             raise DatabaseUnavailableError(
                 f"Ошибка при получении призов для синхронизации: {str(e)}"
+            ) from e
+
+    async def get_prizes_by_sheet(
+        self,
+        sheet_name: str
+    ) -> List[Prize]:
+        """
+        Получает все записи конкретного листа из PostgreSQL
+        
+        Используется для diff операции при синхронизации - определение записей,
+        которые были удалены из Google Sheets.
+        
+        Args:
+            sheet_name: Название листа Google Sheets
+        
+        Returns:
+            List[Prize]: Список всех призов для указанного листа
+        
+        Raises:
+            DatabaseUnavailableError: Если БД недоступна
+        """
+        start_time = time.time()
+        
+        try:
+            async with self._get_session_context() as session:
+                # Запрос всех записей для указанного листа
+                query = select(Prize).where(Prize.sheet_name == sheet_name)
+                
+                result = await session.execute(query)
+                prizes = result.scalars().all()
+                
+                # Логирование времени выполнения
+                elapsed_ms = (time.time() - start_time) * 1000
+                
+                logger.info(
+                    "get_prizes_by_sheet_completed",
+                    sheet_name=sheet_name,
+                    records_found=len(prizes),
+                    elapsed_ms=round(elapsed_ms, 2)
+                )
+                
+                # Предупреждение о медленном запросе
+                if elapsed_ms > 500:
+                    logger.warning(
+                        "slow_get_prizes_by_sheet",
+                        sheet_name=sheet_name,
+                        elapsed_ms=round(elapsed_ms, 2),
+                        threshold_ms=500
+                    )
+                
+                return list(prizes)
+                
+        except Exception as e:
+            elapsed_ms = (time.time() - start_time) * 1000
+            logger.error(
+                "get_prizes_by_sheet_error",
+                sheet_name=sheet_name,
+                error=str(e),
+                elapsed_ms=round(elapsed_ms, 2),
+                exc_info=True
+            )
+            
+            raise DatabaseUnavailableError(
+                f"Ошибка при получении призов листа {sheet_name}: {str(e)}"
+            ) from e
+
+    async def batch_delete_prizes(
+        self,
+        prizes_keys: List[tuple[int, str]]
+    ) -> int:
+        """
+        Удаляет записи без данных доставки (claimed_at IS NULL)
+        
+        Используется при синхронизации для удаления записей, которые были
+        удалены из Google Sheets и не имеют данных доставки.
+        
+        Args:
+            prizes_keys: Список кортежей (telegram_id, code_word) для удаления
+        
+        Returns:
+            int: Количество удалённых записей
+        
+        Raises:
+            DatabaseUnavailableError: Если БД недоступна
+        """
+        if not prizes_keys:
+            logger.warning("batch_delete_prizes_called_with_empty_list")
+            return 0
+        
+        start_time = time.time()
+        deleted_count = 0
+        
+        try:
+            async with self._get_session_context() as session:
+                # Удаляем записи WHERE (telegram_id, code_word) IN prizes_keys AND claimed_at IS NULL
+                from sqlalchemy import delete
+                
+                stmt = delete(Prize).where(
+                    and_(
+                        tuple_(Prize.telegram_id, Prize.code_word).in_(prizes_keys),
+                        Prize.claimed_at.is_(None)
+                    )
+                )
+                
+                result = await session.execute(stmt)
+                deleted_count = result.rowcount
+                
+                # Логирование времени выполнения
+                elapsed_ms = (time.time() - start_time) * 1000
+                
+                logger.info(
+                    "batch_delete_prizes_completed",
+                    keys_count=len(prizes_keys),
+                    deleted_count=deleted_count,
+                    elapsed_ms=round(elapsed_ms, 2)
+                )
+                
+                return deleted_count
+                
+        except Exception as e:
+            elapsed_ms = (time.time() - start_time) * 1000
+            logger.error(
+                "batch_delete_prizes_error",
+                keys_count=len(prizes_keys),
+                deleted_count=deleted_count,
+                error=str(e),
+                elapsed_ms=round(elapsed_ms, 2),
+                exc_info=True
+            )
+            
+            raise DatabaseUnavailableError(
+                f"Ошибка при batch удалении призов: {str(e)}"
+            ) from e
+
+    async def batch_archive_prizes(
+        self,
+        prizes_keys: List[tuple[int, str]]
+    ) -> int:
+        """
+        Архивирует записи с данными доставки (claimed_at IS NOT NULL)
+        
+        Устанавливает is_archived=TRUE вместо удаления для сохранения данных доставки.
+        Используется при синхронизации для записей, удалённых из Google Sheets.
+        
+        Args:
+            prizes_keys: Список кортежей (telegram_id, code_word) для архивирования
+        
+        Returns:
+            int: Количество архивированных записей
+        
+        Raises:
+            DatabaseUnavailableError: Если БД недоступна
+        """
+        if not prizes_keys:
+            logger.warning("batch_archive_prizes_called_with_empty_list")
+            return 0
+        
+        start_time = time.time()
+        archived_count = 0
+        
+        try:
+            async with self._get_session_context() as session:
+                # Обновляем is_archived=TRUE WHERE (telegram_id, code_word) IN prizes_keys AND claimed_at IS NOT NULL
+                stmt = update(Prize).where(
+                    and_(
+                        tuple_(Prize.telegram_id, Prize.code_word).in_(prizes_keys),
+                        Prize.claimed_at.isnot(None)
+                    )
+                ).values(
+                    is_archived=True,
+                    updated_at=datetime.now(timezone.utc)
+                )
+                
+                result = await session.execute(stmt)
+                archived_count = result.rowcount
+                
+                # Логирование времени выполнения
+                elapsed_ms = (time.time() - start_time) * 1000
+                
+                logger.info(
+                    "batch_archive_prizes_completed",
+                    keys_count=len(prizes_keys),
+                    archived_count=archived_count,
+                    elapsed_ms=round(elapsed_ms, 2)
+                )
+                
+                if archived_count > 0:
+                    logger.info(
+                        "delivery_data_preserved_via_archiving",
+                        archived_count=archived_count,
+                        message="Данные доставки сохранены через архивирование вместо удаления"
+                    )
+                
+                return archived_count
+                
+        except Exception as e:
+            elapsed_ms = (time.time() - start_time) * 1000
+            logger.error(
+                "batch_archive_prizes_error",
+                keys_count=len(prizes_keys),
+                archived_count=archived_count,
+                error=str(e),
+                elapsed_ms=round(elapsed_ms, 2),
+                exc_info=True
+            )
+            
+            raise DatabaseUnavailableError(
+                f"Ошибка при batch архивировании призов: {str(e)}"
             ) from e
