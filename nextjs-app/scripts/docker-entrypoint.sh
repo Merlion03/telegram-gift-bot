@@ -12,11 +12,18 @@ done
 
 echo "[Entrypoint] PostgreSQL готов!"
 
-# Применяем миграцию триггеров
-echo "[Entrypoint] Применение миграции realtime триггеров..."
+# Применяем миграции в правильном порядке
+echo "[Entrypoint] Применение миграций..."
+
+# Создание таблиц
+echo "[Entrypoint] Применение миграции 001: создание таблиц..."
+PGPASSWORD=$POSTGRES_PASSWORD psql -h "$POSTGRES_HOST" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /app/migrations/001_create_tables.sql
+
+# Создание триггеров
+echo "[Entrypoint] Применение миграции 005: realtime триггеры..."
 PGPASSWORD=$POSTGRES_PASSWORD psql -h "$POSTGRES_HOST" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /app/migrations/005_realtime_triggers.sql
 
-echo "[Entrypoint] Миграция применена успешно!"
+echo "[Entrypoint] Все миграции применены успешно!"
 
 # Запускаем основное приложение
 echo "[Entrypoint] Запуск Next.js сервера..."

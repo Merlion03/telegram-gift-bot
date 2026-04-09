@@ -86,8 +86,9 @@ export default function AdminPage() {
         }
         
         // Добавляем обработчик для кнопки "Назад" для выхода из полноэкранного режима
-        if (WebApp.BackButton) {
-          WebApp.BackButton.onClick(() => {
+        const backButton = (WebApp as any).BackButton;
+        if (backButton) {
+          backButton.onClick(() => {
             if (typeof (WebApp as any).exitFullscreen === 'function') {
               try {
                 (WebApp as any).exitFullscreen();
@@ -99,7 +100,7 @@ export default function AdminPage() {
           });
           
           // Показываем кнопку "Назад"
-          WebApp.BackButton.show();
+          backButton.show();
         }
       }
     };
@@ -109,8 +110,9 @@ export default function AdminPage() {
     // Cleanup при размонтировании
     return () => {
       const WebApp = window.Telegram?.WebApp;
-      if (WebApp?.BackButton) {
-        WebApp.BackButton.hide();
+      const backButton = (WebApp as any)?.BackButton;
+      if (backButton) {
+        backButton.hide();
       }
     };
   }, []);
