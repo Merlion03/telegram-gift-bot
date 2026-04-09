@@ -81,7 +81,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 # Копирование миграций и entrypoint скрипта (временно от root для создания директории)
 USER root
 COPY migrations/001_create_tables.sql /app/migrations/
+COPY migrations/002_fix_created_at_default.sql /app/migrations/
 COPY migrations/005_realtime_triggers.sql /app/migrations/
+COPY migrations/015_add_help_needed_field.sql /app/migrations/
 COPY scripts/docker-entrypoint.sh /app/
 RUN chmod +x /app/docker-entrypoint.sh && \
     chown -R nextjs:nodejs /app/migrations

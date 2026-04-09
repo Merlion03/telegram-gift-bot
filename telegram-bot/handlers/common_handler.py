@@ -4,7 +4,7 @@
 """
 
 from typing import Optional
-from aiogram import Router
+from aiogram import Router, Bot
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import Command
 
@@ -32,7 +32,7 @@ class CommonHandler:
         self.admin_start_handler = admin_start_handler
         logger.info("common_handler_initialized")
     
-    async def handle_start(self, message: Message, session_id: Optional[int] = None) -> None:
+    async def handle_start(self, message: Message, session_id: Optional[int] = None, bot: Optional[Bot] = None) -> None:
         """
         Обрабатывает команду /start
         
@@ -45,6 +45,7 @@ class CommonHandler:
         Args:
             message: Сообщение от пользователя
             session_id: ID сессии из middleware (опционально)
+            bot: Экземпляр бота (опционально, для программного вызова)
             
         Validates:
             Requirements 1.1, 1.2, 1.3, 1.4, 3.1, 4.1, 10.7, 10.8
@@ -86,7 +87,16 @@ class CommonHandler:
             welcome_text = get_welcome_message(username)
             
             keyboard = get_main_menu_keyboard()
-            await message.answer(welcome_text, reply_markup=keyboard)
+            
+            # Используем переданный bot или получаем из message
+            if bot:
+                await bot.send_message(
+                    chat_id=message.chat.id,
+                    text=welcome_text,
+                    reply_markup=keyboard
+                )
+            else:
+                await message.answer(welcome_text, reply_markup=keyboard)
             
             # Сохраняем ответ бота, если есть session_manager и session_id
             if self.session_manager and session_id:

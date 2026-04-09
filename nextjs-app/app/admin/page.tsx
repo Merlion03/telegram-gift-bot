@@ -23,6 +23,7 @@ import type { SupportSession } from '@/types/support';
 export default function AdminPage() {
   const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [userRole, setUserRole] = useState<number | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [selectedSession, setSelectedSession] = useState<SupportSession | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -171,7 +172,9 @@ export default function AdminPage() {
       });
       
       if (response.ok) {
+        const data = await response.json();
         setIsAuthenticated(true);
+        setUserRole(data.role); // Сохраняем роль пользователя
       } else {
         // Токен невалиден - редирект на логин
         console.log('Токен невалиден, редирект на /login');
@@ -370,7 +373,7 @@ export default function AdminPage() {
                   </div>
                 }
               >
-                <ChatWindow session={selectedSession} />
+                <ChatWindow session={selectedSession} userRole={userRole} />
               </ErrorBoundary>
             ) : (
               <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: 'var(--tg-theme-secondary-bg-color, #efeff4)' }}>

@@ -53,13 +53,14 @@ async def startup_event():
     Инициализация при запуске приложения
     
     Инициализирует подключение к базе данных и создает таблицы если их нет.
+    Инициализирует StateResetService для endpoint сброса состояния.
     """
     logger.info("api_server_starting")
     
     # Загрузка конфигурации
     config = get_config()
     
-    # Инициализация подключения к БД
+    # Инициализация подключения к БД (SQLAlchemy)
     init_database(
         database_url=config.database.connection_url,
         pool_size=config.database.pool_size,
@@ -67,11 +68,62 @@ async def startup_event():
         pool_pre_ping=config.database.pool_pre_ping
     )
     
+    # Инициализация asyncpg connection pool для AdminRepository
+    from database.asyncpg_connection import initialize_asyncpg_pool
+    await initialize_asyncpg_pool(
+        database_url=config.database.connection_url,
+        min_size=5,
+        max_size=20
+    )
+    
     # Создание таблиц если их нет
     db = get_database()
     await db.create_tables()
     
+    # Инициализация компонентов для StateResetService
+    from aiogram import Bot
+    from fsm.storage import create_fsm_storage
+    from handlers.common_handler import CommonHandler
+    from services.session_manager import SessionManager
+    from services.state_reset_service import StateResetService
+    from database.repository import SupportRepository
+    from handlers.admin_start_handler import AdminStartHandler
+    from database.repositories.admin_repository import AdminRepository
+    
+    # Создание бота
+    bot = Bot(token=config.bot.token)
+    
+    # Создание FSM storage
+    storage = create_fsm_storage(config.fsm)
+    
+    # Создание SupportRepository и SessionManager
+    support_repository = SupportRepository(None)  # Использует глобальное подключение
+    session_manager = SessionManager(support_repository)
+    
+    # Создание AdminRepository и AdminStartHandler
+    admin_repository = AdminRepository()
+    admin_start_handler = AdminStartHandler(
+        admin_repository=admin_repository,
+        session_manager=session_manager,
+        webapp_url=config.app.webapp_url
+    )
+    
+    # Создание CommonHandler
+    common_handler = CommonHandler(session_manager, admin_start_handler)
+    
+    # Создание StateResetService
+    state_reset_service = StateResetService(
+        bot=bot,
+        common_handler=common_handler,
+        session_manager=session_manager,
+        storage=storage
+    )
+    
+    # Сохранение StateResetService в app.state для доступа из endpoint
+    app.state.state_reset_service = state_reset_service
+    
     logger.info("api_server_started")
+    logger.info("state_reset_service_initialized")
 
 
 @app.on_event("shutdown")
@@ -83,6 +135,11 @@ async def shutdown_event():
     """
     logger.info("api_server_shutting_down")
     
+    # Закрытие asyncpg connection pool
+    from database.asyncpg_connection import close_asyncpg_pool
+    await close_asyncpg_pool()
+    
+    # Закрытие SQLAlchemy подключения
     db = get_database()
     await db.close()
     
@@ -405,6 +462,21 @@ class DeliveryNotificationRequest(BaseModel):
     message_id: Optional[int] = Field(None, description="ID сообщения с кнопкой для удаления")
 
 
+class ResetStateRequest(BaseModel):
+    """Модель запроса на сброс состояния пользователя"""
+    telegram_id: int = Field(..., description="Telegram ID пользователя", gt=0)
+    session_id: int = Field(..., description="ID сессии поддержки", gt=0)
+    admin_id: str = Field(..., description="ID администратора для логирования")
+
+
+class ResetStateResponse(BaseModel):
+    """Модель ответа на сброс состояния"""
+    success: bool = Field(..., description="Статус операции")
+    message: str = Field(..., description="Сообщение о результате")
+    telegram_id: int = Field(..., description="Telegram ID пользователя")
+    session_id: int = Field(..., description="ID сессии")
+
+
 @app.post(
     "/bot/delivery-notification",
     summary="Отправить уведомления о доставке",
@@ -552,6 +624,130 @@ async def send_delivery_notification(request: DeliveryNotificationRequest):
             detail={
                 "error": "Failed to send notification",
                 "message": "Не удалось отправить уведомление"
+            }
+        )
+
+
+@app.post(
+    "/api/bot/reset-state",
+    response_model=ResetStateResponse,
+    responses={
+        200: {
+            "description": "Состояние пользователя успешно сброшено",
+            "model": ResetStateResponse
+        },
+        400: {
+            "description": "Невалидные входные данные",
+            "model": ErrorResponse
+        },
+        500: {
+            "description": "Ошибка при сбросе состояния",
+            "model": ErrorResponse
+        }
+    },
+    summary="Сбросить состояние пользователя",
+    description="Сбрасывает FSM состояние пользователя и отправляет команду /start"
+)
+async def reset_state(request: ResetStateRequest):
+    """
+    Сбрасывает состояние пользователя и отправляет команду /start
+    
+    Validates: Requirements 3.1, 3.2, 3.3, 8.4, 8.5
+    
+    Args:
+        request: Данные запроса (telegram_id, session_id, admin_id)
+    
+    Returns:
+        ResetStateResponse: Результат операции
+    
+    Raises:
+        HTTPException 400: Если входные данные невалидны
+        HTTPException 500: Если произошла ошибка при сбросе состояния
+    """
+    # Логирование входящего запроса
+    logger.info(
+        "reset_state_request_received",
+        telegram_id=request.telegram_id,
+        session_id=request.session_id,
+        admin_id=request.admin_id
+    )
+    
+    try:
+        # Получаем StateResetService из app.state
+        state_reset_service = app.state.state_reset_service
+        
+        # Вызываем метод сброса состояния
+        result = await state_reset_service.reset_user_state(
+            telegram_id=request.telegram_id,
+            session_id=request.session_id,
+            admin_id=request.admin_id
+        )
+        
+        # Логирование успешного сброса
+        logger.info(
+            "reset_state_success",
+            telegram_id=request.telegram_id,
+            session_id=request.session_id,
+            admin_id=request.admin_id
+        )
+        
+        return ResetStateResponse(
+            success=result["success"],
+            message=result["message"],
+            telegram_id=result["telegram_id"],
+            session_id=result["session_id"]
+        )
+    
+    except ValueError as e:
+        # Ошибка валидации входных данных
+        logger.error(
+            "reset_state_validation_error",
+            telegram_id=request.telegram_id,
+            session_id=request.session_id,
+            admin_id=request.admin_id,
+            error=str(e)
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "Invalid request",
+                "message": str(e)
+            }
+        )
+    
+    except RuntimeError as e:
+        # Ошибка при сбросе состояния (FSM, handler invocation, database)
+        logger.error(
+            "reset_state_runtime_error",
+            telegram_id=request.telegram_id,
+            session_id=request.session_id,
+            admin_id=request.admin_id,
+            error=str(e),
+            exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "FSM error",
+                "message": "Не удалось сбросить состояние пользователя"
+            }
+        )
+    
+    except Exception as e:
+        # Неожиданная ошибка
+        logger.error(
+            "reset_state_unexpected_error",
+            telegram_id=request.telegram_id,
+            session_id=request.session_id,
+            admin_id=request.admin_id,
+            error=str(e),
+            exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "Internal server error",
+                "message": "Произошла внутренняя ошибка"
             }
         )
 

@@ -20,9 +20,11 @@ import {
   getMessageAnimationClass,
 } from '@/lib/telegram-utils';
 import { MediaRenderer } from '@/components/MediaRenderer';
+import { ResetStateButton } from './ResetStateButton';
 
 interface ChatWindowProps {
   session: SupportSession;
+  userRole?: number; // 2 = admin, 3 = operator
 }
 
 /**
@@ -30,14 +32,13 @@ interface ChatWindowProps {
  * Поддерживает работу с Chat_Session и Support_Session
  * Requirements: 4.1, 4.2, 4.3, 7.2, 7.3, 7.5, 8.1
  */
-export function ChatWindow({ session }: ChatWindowProps) {
+export function ChatWindow({ session, userRole }: ChatWindowProps) {
   const [messages, setMessages] = useState<SupportMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isConnecting, setIsConnecting] = useState(false);
   const [currentSessionType, setCurrentSessionType] = useState<'chat' | 'support'>(session.session_type);
   const [hasMore, setHasMore] = useState(false);
   const [totalMessages, setTotalMessages] = useState(0);
@@ -246,43 +247,6 @@ export function ChatWindow({ session }: ChatWindowProps) {
   }, [messages.length, hasMore, isLoadingMore]);
 
   /**
-   * Подключается к Chat_Session, преобразуя её в Support_Session
-   * Requirements: 4.1, 4.3
-   */
-  const handleConnectToChat = async () => {
-    setIsConnecting(true);
-    setError(null);
-
-    try {
-      const response = await fetch(`/api/support/sessions/${session.id}/convert`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Не удалось подключиться к диалогу');
-      }
-
-      const data = await response.json();
-
-      // Обновляем тип сессии
-      if (data.session && data.session.session_type) {
-        setCurrentSessionType(data.session.session_type);
-      }
-
-      // Перезагружаем сообщения
-      await loadMessages();
-    } catch (err) {
-      console.error('Ошибка подключения к диалогу:', err);
-      setError(getReadableErrorMessage(err));
-    } finally {
-      setIsConnecting(false);
-    }
-  };
-
   /**
    * Отправляет ответ пользователю через новый API endpoint
    * Автоматически преобразует Chat_Session в Support_Session при первом сообщении
@@ -436,20 +400,6 @@ export function ChatWindow({ session }: ChatWindowProps) {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {/* Кнопка подключения к Chat_Session (Requirements 4.1) */}
-              {currentSessionType === 'chat' && session.status === 'active' && (
-                <button
-                  onClick={handleConnectToChat}
-                  disabled={isConnecting}
-                  className="px-4 py-2 text-sm rounded-xl font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{
-                    backgroundColor: 'var(--tg-theme-button-color, #3390ec)',
-                    color: 'var(--tg-theme-button-text-color, #ffffff)',
-                  }}
-                >
-                  {isConnecting ? 'Подключение...' : 'Подключиться к диалогу'}
-                </button>
-              )}
               {session.status === 'active' && (
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium" style={{
                   backgroundColor: '#34c75920',
@@ -659,6 +609,19 @@ export function ChatWindow({ session }: ChatWindowProps) {
             </div>
           </div>
         </form>
+      )}
+
+      {/* Кнопка сброса состояния пользователя */}
+      {session.status === 'active' && userRole !== undefined && userRole >= 0 && userRole <= 3 && (
+        <div className="mx-4 mb-4">
+          <ResetStateButton
+            sessionId={session.id}
+            telegramId={session.telegram_id}
+            userRole={userRole}
+            sessionStatus={session.status}
+            onError={(errorMessage) => setError(errorMessage)}
+          />
+        </div>
       )}
 
       {/* Сообщение о завершённой сессии */}

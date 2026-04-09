@@ -169,13 +169,14 @@ export class DatabaseClient {
           s.first_name,
           s.last_name,
           s.username,
+          s.help_needed,
           COUNT(CASE WHEN m.message_type = 'from_user' AND m.delivered = false THEN 1 END) as unread_count,
           MAX(m.message_text) as last_message,
           MAX(m.created_at) as last_message_at
         FROM support_sessions s
         LEFT JOIN support_messages m ON s.id = m.session_id
         ${whereClause}
-        GROUP BY s.id, s.telegram_id, s.status, s.session_type, s.created_at, s.closed_at, s.first_name, s.last_name, s.username
+        GROUP BY s.id, s.telegram_id, s.status, s.session_type, s.created_at, s.closed_at, s.first_name, s.last_name, s.username, s.help_needed
         ORDER BY COALESCE(MAX(m.created_at), s.created_at) DESC
         LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
       `;
@@ -200,6 +201,8 @@ export class DatabaseClient {
           ? `${row.first_name} ${row.last_name}` 
           : row.first_name || undefined,
         user_username: row.username || undefined,
+        // Флаг запроса помощи (Requirements 5.8)
+        help_needed: row.help_needed || false,
       }));
 
       const has_more = offset + sessions.length < total;
@@ -379,6 +382,82 @@ export class DatabaseClient {
     } catch (error) {
       console.error('Error marking message as delivered:', error);
       throw new Error('Failed to mark message as delivered');
+    }
+  }
+
+  /**
+   * Отмечает все непрочитанные сообщения от пользователя как доставленные
+   * Используется при открытии диалога оператором для обнуления счётчика непрочитанных
+   * @param sessionId - ID сессии поддержки
+   * @returns Количество обновлённых сообщений
+   * 
+   * Validates: Requirements 3.1, 3.2
+   * Bug_Condition: isBugCondition1 - отсутствие метода для массового обновления delivered
+   * Expected_Behavior: метод обновляет все непрочитанные сообщения от пользователя
+   * Preservation: существующий метод markMessageAsDelivered(messageId) продолжает работать
+   */
+  async markMessagesAsDelivered(sessionId: number): Promise<number> {
+    if (sessionId < 1) {
+      throw new Error('Session ID must be >= 1');
+    }
+
+    try {
+      const query = `
+        UPDATE support_messages
+        SET delivered = true
+        WHERE session_id = $1 
+          AND message_type = 'from_user' 
+          AND delivered = false
+      `;
+
+      const result = await this.pool.query(query, [sessionId]);
+      const updatedCount = result.rowCount || 0;
+
+      console.log(`[markMessagesAsDelivered] Marked ${updatedCount} messages as delivered for session ${sessionId}`);
+
+      return updatedCount;
+    } catch (error) {
+      console.error(`[markMessagesAsDelivered] Error marking messages as delivered for session ${sessionId}:`, error);
+      throw new Error('Failed to mark messages as delivered');
+    }
+  }
+
+  /**
+   * Устанавливает флаг help_needed для сессии
+   * Используется при нажатии пользователем кнопки "Нужна помощь" или при сбросе флага оператором
+   * @param sessionId - ID сессии поддержки
+   * @param helpNeeded - Значение флага (true = нужна помощь, false = помощь не требуется)
+   * @returns true если обновление успешно
+   * 
+   * Validates: Requirements 4.1, 4.2
+   * Bug_Condition: isBugCondition2 - отсутствие метода для установки help_needed
+   * Expected_Behavior: метод устанавливает флаг help_needed в БД
+   */
+  async setHelpNeeded(sessionId: number, helpNeeded: boolean): Promise<boolean> {
+    if (sessionId < 1) {
+      throw new Error('Session ID must be >= 1');
+    }
+
+    try {
+      const query = `
+        UPDATE support_sessions
+        SET help_needed = $1
+        WHERE id = $2
+      `;
+
+      const result = await this.pool.query(query, [helpNeeded, sessionId]);
+      const success = result.rowCount !== null && result.rowCount > 0;
+
+      if (success) {
+        console.log(`[setHelpNeeded] Set help_needed=${helpNeeded} for session ${sessionId}`);
+      } else {
+        console.warn(`[setHelpNeeded] Session ${sessionId} not found`);
+      }
+
+      return success;
+    } catch (error) {
+      console.error(`[setHelpNeeded] Error setting help_needed for session ${sessionId}:`, error);
+      throw new Error('Failed to set help_needed flag');
     }
   }
 

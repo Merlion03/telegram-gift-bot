@@ -19,9 +19,17 @@ echo "[Entrypoint] Применение миграций..."
 echo "[Entrypoint] Применение миграции 001: создание таблиц..."
 PGPASSWORD=$POSTGRES_PASSWORD psql -h "$POSTGRES_HOST" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /app/migrations/001_create_tables.sql
 
+# Исправление DEFAULT значений
+echo "[Entrypoint] Применение миграции 002: исправление DEFAULT значений..."
+PGPASSWORD=$POSTGRES_PASSWORD psql -h "$POSTGRES_HOST" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /app/migrations/002_fix_created_at_default.sql
+
 # Создание триггеров
 echo "[Entrypoint] Применение миграции 005: realtime триггеры..."
 PGPASSWORD=$POSTGRES_PASSWORD psql -h "$POSTGRES_HOST" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /app/migrations/005_realtime_triggers.sql
+
+# Добавление поля help_needed
+echo "[Entrypoint] Применение миграции 015: добавление поля help_needed..."
+PGPASSWORD=$POSTGRES_PASSWORD psql -h "$POSTGRES_HOST" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /app/migrations/015_add_help_needed_field.sql
 
 echo "[Entrypoint] Все миграции применены успешно!"
 

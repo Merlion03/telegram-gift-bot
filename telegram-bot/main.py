@@ -240,17 +240,25 @@ class BotApplication:
         Регистрирует middleware в диспетчере
         
         Middleware выполняются в порядке регистрации, поэтому MessageInterceptor
-        регистрируется первым для перехвата всех сообщений до обработчиков.
+        и CallbackInterceptor регистрируются первыми для перехвата всех событий до обработчиков.
         
         Args:
-            session_manager: Менеджер сессий для MessageInterceptor
+            session_manager: Менеджер сессий для interceptors
         """
+        from middleware.callback_interceptor import CallbackInterceptor
+        
         # Создание MessageInterceptor
         message_interceptor = MessageInterceptor(session_manager)
+        
+        # Создание CallbackInterceptor
+        callback_interceptor = CallbackInterceptor(session_manager)
         
         # Регистрация middleware для всех входящих сообщений
         # Middleware выполняется ДО всех handlers
         self.dp.message.middleware(message_interceptor)
+        
+        # Регистрация middleware для всех callback query
+        self.dp.callback_query.middleware(callback_interceptor)
         
         self.logger.info("middleware_registered")
     

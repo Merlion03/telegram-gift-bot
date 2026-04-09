@@ -60,6 +60,9 @@ class SupportSession(Base):
         index=True
     )
     
+    # Флаг запроса помощи пользователем через кнопку "Нужна помощь"
+    help_needed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    
     # Информация о пользователе из Telegram
     first_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     last_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
@@ -81,6 +84,7 @@ class SupportSession(Base):
         created_at: Optional[datetime] = None,
         closed_at: Optional[datetime] = None,
         last_activity: Optional[datetime] = None,
+        help_needed: bool = False,
         first_name: Optional[str] = None,
         last_name: Optional[str] = None,
         username: Optional[str] = None,
@@ -96,6 +100,7 @@ class SupportSession(Base):
             created_at: Время создания (по умолчанию текущее время UTC)
             closed_at: Время закрытия (опционально)
             last_activity: Время последней активности (по умолчанию текущее время UTC)
+            help_needed: Флаг запроса помощи пользователем (по умолчанию False)
             first_name: Имя пользователя из Telegram (опционально)
             last_name: Фамилия пользователя из Telegram (опционально)
             username: Username пользователя из Telegram (опционально)
@@ -107,6 +112,7 @@ class SupportSession(Base):
         self.created_at = created_at if created_at is not None else datetime.now(timezone.utc)
         self.closed_at = closed_at
         self.last_activity = last_activity if last_activity is not None else datetime.now(timezone.utc)
+        self.help_needed = help_needed
         self.first_name = first_name
         self.last_name = last_name
         self.username = username
@@ -146,6 +152,37 @@ class SupportSession(Base):
         """Закрывает сессию"""
         self.status = 'closed'
         self.closed_at = datetime.now(timezone.utc)
+    
+    def set_help_needed(self, value: bool) -> None:
+        """
+        Устанавливает флаг запроса помощи пользователем
+        
+        Args:
+            value: Значение флага (True - помощь нужна, False - помощь не нужна)
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        self.help_needed = value
+        logger.info(
+            f"Установлен флаг help_needed={value} для сессии {self.id} "
+            f"(telegram_id={self.telegram_id})"
+        )
+    
+    def reset_help_needed(self) -> None:
+        """
+        Сбрасывает флаг запроса помощи пользователем в False
+        
+        Используется когда оператор открывает диалог и читает сообщения
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        self.help_needed = False
+        logger.info(
+            f"Сброшен флаг help_needed для сессии {self.id} "
+            f"(telegram_id={self.telegram_id})"
+        )
     
     def get_user_display_name(self) -> str:
         """

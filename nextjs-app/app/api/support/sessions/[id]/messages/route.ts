@@ -87,7 +87,8 @@ export async function GET(
     }
 
     // Параметр фильтрации команд (Requirements 8.4)
-    const filterCommands = filterCommandsParam !== 'false'; // По умолчанию true
+    // По умолчанию false - показываем все команды согласно Requirement 3
+    const filterCommands = filterCommandsParam === 'true'; // По умолчанию false
 
     const db = getDb();
 
@@ -99,6 +100,26 @@ export async function GET(
         { error: 'Session not found', message: 'Сессия не найдена' },
         { status: 404 }
       );
+    }
+
+    // Обновление флагов при открытии диалога оператором (Bug Fix: Requirements 3.1, 3.2, 3.3, 4.6)
+    try {
+      // Помечаем все непрочитанные сообщения от пользователя как доставленные
+      const updatedCount = await db.markMessagesAsDelivered(sessionId);
+      console.log(`Marked ${updatedCount} messages as delivered for session ${sessionId}`);
+
+      // Сбрасываем флаг help_needed если он был установлен
+      if (supportSession.help_needed) {
+        await db.setHelpNeeded(sessionId, false);
+        console.log(`Reset help_needed flag for session ${sessionId}`);
+      }
+    } catch (flagUpdateError) {
+      // Логируем ошибку, но не прерываем загрузку сообщений (Preservation: Requirements 3.1, 3.2, 4.6)
+      console.error('Failed to update message flags:', {
+        session_id: sessionId,
+        error: flagUpdateError instanceof Error ? flagUpdateError.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      });
     }
 
     // Получаем сообщения с учётом параметров

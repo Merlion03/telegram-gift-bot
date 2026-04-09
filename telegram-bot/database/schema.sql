@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS support_sessions (
     first_name VARCHAR(255),
     last_name VARCHAR(255),
     username VARCHAR(255),
+    help_needed BOOLEAN NOT NULL DEFAULT FALSE, -- Флаг запроса помощи пользователем через кнопку "Нужна помощь"
     
     -- Constraints для проверки значений
     CONSTRAINT chk_status CHECK (status IN ('active', 'closed')),
@@ -29,6 +30,7 @@ CREATE INDEX IF NOT EXISTS idx_sessions_telegram_active ON support_sessions(tele
 CREATE INDEX IF NOT EXISTS idx_sessions_created_desc ON support_sessions(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_support_sessions_last_activity ON support_sessions(last_activity) WHERE status = 'active';
 CREATE INDEX IF NOT EXISTS idx_support_sessions_user_info ON support_sessions(first_name, last_name, username);
+CREATE INDEX IF NOT EXISTS idx_support_sessions_help_needed ON support_sessions(help_needed);
 
 -- Таблица сообщений поддержки
 CREATE TABLE IF NOT EXISTS support_messages (
@@ -79,6 +81,7 @@ COMMENT ON COLUMN support_sessions.last_activity IS 'Время последне
 COMMENT ON COLUMN support_sessions.first_name IS 'Имя пользователя из Telegram';
 COMMENT ON COLUMN support_sessions.last_name IS 'Фамилия пользователя из Telegram';
 COMMENT ON COLUMN support_sessions.username IS 'Username пользователя в Telegram (без @)';
+COMMENT ON COLUMN support_sessions.help_needed IS 'Флаг запроса помощи пользователем через кнопку "Нужна помощь"';
 
 COMMENT ON COLUMN support_messages.session_id IS 'ID сессии поддержки';
 COMMENT ON COLUMN support_messages.telegram_id IS 'Telegram ID отправителя';

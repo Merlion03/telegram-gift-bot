@@ -19,6 +19,7 @@ services:
       - ./telegram-bot/database/migrations/005_realtime_triggers.sql:/docker-entrypoint-initdb.d/06-realtime-triggers.sql
       - ./telegram-bot/database/migrations/006_add_last_activity.sql:/docker-entrypoint-initdb.d/07-add-last-activity.sql
       - ./telegram-bot/database/migrations/014_fix_default_values.sql:/docker-entrypoint-initdb.d/08-fix-default-values.sql
+      - ./telegram-bot/database/migrations/015_add_help_needed_field.sql:/docker-entrypoint-initdb.d/09-add-help-needed-field.sql
     ports:
       - "5433:5432"
     healthcheck:

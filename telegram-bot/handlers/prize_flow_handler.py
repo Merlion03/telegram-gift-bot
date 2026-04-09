@@ -40,7 +40,9 @@ from constants import (
     CONSENT_BACK_MESSAGE,
     INVALID_CONSENT_RESPONSE,
     EMPTY_CODE_WORD_HINT,
-    INVALID_CODE_WORD,
+    INVALID_CODE_WORD_ATTEMPT_1,
+    INVALID_CODE_WORD_ATTEMPT_2,
+    INVALID_CODE_WORD_ATTEMPT_3_PLUS,
     PRIZE_ERROR_AFTER_VALIDATION,
     MISSING_PROMO_CODE_ERROR,
     ERROR_SERVICE_UNAVAILABLE,
@@ -787,11 +789,19 @@ class PrizeFlowHandler:
                             error=str(e)
                         )
                 
+                # Определяем текст сообщения в зависимости от количества попыток
+                if invalid_attempts == 1:
+                    error_message = INVALID_CODE_WORD_ATTEMPT_1
+                elif invalid_attempts == 2:
+                    error_message = INVALID_CODE_WORD_ATTEMPT_2
+                else:  # 3 и более попыток
+                    error_message = INVALID_CODE_WORD_ATTEMPT_3_PLUS
+                
                 # Определяем, показывать ли кнопку "Нужна помощь" (после 3-х попыток)
                 show_help = invalid_attempts >= 3
                 
                 sent_message = await message.answer(
-                    INVALID_CODE_WORD,
+                    error_message,
                     reply_markup=get_invalid_code_keyboard(show_help=show_help)
                 )
                 
@@ -809,7 +819,7 @@ class PrizeFlowHandler:
                     try:
                         await self.session_manager.save_bot_message(
                             session_id=session_id,
-                            message_text=INVALID_CODE_WORD
+                            message_text=error_message
                         )
                     except Exception as e:
                         logger.error(
@@ -1456,6 +1466,39 @@ class PrizeFlowHandler:
                     error=str(e)
                 )
         
+        # Устанавливаем флаг help_needed для активной сессии пользователя
+        if self.session_manager:
+            try:
+                # Получаем активную сессию пользователя
+                session = await self.session_manager.repository.get_user_active_session(telegram_id)
+                
+                if session:
+                    # Устанавливаем флаг help_needed
+                    session.set_help_needed(True)
+                    
+                    # Сохраняем изменения в БД через контекстный менеджер
+                    async with self.session_manager.repository._get_session_context() as db_session:
+                        db_session.add(session)
+                        await db_session.flush()
+                    
+                    logger.info(
+                        f"Set help_needed flag for session {session.id}",
+                        session_id=session.id,
+                        telegram_id=telegram_id
+                    )
+                else:
+                    logger.warning(
+                        "no_active_session_found_for_help_needed",
+                        telegram_id=telegram_id
+                    )
+            except Exception as e:
+                logger.error(
+                    "failed_to_set_help_needed_flag",
+                    telegram_id=telegram_id,
+                    error=str(e)
+                )
+                # Не прерываем отправку сообщения если установка флага провалилась
+        
         # Закрываем callback
         await callback.answer()
         
@@ -1571,6 +1614,39 @@ class PrizeFlowHandler:
                     session_id=session_id,
                     error=str(e)
                 )
+        
+        # Устанавливаем флаг help_needed для активной сессии пользователя
+        if self.session_manager:
+            try:
+                # Получаем активную сессию пользователя
+                session = await self.session_manager.repository.get_user_active_session(telegram_id)
+                
+                if session:
+                    # Устанавливаем флаг help_needed
+                    session.set_help_needed(True)
+                    
+                    # Сохраняем изменения в БД используя правильный паттерн
+                    async with self.session_manager.repository._get_session_context() as db_session:
+                        db_session.add(session)
+                        await db_session.flush()
+                    
+                    logger.info(
+                        f"Set help_needed flag for session {session.id}",
+                        session_id=session.id,
+                        telegram_id=telegram_id
+                    )
+                else:
+                    logger.warning(
+                        "no_active_session_found_for_help_needed",
+                        telegram_id=telegram_id
+                    )
+            except Exception as e:
+                logger.error(
+                    "failed_to_set_help_needed_flag",
+                    telegram_id=telegram_id,
+                    error=str(e)
+                )
+                # Не прерываем отправку сообщения если установка флага провалилась
         
         # Закрываем callback
         await callback.answer()

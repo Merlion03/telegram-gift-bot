@@ -32,6 +32,8 @@ export interface SupportSession {
   unread_count?: number; // Количество непрочитанных сообщений
   last_message?: string; // Текст последнего сообщения
   last_message_at?: string; // Время последнего сообщения (ISO 8601 timestamp)
+  /** Флаг запроса помощи пользователем */
+  help_needed?: boolean;
   // Дополнительные поля для UI (опциональные)
   user_avatar?: string; // URL аватара пользователя
   user_name?: string; // Имя пользователя

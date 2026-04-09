@@ -549,12 +549,19 @@ export function SessionList({ onSelectSession, selectedSessionId }: SessionListP
                       {/* Счётчик непрочитанных сообщений */}
                       {session.unread_count !== undefined && session.unread_count > 0 && (
                         <div className="flex-shrink-0 flex flex-col items-end gap-1">
-                          <span className="flex items-center justify-center text-xs font-bold rounded-full w-6 h-6 min-w-[24px]" style={{
-                            backgroundColor: '#ff3b30',
-                            color: '#ffffff',
-                          }}>
-                            {session.unread_count > 99 ? '99+' : session.unread_count}
-                          </span>
+                          {(() => {
+                            // Зелёный цвет для "Нужна помощь", красный для обычных непрочитанных
+                            const counterColor = session.help_needed && session.unread_count > 0 ? '#34c759' : '#ff3b30';
+                            
+                            return (
+                              <span className="flex items-center justify-center text-xs font-bold rounded-full w-6 h-6 min-w-[24px]" style={{
+                                backgroundColor: counterColor,
+                                color: '#ffffff',
+                              }}>
+                                {session.unread_count > 99 ? '99+' : session.unread_count}
+                              </span>
+                            );
+                          })()}
                         </div>
                       )}
                     </div>
