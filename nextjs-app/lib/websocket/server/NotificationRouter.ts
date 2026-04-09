@@ -26,6 +26,10 @@ interface PostgresNewMessagePayload {
   message_text: string;
   created_at: string;
   is_read: boolean;
+  media_type?: string;
+  file_path?: string;
+  caption?: string;
+  file_size?: number;
 }
 
 /**
@@ -89,13 +93,18 @@ export class NotificationRouter {
   async handleNotification(channel: string, payload: string): Promise<void> {
     console.log(`[NotificationRouter] 📨 Получено уведомление:`, {
       channel,
-      payload: payload.substring(0, 100), // Логируем первые 100 символов
+      payloadLength: payload.length,
+      payloadPreview: payload.substring(0, 200), // Логируем первые 200 символов
       timestamp: new Date().toISOString(),
     });
     
     try {
       // Парсим JSON payload
       const parsedPayload = JSON.parse(payload);
+      console.log(`[NotificationRouter] 📋 Распарсенный payload:`, {
+        channel,
+        parsedPayload,
+      });
       
       // Определяем тип уведомления и создаём соответствующее сообщение
       const message = this.createMessageFromPayload(channel, parsedPayload);
@@ -105,8 +114,18 @@ export class NotificationRouter {
         return;
       }
       
+      console.log(`[NotificationRouter] ✅ Создано сообщение:`, {
+        channel,
+        messageType: message.type,
+        message,
+      });
+      
       // Определяем целевые каналы для маршрутизации
       const targetChannels = this.getTargetChannels(channel, parsedPayload);
+      console.log(`[NotificationRouter] 🎯 Целевые каналы:`, {
+        sourceChannel: channel,
+        targetChannels,
+      });
       
       // Отправляем уведомление всем целевым каналам
       for (const targetChannel of targetChannels) {
@@ -117,7 +136,8 @@ export class NotificationRouter {
       console.error(`[NotificationRouter] ❌ Ошибка обработки уведомления:`, {
         channel,
         error: error instanceof Error ? error.message : String(error),
-        payload: payload.substring(0, 100),
+        stack: error instanceof Error ? error.stack : undefined,
+        payload: payload.substring(0, 200),
       });
       
       // Не пробрасываем ошибку дальше - логируем и продолжаем работу
@@ -295,6 +315,10 @@ export class NotificationRouter {
           message_text: data.message_text,
           created_at: data.created_at,
           is_read: data.is_read ?? false,
+          media_type: data.media_type,
+          file_path: data.file_path,
+          caption: data.caption,
+          file_size: data.file_size,
         },
       };
       
@@ -339,6 +363,10 @@ export class NotificationRouter {
           message_text: data.message_text,
           created_at: data.created_at,
           is_read: false, // Новые сообщения всегда непрочитанные
+          media_type: data.media_type,
+          file_path: data.file_path,
+          caption: data.caption,
+          file_size: data.file_size,
         },
       };
       
@@ -381,6 +409,8 @@ export class NotificationRouter {
    * Логика маршрутизации:
    * - Для канала new_message: маршрутизируем к session_<session_id> и all_messages
    *   (уведомление должно получить и конкретная сессия, и все админы)
+   * - Для канала session_status_change: маршрутизируем к status_changes и session_<session_id>
+   * - Для канала session_type_change: маршрутизируем к type_changes и session_<session_id>
    * - Для всех остальных каналов: маршрутизация 1:1 (отправляем в исходный канал)
    * 
    * @param channel - Исходный канал PostgreSQL
@@ -396,14 +426,20 @@ export class NotificationRouter {
       ];
     }
     
-    // Для канала session_status_change маршрутизируем к status_changes
-    if (channel === 'session_status_change') {
-      return ['status_changes'];
+    // Для канала session_status_change маршрутизируем к status_changes и конкретной сессии
+    if (channel === 'session_status_change' && payload.session_id) {
+      return [
+        'status_changes',
+        `session_${payload.session_id}`
+      ];
     }
     
-    // Для канала session_type_change маршрутизируем к type_changes
-    if (channel === 'session_type_change') {
-      return ['type_changes'];
+    // Для канала session_type_change маршрутизируем к type_changes и конкретной сессии
+    if (channel === 'session_type_change' && payload.session_id) {
+      return [
+        'type_changes',
+        `session_${payload.session_id}`
+      ];
     }
     
     // Для всех остальных каналов - маршрутизация 1:1 (сохраняем существующее поведение)

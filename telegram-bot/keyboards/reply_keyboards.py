@@ -49,7 +49,7 @@ def get_consent_keyboard() -> InlineKeyboardMarkup:
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(
-                text="Согласен", 
+                text="Продолжить", 
                 callback_data="consent_agree",
                 style="success",
                 icon_custom_emoji_id="5379890388750330965"
@@ -62,6 +62,68 @@ def get_consent_keyboard() -> InlineKeyboardMarkup:
             )]
         ]
     )
+    return keyboard
+
+
+def get_user_not_found_keyboard() -> InlineKeyboardMarkup:
+    """
+    Создаёт inline клавиатуру для случая, когда пользователь не найден в списке победителей.
+    
+    Клавиатура содержит кнопки для возврата в главное меню или запроса помощи.
+    
+    Returns:
+        InlineKeyboardMarkup: Клавиатура с кнопками "Назад" и "Нужна помощь"
+    """
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(
+                text="Назад", 
+                callback_data="back_to_main_menu",
+                style="primary",
+                icon_custom_emoji_id="5316911646906541152"
+            )],
+            [InlineKeyboardButton(
+                text="Нужна помощь", 
+                callback_data="need_help",
+                style="success",
+                icon_custom_emoji_id="5314181313094193732"
+            )]
+        ]
+    )
+    return keyboard
+
+
+def get_invalid_code_keyboard(show_help: bool = False) -> InlineKeyboardMarkup:
+    """
+    Создаёт inline клавиатуру для случая неправильного кодового слова.
+    
+    Клавиатура содержит кнопку "Назад" и опционально кнопку "Нужна помощь"
+    (после 3-х неправильных попыток).
+    
+    Args:
+        show_help: Показывать ли кнопку "Нужна помощь" (после 3-х попыток)
+    
+    Returns:
+        InlineKeyboardMarkup: Клавиатура с кнопками "Назад" и опционально "Нужна помощь"
+    """
+    buttons = [
+        [InlineKeyboardButton(
+            text="Назад", 
+            callback_data="invalid_code_back",
+            style="primary",
+            icon_custom_emoji_id="5316911646906541152"
+        )]
+    ]
+    
+    if show_help:
+        buttons.append([InlineKeyboardButton(
+            text="Нужна помощь", 
+            callback_data="invalid_code_help",
+            style="success",
+            icon_custom_emoji_id="5314181313094193732"
+        )])
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     return keyboard
 
 
@@ -100,8 +162,20 @@ def get_delivery_actions_keyboard(prize_id: int, webapp_url: str) -> InlineKeybo
     
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="◀️ Назад", callback_data=f"confirm_delivery:{prize_id}")],
-            [InlineKeyboardButton(text="✏️ Изменить данные", web_app=WebAppInfo(url=form_url))]
+            [InlineKeyboardButton(
+                text="Назад", 
+                callback_data=f"back_to_menu:{prize_id}",
+                style="primary",
+                icon_custom_emoji_id="5316911646906541152"
+            )],
+            [InlineKeyboardButton(
+                text="Изменить данные", 
+                web_app=WebAppInfo(url=form_url),
+                style="success",
+                icon_custom_emoji_id="5274056321493115109"
+            )]
         ]
     )
     return keyboard
+
+

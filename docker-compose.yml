@@ -12,12 +12,13 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./telegram-bot/database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
-      - ./telegram-bot/database/migrations/011_create_prizes_table.sql:/docker-entrypoint-initdb.d/02-create-prizes.sql
-      - ./telegram-bot/database/migrations/012_add_country_postal_code_to_prizes.sql:/docker-entrypoint-initdb.d/03-add-country-postal-code.sql
-      - ./telegram-bot/database/migrations/013_add_is_archived_to_prizes.sql:/docker-entrypoint-initdb.d/04-add-is-archived.sql
-      - ./telegram-bot/database/migrations/005_realtime_triggers.sql:/docker-entrypoint-initdb.d/05-realtime-triggers.sql
-      - ./telegram-bot/database/migrations/006_add_last_activity.sql:/docker-entrypoint-initdb.d/06-add-last-activity.sql
-      - ./telegram-bot/database/migrations/014_fix_default_values.sql:/docker-entrypoint-initdb.d/07-fix-default-values.sql
+      - ./telegram-bot/database/migrations/009_create_admin_tables.sql:/docker-entrypoint-initdb.d/02-create-admin-tables.sql
+      - ./telegram-bot/database/migrations/011_create_prizes_table.sql:/docker-entrypoint-initdb.d/03-create-prizes.sql
+      - ./telegram-bot/database/migrations/012_add_country_postal_code_to_prizes.sql:/docker-entrypoint-initdb.d/04-add-country-postal-code.sql
+      - ./telegram-bot/database/migrations/013_add_is_archived_to_prizes.sql:/docker-entrypoint-initdb.d/05-add-is-archived.sql
+      - ./telegram-bot/database/migrations/005_realtime_triggers.sql:/docker-entrypoint-initdb.d/06-realtime-triggers.sql
+      - ./telegram-bot/database/migrations/006_add_last_activity.sql:/docker-entrypoint-initdb.d/07-add-last-activity.sql
+      - ./telegram-bot/database/migrations/014_fix_default_values.sql:/docker-entrypoint-initdb.d/08-fix-default-values.sql
     ports:
       - "5433:5432"
     healthcheck:
@@ -67,6 +68,8 @@ services:
     volumes:
       # Монтируем credentials для Google Sheets (read-only)
       - ${GOOGLE_CREDENTIALS_HOST_PATH:-./credentials/google-credentials.json}:/app/credentials/google-credentials.json:ro
+      # Shared volume для медиафайлов
+      - media_files:/app/media
     networks:
       - app-network
     healthcheck:
@@ -243,6 +246,8 @@ services:
     volumes:
       # Монтируем credentials для Google Sheets (read-only)
       - ${GOOGLE_CREDENTIALS_HOST_PATH:-./credentials/google-credentials.json}:/app/credentials/google-credentials.json:ro
+      # Shared volume для медиафайлов (read-only для webapp)
+      - media_files:/telegram-bot/media:ro
     ports:
       - "${WEBAPP_PORT:-3000}:3000"
     networks:
@@ -282,6 +287,9 @@ volumes:
   redis_data:
     driver: local
     name: telegram_system_redis_data
+  media_files:
+    driver: local
+    name: telegram_system_media_files
 
 # Изолированная сеть для всех сервисов
 networks:

@@ -25,11 +25,14 @@ from services.prize_service import (
 from database.repositories.prize_repository import DatabaseUnavailableError
 from keyboards.reply_keyboards import (
     get_main_menu_keyboard,
-    get_consent_keyboard
+    get_consent_keyboard,
+    get_user_not_found_keyboard,
+    get_invalid_code_keyboard
 )
 from fsm.states import PrizeFlowStates
 from config import get_config
 from utils.logging_config import get_logger
+from utils.keyboard_utils import remove_inline_keyboard
 from constants import (
     USER_NOT_FOUND_IN_PRIZE_TABLE,
     GDPR_CONSENT_REQUEST,
@@ -42,6 +45,7 @@ from constants import (
     MISSING_PROMO_CODE_ERROR,
     ERROR_SERVICE_UNAVAILABLE,
     get_digital_prize_congratulations,
+    get_welcome_message,
     DIGITAL_PRIZE_DEFAULT_INSTRUCTIONS,
     DIGITAL_PRIZE_MENU_MESSAGE,
     PHYSICAL_PRIZE_INSTRUCTION,
@@ -111,6 +115,9 @@ class PrizeFlowHandler:
             state: FSM контекст
             session_id: ID сессии из middleware (опционально)
         """
+        # Удаляем inline-клавиатуру из сообщения
+        await remove_inline_keyboard(callback, logger)
+        
         # Просто вызываем start_prize_flow, передавая callback вместо message
         await self.start_prize_flow_from_callback(callback, state, session_id)
         
@@ -149,7 +156,7 @@ class PrizeFlowHandler:
                 # Пользователь не найден в таблице призов
                 await callback.message.answer(
                     USER_NOT_FOUND_IN_PRIZE_TABLE,
-                    reply_markup=get_main_menu_keyboard()
+                    reply_markup=get_user_not_found_keyboard()
                 )
                 
                 # Сохраняем ответ бота
@@ -179,7 +186,8 @@ class PrizeFlowHandler:
                 # Запрос согласия на обработку персональных данных
                 await callback.message.answer(
                     GDPR_CONSENT_REQUEST,
-                    reply_markup=get_consent_keyboard()
+                    reply_markup=get_consent_keyboard(),
+                    parse_mode='HTML'
                 )
                 
                 # Устанавливаем состояние ожидания согласия
@@ -208,8 +216,9 @@ class PrizeFlowHandler:
             # Шаг 3: Запрос кодового слова (если согласие уже есть)
             await callback.message.answer(CODE_WORD_REQUEST)
             
-            # Устанавливаем состояние ожидания кодового слова
+            # Устанавливаем состояние ожидания кодового слова и сбрасываем счётчик попыток
             await state.set_state(PrizeFlowStates.waiting_for_code_word)
+            await state.update_data(invalid_code_attempts=0, last_error_message_id=None)
             
             # Сохраняем ответ бота
             if self.session_manager and session_id:
@@ -298,7 +307,7 @@ class PrizeFlowHandler:
                 # Пользователь не найден в таблице призов
                 await message.answer(
                     USER_NOT_FOUND_IN_PRIZE_TABLE,
-                    reply_markup=get_main_menu_keyboard()
+                    reply_markup=get_user_not_found_keyboard()
                 )
                 
                 # Сохраняем ответ бота
@@ -328,7 +337,8 @@ class PrizeFlowHandler:
                 # Запрос согласия на обработку персональных данных
                 await message.answer(
                     GDPR_CONSENT_REQUEST,
-                    reply_markup=get_consent_keyboard()
+                    reply_markup=get_consent_keyboard(),
+                    parse_mode='HTML'
                 )
                 
                 # Устанавливаем состояние ожидания согласия
@@ -359,8 +369,9 @@ class PrizeFlowHandler:
                     reply_markup=ReplyKeyboardRemove()
                 )
                 
-                # Устанавливаем состояние ожидания кодового слова
+                # Устанавливаем состояние ожидания кодового слова и сбрасываем счётчик попыток
                 await state.set_state(PrizeFlowStates.waiting_for_code_word)
+                await state.update_data(invalid_code_attempts=0, last_error_message_id=None)
                 
                 # Сохраняем ответ бота
                 if self.session_manager and session_id:
@@ -438,6 +449,9 @@ class PrizeFlowHandler:
         telegram_id = callback.from_user.id
         callback_data = callback.data
         
+        # Удаляем inline-клавиатуру из сообщения
+        await remove_inline_keyboard(callback, logger)
+        
         logger.info(
             "handling_consent_callback",
             telegram_id=telegram_id,
@@ -454,8 +468,9 @@ class PrizeFlowHandler:
                 # Запрашиваем кодовое слово
                 await callback.message.answer(CODE_WORD_REQUEST)
                 
-                # Устанавливаем состояние ожидания кодового слова
+                # Устанавливаем состояние ожидания кодового слова и сбрасываем счётчик попыток
                 await state.set_state(PrizeFlowStates.waiting_for_code_word)
+                await state.update_data(invalid_code_attempts=0, last_error_message_id=None)
                 
                 # Сохраняем ответ бота
                 if self.session_manager and session_id:
@@ -609,8 +624,9 @@ class PrizeFlowHandler:
                     reply_markup=ReplyKeyboardRemove()
                 )
                 
-                # Устанавливаем состояние ожидания кодового слова
+                # Устанавливаем состояние ожидания кодового слова и сбрасываем счётчик попыток
                 await state.set_state(PrizeFlowStates.waiting_for_code_word)
+                await state.update_data(invalid_code_attempts=0, last_error_message_id=None)
                 
                 # Сохраняем ответ бота
                 if self.session_manager and session_id:
@@ -751,8 +767,39 @@ class PrizeFlowHandler:
             is_valid = await self.prize_service.validate_code_word(telegram_id, code_word)
             
             if not is_valid:
-                # Неверное кодовое слово
-                await message.answer(INVALID_CODE_WORD)
+                # Неверное кодовое слово - увеличиваем счётчик попыток
+                state_data = await state.get_data()
+                invalid_attempts = state_data.get('invalid_code_attempts', 0) + 1
+                last_error_message_id = state_data.get('last_error_message_id')
+                
+                # Удаляем клавиатуру из предыдущего сообщения с ошибкой (если есть)
+                if last_error_message_id:
+                    try:
+                        await message.bot.edit_message_reply_markup(
+                            chat_id=message.chat.id,
+                            message_id=last_error_message_id,
+                            reply_markup=None
+                        )
+                    except Exception as e:
+                        # Игнорируем ошибки (сообщение могло быть удалено)
+                        logger.debug(
+                            "failed_to_remove_keyboard_from_previous_message",
+                            error=str(e)
+                        )
+                
+                # Определяем, показывать ли кнопку "Нужна помощь" (после 3-х попыток)
+                show_help = invalid_attempts >= 3
+                
+                sent_message = await message.answer(
+                    INVALID_CODE_WORD,
+                    reply_markup=get_invalid_code_keyboard(show_help=show_help)
+                )
+                
+                # Сохраняем ID нового сообщения с кнопками
+                await state.update_data(
+                    invalid_code_attempts=invalid_attempts,
+                    last_error_message_id=sent_message.message_id
+                )
                 
                 # Сохраняем состояние waiting_for_code_word (остаёмся в нём)
                 # Состояние уже установлено, ничего не меняем
@@ -774,7 +821,8 @@ class PrizeFlowHandler:
                 logger.info(
                     "invalid_code_word",
                     telegram_id=telegram_id,
-                    code_word=code_word
+                    code_word=code_word,
+                    invalid_attempts=invalid_attempts
                 )
                 return
             
@@ -800,7 +848,8 @@ class PrizeFlowHandler:
                     keyboard = get_delivery_actions_keyboard(prize_result.prize_id, self.webapp_url)
                     await message.answer(
                         DELIVERY_DATA_ALREADY_FILLED,
-                        reply_markup=keyboard
+                        reply_markup=keyboard,
+                        parse_mode="HTML"
                     )
                     
                     # Сбрасываем состояние
@@ -1045,15 +1094,12 @@ class PrizeFlowHandler:
         # Разделение сообщения если необходимо
         message_parts = MessageFormatter.split_message_if_needed(text, telegram_id)
         
-        # Отправка сообщения(й)
+        # Отправка сообщения(й) с промокодами БЕЗ кнопки
         for i, part in enumerate(message_parts):
-            # Кнопка только в последнем сообщении
-            keyboard = get_main_menu_keyboard() if i == len(message_parts) - 1 else None
-            
             await message.answer(
                 part,
                 parse_mode="HTML",
-                reply_markup=keyboard,
+                reply_markup=None,
                 disable_web_page_preview=True
             )
             
@@ -1070,6 +1116,29 @@ class PrizeFlowHandler:
                         session_id=session_id,
                         error=str(e)
                     )
+        
+        # Отправляем отдельное сообщение из /start с кнопкой "Получить приз"
+        username = message.from_user.username or message.from_user.first_name
+        welcome_text = get_welcome_message(username)
+        
+        await message.answer(
+            welcome_text,
+            reply_markup=get_main_menu_keyboard()
+        )
+        
+        # Сохранение приветственного сообщения
+        if self.session_manager and session_id:
+            try:
+                await self.session_manager.save_bot_message(
+                    session_id=session_id,
+                    message_text=welcome_text
+                )
+            except Exception as e:
+                logger.error(
+                    "failed_to_save_bot_response",
+                    session_id=session_id,
+                    error=str(e)
+                )
         
         # Сбрасываем FSM состояние
         await state.clear()
@@ -1114,45 +1183,56 @@ class PrizeFlowHandler:
             session_id=session_id
         )
         
-        # Отправляем инструкцию по заполнению формы
-        await message.answer(PHYSICAL_PRIZE_INSTRUCTION)
-        
-        # Сохраняем инструкцию
-        if self.session_manager and session_id:
-            try:
-                await self.session_manager.save_bot_message(
-                    session_id=session_id,
-                    message_text=PHYSICAL_PRIZE_INSTRUCTION
-                )
-            except Exception as e:
-                logger.error(
-                    "failed_to_save_bot_response",
-                    session_id=session_id,
-                    error=str(e)
-                )
-        
         # Формируем URL для WebApp с prize_id
         webapp_url = f"{self.webapp_url.rstrip('/')}/webapp?prize_id={prize_result.prize_id}"
         
         # Создаём Inline-кнопку с WebApp
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(
-                text="📦 Указать данные доставки",
-                web_app=WebAppInfo(url=webapp_url)
+                text="Заполнить форму", 
+                web_app=WebAppInfo(url=webapp_url),
+                icon_custom_emoji_id="5274056321493115109",
+                style="success"
             )]
         ])
         
-        await message.answer(
-            PHYSICAL_PRIZE_BUTTON_TEXT,
-            reply_markup=keyboard
+        # Объединяем инструкцию и кнопку в одно сообщение
+        combined_message = f"{PHYSICAL_PRIZE_INSTRUCTION}\n\n{PHYSICAL_PRIZE_BUTTON_TEXT}"
+        
+        # Отправляем сообщение с инструкцией и WebApp кнопкой
+        sent_message = await message.answer(
+            combined_message,
+            reply_markup=keyboard,
+            parse_mode='HTML'
         )
         
-        # Сохраняем сообщение с кнопкой
+        # Обновляем URL с message_id для последующего удаления клавиатуры
+        webapp_url_with_message = f"{webapp_url}&message_id={sent_message.message_id}"
+        keyboard_updated = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(
+                text="Заполнить форму", 
+                web_app=WebAppInfo(url=webapp_url_with_message),
+                icon_custom_emoji_id="5274056321493115109",
+                style="success"
+            )]
+        ])
+        
+        # Обновляем кнопку с message_id в URL
+        await sent_message.edit_reply_markup(reply_markup=keyboard_updated)
+        
+        logger.info(
+            "webapp_message_id_added_to_url",
+            telegram_id=telegram_id,
+            webapp_message_id=sent_message.message_id,
+            prize_id=prize_result.prize_id
+        )
+        
+        # Сохраняем объединённое сообщение
         if self.session_manager and session_id:
             try:
                 await self.session_manager.save_bot_message(
                     session_id=session_id,
-                    message_text=PHYSICAL_PRIZE_BUTTON_TEXT
+                    message_text=combined_message
                 )
             except Exception as e:
                 logger.error(
@@ -1181,6 +1261,9 @@ class PrizeFlowHandler:
     ) -> None:
         """
         Обрабатывает нажатие на кнопку "Получить приз" для уже заполненной формы.
+        
+        ПРИМЕЧАНИЕ: Этот метод больше не обрабатывает кнопку "Назад".
+        Кнопка "Назад" теперь обрабатывается методом handle_back_to_menu_callback.
         
         Отправляет подтверждающее сообщение и главное меню.
         
@@ -1217,3 +1300,285 @@ class PrizeFlowHandler:
         # Подтверждаем callback
         await callback.answer("Данные отправлены!")
 
+    async def handle_back_to_menu_callback(
+        self,
+        callback: CallbackQuery,
+        state: FSMContext,
+        prize_id: int,
+        session_id: Optional[int] = None
+    ) -> None:
+        """
+        Обрабатывает нажатие на кнопку "Назад" в процессе получения физического приза.
+        
+        Возвращает пользователя в главное меню без отправки уведомлений о доставке.
+        Используется когда пользователь уже заполнил форму доставки и хочет просто
+        вернуться в меню, не подтверждая повторно отправку данных.
+        
+        Args:
+            callback: Callback от inline кнопки
+            state: FSM контекст
+            prize_id: ID приза
+            session_id: ID сессии из middleware (опционально)
+        """
+        telegram_id = callback.from_user.id
+        
+        logger.info(
+            "back_to_menu_callback",
+            telegram_id=telegram_id,
+            prize_id=prize_id,
+            session_id=session_id
+        )
+        
+        # Удаляем inline-клавиатуру из сообщения
+        await callback.message.edit_reply_markup(reply_markup=None)
+        
+        # Отправляем главное меню
+        await callback.message.answer(
+            text="Если вы выиграли в конкурсе и знаете кодовое слово, нажмите «Получить приз».",
+            reply_markup=get_main_menu_keyboard()
+        )
+        
+        # Закрываем callback без всплывающего уведомления
+        await callback.answer()
+        
+        # Сбрасываем FSM состояние
+        await state.clear()
+        
+        logger.info(
+            "back_to_menu_completed",
+            telegram_id=telegram_id,
+            prize_id=prize_id
+        )
+
+
+    async def handle_back_to_main_menu_callback(
+        self,
+        callback: CallbackQuery,
+        state: FSMContext,
+        session_id: Optional[int] = None
+    ) -> None:
+        """
+        Обрабатывает нажатие на кнопку "Назад" когда пользователь не найден в списке победителей.
+        
+        Возвращает пользователя в главное меню.
+        
+        Args:
+            callback: Callback от inline кнопки
+            state: FSM контекст
+            session_id: ID сессии из middleware (опционально)
+        """
+        telegram_id = callback.from_user.id
+        username = callback.from_user.username or callback.from_user.first_name
+        
+        logger.info(
+            "back_to_main_menu_callback",
+            telegram_id=telegram_id,
+            session_id=session_id
+        )
+        
+        # Удаляем inline-клавиатуру из сообщения
+        await callback.message.edit_reply_markup(reply_markup=None)
+        
+        # Отправляем приветственное сообщение с главным меню
+        welcome_text = get_welcome_message(username)
+        await callback.message.answer(
+            text=welcome_text,
+            reply_markup=get_main_menu_keyboard()
+        )
+        
+        # Сохраняем ответ бота
+        if self.session_manager and session_id:
+            try:
+                await self.session_manager.save_bot_message(
+                    session_id=session_id,
+                    message_text=welcome_text
+                )
+            except Exception as e:
+                logger.error(
+                    "failed_to_save_bot_response",
+                    session_id=session_id,
+                    error=str(e)
+                )
+        
+        # Закрываем callback
+        await callback.answer()
+        
+        # Сбрасываем FSM состояние
+        await state.clear()
+        
+        logger.info(
+            "back_to_main_menu_completed",
+            telegram_id=telegram_id
+        )
+
+    async def handle_need_help_callback(
+        self,
+        callback: CallbackQuery,
+        state: FSMContext,
+        session_id: Optional[int] = None
+    ) -> None:
+        """
+        Обрабатывает нажатие на кнопку "Нужна помощь" когда пользователь не найден в списке победителей.
+        
+        Отправляет сообщение в чат о том, что всё будет проверено.
+        
+        Args:
+            callback: Callback от inline кнопки
+            state: FSM контекст
+            session_id: ID сессии из middleware (опционально)
+        """
+        telegram_id = callback.from_user.id
+        
+        logger.info(
+            "need_help_callback",
+            telegram_id=telegram_id,
+            session_id=session_id
+        )
+        
+        # Удаляем inline-клавиатуру из сообщения
+        await callback.message.edit_reply_markup(reply_markup=None)
+        
+        # Отправляем сообщение о проверке
+        help_message = "Всё проверю и вернусь. Пожалуйста, подождите."
+        await callback.message.answer(text=help_message)
+        
+        # Сохраняем ответ бота
+        if self.session_manager and session_id:
+            try:
+                await self.session_manager.save_bot_message(
+                    session_id=session_id,
+                    message_text=help_message
+                )
+            except Exception as e:
+                logger.error(
+                    "failed_to_save_bot_response",
+                    session_id=session_id,
+                    error=str(e)
+                )
+        
+        # Закрываем callback
+        await callback.answer()
+        
+        # Сбрасываем FSM состояние
+        await state.clear()
+        
+        logger.info(
+            "need_help_completed",
+            telegram_id=telegram_id
+        )
+
+    async def handle_invalid_code_back_callback(
+        self,
+        callback: CallbackQuery,
+        state: FSMContext,
+        session_id: Optional[int] = None
+    ) -> None:
+        """
+        Обрабатывает нажатие на кнопку "Назад" после неправильного ввода кодового слова.
+        
+        Возвращает пользователя в главное меню и сбрасывает счётчик попыток.
+        
+        Args:
+            callback: Callback от inline кнопки
+            state: FSM контекст
+            session_id: ID сессии из middleware (опционально)
+        """
+        telegram_id = callback.from_user.id
+        username = callback.from_user.username or callback.from_user.first_name
+        
+        logger.info(
+            "invalid_code_back_callback",
+            telegram_id=telegram_id,
+            session_id=session_id
+        )
+        
+        # Удаляем inline-клавиатуру из сообщения
+        await callback.message.edit_reply_markup(reply_markup=None)
+        
+        # Отправляем приветственное сообщение с главным меню
+        welcome_text = get_welcome_message(username)
+        await callback.message.answer(
+            text=welcome_text,
+            reply_markup=get_main_menu_keyboard()
+        )
+        
+        # Сохраняем ответ бота
+        if self.session_manager and session_id:
+            try:
+                await self.session_manager.save_bot_message(
+                    session_id=session_id,
+                    message_text=welcome_text
+                )
+            except Exception as e:
+                logger.error(
+                    "failed_to_save_bot_response",
+                    session_id=session_id,
+                    error=str(e)
+                )
+        
+        # Закрываем callback
+        await callback.answer()
+        
+        # Сбрасываем FSM состояние (включая счётчик попыток)
+        await state.clear()
+        
+        logger.info(
+            "invalid_code_back_completed",
+            telegram_id=telegram_id
+        )
+
+    async def handle_invalid_code_help_callback(
+        self,
+        callback: CallbackQuery,
+        state: FSMContext,
+        session_id: Optional[int] = None
+    ) -> None:
+        """
+        Обрабатывает нажатие на кнопку "Нужна помощь" после 3-х неправильных попыток ввода кодового слова.
+        
+        Отправляет сообщение о проверке и сбрасывает состояние.
+        
+        Args:
+            callback: Callback от inline кнопки
+            state: FSM контекст
+            session_id: ID сессии из middleware (опционально)
+        """
+        telegram_id = callback.from_user.id
+        
+        logger.info(
+            "invalid_code_help_callback",
+            telegram_id=telegram_id,
+            session_id=session_id
+        )
+        
+        # Удаляем inline-клавиатуру из сообщения
+        await callback.message.edit_reply_markup(reply_markup=None)
+        
+        # Отправляем сообщение о проверке
+        help_message = "Всё проверю и вернусь. Пожалуйста, подождите."
+        await callback.message.answer(text=help_message)
+        
+        # Сохраняем ответ бота
+        if self.session_manager and session_id:
+            try:
+                await self.session_manager.save_bot_message(
+                    session_id=session_id,
+                    message_text=help_message
+                )
+            except Exception as e:
+                logger.error(
+                    "failed_to_save_bot_response",
+                    session_id=session_id,
+                    error=str(e)
+                )
+        
+        # Закрываем callback
+        await callback.answer()
+        
+        # Сбрасываем FSM состояние (включая счётчик попыток)
+        await state.clear()
+        
+        logger.info(
+            "invalid_code_help_completed",
+            telegram_id=telegram_id
+        )

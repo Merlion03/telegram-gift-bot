@@ -3,7 +3,7 @@
 """
 
 from aiogram import Bot
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, ReplyKeyboardRemove
 from services.role_service import RoleService
 from utils.logging_config import get_logger
 
@@ -14,7 +14,7 @@ class AdminNotificationService:
     """
     Сервис для отправки уведомлений новым администраторам
     
-    Отправляет уведомление с Reply Keyboard, содержащей кнопку WebApp
+    Отправляет уведомление с Inline Keyboard, содержащей кнопку WebApp
     для доступа к административной панели.
     
     Validates: Requirements 5.1, 5.2, 5.3, 5.4
@@ -37,8 +37,8 @@ class AdminNotificationService:
         
         Логика:
         1. Формирует текст уведомления с указанием роли
-        2. Создаёт Reply Keyboard с кнопкой WebApp
-        3. Отправляет сообщение через Bot API
+        2. Создаёт Inline Keyboard с кнопкой WebApp
+        3. Отправляет сообщение через Bot API с удалением ReplyKeyboard
         4. Обрабатывает ошибки отправки
         
         Args:
@@ -67,10 +67,10 @@ class AdminNotificationService:
                 f"Нажмите кнопку ниже для доступа к административной панели."
             )
             
-            # Создаём Reply Keyboard с кнопкой WebApp
+            # Создаём Inline Keyboard с кнопкой WebApp
             keyboard = self._create_admin_keyboard()
             
-            # Отправляем уведомление
+            # Отправляем уведомление с удалением ReplyKeyboard
             await self._bot.send_message(
                 chat_id=tg_id,
                 text=notification_text,
@@ -111,12 +111,12 @@ class AdminNotificationService:
                 }
             )
     
-    def _create_admin_keyboard(self) -> ReplyKeyboardMarkup:
+    def _create_admin_keyboard(self) -> InlineKeyboardMarkup:
         """
-        Создаёт Reply Keyboard с кнопкой WebApp для админ-панели
+        Создаёт Inline Keyboard с кнопкой WebApp для админ-панели
         
         Returns:
-            ReplyKeyboardMarkup с кнопкой доступа к WebApp
+            InlineKeyboardMarkup с кнопкой доступа к WebApp
         
         Validates: Requirements 5.3
         """
@@ -124,16 +124,14 @@ class AdminNotificationService:
         admin_url = f"{self._webapp_url.rstrip('/')}/admin"
         
         # Создаём кнопку с WebApp
-        webapp_button = KeyboardButton(
-            text="🔐 Админ-панель",
+        webapp_button = InlineKeyboardButton(
+            text="🔐 Открыть админ-панель",
             web_app=WebAppInfo(url=admin_url)
         )
         
-        # Создаём клавиатуру
-        keyboard = ReplyKeyboardMarkup(
-            keyboard=[[webapp_button]],
-            resize_keyboard=True,
-            one_time_keyboard=False
+        # Создаём inline-клавиатуру
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[[webapp_button]]
         )
         
         return keyboard

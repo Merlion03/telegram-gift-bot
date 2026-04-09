@@ -89,6 +89,21 @@ class MessageInterceptor:
             )
             return await handler(event, data)
         
+        # Получаем FSM state для проверки режима поддержки
+        from fsm.states import SupportStates
+        state = data.get('state')
+        current_state = None
+        
+        if state:
+            try:
+                current_state = await state.get_state()
+            except Exception:
+                pass
+        
+        # Если пользователь в режиме поддержки, не сохраняем сообщение здесь
+        # Оно будет сохранено в SupportHandler
+        in_support_mode = current_state == SupportStates.in_support
+        
         # Пытаемся создать/получить сессию и сохранить сообщение
         try:
             # Получаем или создаём активную сессию с информацией о пользователе
@@ -103,37 +118,50 @@ class MessageInterceptor:
             # Сохраняем session_id в контексте для использования в handlers
             data['session_id'] = session_id
             
-            # Извлекаем текст и file_id из сообщения
-            message_text = self._extract_message_text(event)
-            file_id = self._extract_file_id(event)
+            # Сохраняем сообщение только если НЕ в режиме поддержки
+            # И только если это НЕ медиа-сообщение (медиа обрабатывается в MediaHandler)
+            has_media = self._has_media(event)
             
-            # Сохраняем сообщение пользователя
-            try:
-                await self.session_manager.save_user_message(
-                    session_id=session_id,
-                    telegram_id=telegram_id,
-                    message_text=message_text,
-                    file_id=file_id
-                )
+            if not in_support_mode and not has_media:
+                # Извлекаем текст и file_id из сообщения
+                message_text = self._extract_message_text(event)
+                file_id = self._extract_file_id(event)
                 
+                # Сохраняем сообщение пользователя
+                try:
+                    await self.session_manager.save_user_message(
+                        session_id=session_id,
+                        telegram_id=telegram_id,
+                        message_text=message_text,
+                        file_id=file_id
+                    )
+                    
+                    logger.debug(
+                        "user_message_intercepted_and_saved",
+                        session_id=session_id,
+                        telegram_id=telegram_id,
+                        has_text=bool(message_text),
+                        has_file=file_id is not None
+                    )
+                
+                except Exception as e:
+                    # Логируем ошибку сохранения, но не блокируем обработку
+                    logger.error(
+                        "failed_to_save_user_message",
+                        session_id=session_id,
+                        telegram_id=telegram_id,
+                        error=str(e),
+                        exc_info=True
+                    )
+                    # Продолжаем обработку сообщения
+            else:
                 logger.debug(
-                    "user_message_intercepted_and_saved",
-                    session_id=session_id,
+                    "message_skipped_in_interceptor",
                     telegram_id=telegram_id,
-                    has_text=bool(message_text),
-                    has_file=file_id is not None
-                )
-            
-            except Exception as e:
-                # Логируем ошибку сохранения, но не блокируем обработку
-                logger.error(
-                    "failed_to_save_user_message",
                     session_id=session_id,
-                    telegram_id=telegram_id,
-                    error=str(e),
-                    exc_info=True
+                    in_support_mode=in_support_mode,
+                    has_media=has_media
                 )
-                # Продолжаем обработку сообщения
         
         except Exception as e:
             # Логируем ошибку создания сессии, но не блокируем обработку
@@ -214,6 +242,26 @@ class MessageInterceptor:
             return "[GIF]"
         else:
             return "[Медиа-контент]"
+    
+    def _has_media(self, message: Message) -> bool:
+        """
+        Проверяет, содержит ли сообщение медиа-контент
+        
+        Args:
+            message: Сообщение для проверки
+            
+        Returns:
+            True если сообщение содержит медиа, False иначе
+        """
+        return bool(
+            message.photo or
+            message.document or
+            message.video or
+            message.audio or
+            message.voice or
+            message.sticker or
+            message.animation
+        )
     
     def _extract_file_id(self, message: Message) -> Optional[str]:
         """

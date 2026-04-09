@@ -402,6 +402,57 @@ class BotApplication:
             StateFilter(PrizeFlowStates.waiting_for_consent)
         )
         
+        # Callback для кнопки "Назад" в процессе получения физического приза
+        async def back_to_menu_callback_wrapper(callback: CallbackQuery, state: FSMContext, **kwargs):
+            session_id = kwargs.get('session_id')
+            prize_id = int(callback.data.split(':')[1])
+            await prize_flow_handler.handle_back_to_menu_callback(callback, state, prize_id, session_id)
+        
+        self.dp.callback_query.register(
+            back_to_menu_callback_wrapper,
+            F.data.startswith("back_to_menu:")
+        )
+        
+        # Callback для кнопки "Назад" когда пользователь не найден в списке победителей
+        async def back_to_main_menu_callback_wrapper(callback: CallbackQuery, state: FSMContext, **kwargs):
+            session_id = kwargs.get('session_id')
+            await prize_flow_handler.handle_back_to_main_menu_callback(callback, state, session_id)
+        
+        self.dp.callback_query.register(
+            back_to_main_menu_callback_wrapper,
+            F.data == "back_to_main_menu"
+        )
+        
+        # Callback для кнопки "Нужна помощь" когда пользователь не найден в списке победителей
+        async def need_help_callback_wrapper(callback: CallbackQuery, state: FSMContext, **kwargs):
+            session_id = kwargs.get('session_id')
+            await prize_flow_handler.handle_need_help_callback(callback, state, session_id)
+        
+        self.dp.callback_query.register(
+            need_help_callback_wrapper,
+            F.data == "need_help"
+        )
+        
+        # Callback для кнопки "Назад" после неправильного ввода кодового слова
+        async def invalid_code_back_callback_wrapper(callback: CallbackQuery, state: FSMContext, **kwargs):
+            session_id = kwargs.get('session_id')
+            await prize_flow_handler.handle_invalid_code_back_callback(callback, state, session_id)
+        
+        self.dp.callback_query.register(
+            invalid_code_back_callback_wrapper,
+            F.data == "invalid_code_back"
+        )
+        
+        # Callback для кнопки "Нужна помощь" после 3-х неправильных попыток ввода кодового слова
+        async def invalid_code_help_callback_wrapper(callback: CallbackQuery, state: FSMContext, **kwargs):
+            session_id = kwargs.get('session_id')
+            await prize_flow_handler.handle_invalid_code_help_callback(callback, state, session_id)
+        
+        self.dp.callback_query.register(
+            invalid_code_help_callback_wrapper,
+            F.data == "invalid_code_help"
+        )
+        
         # Callback для кнопок действий с заполненной формой доставки
         async def confirm_delivery_callback_wrapper(callback: CallbackQuery, state: FSMContext, **kwargs):
             session_id = kwargs.get('session_id')
@@ -423,6 +474,19 @@ class BotApplication:
             support_end_callback_wrapper,
             F.data == "support_end",
             StateFilter(SupportStates.in_support)
+        )
+        
+        # Fallback обработчик для всех остальных сообщений в default_state
+        # Автоматически создаёт сессию поддержки и обрабатывает сообщение
+        async def fallback_support_message_wrapper(message: Message, state: FSMContext, **kwargs):
+            """Обработчик для сообщений, не попавших в другие handlers - автоматически создаёт сессию поддержки"""
+            session_id = kwargs.get('session_id')
+            # Автоматически переводим в режим поддержки
+            await support_handler.handle_support_message(message, state, session_id)
+        
+        self.dp.message.register(
+            fallback_support_message_wrapper,
+            StateFilter(default_state)
         )
         
         self.logger.info("handlers_registered")

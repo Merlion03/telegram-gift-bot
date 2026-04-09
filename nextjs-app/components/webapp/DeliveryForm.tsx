@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -88,6 +88,7 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
   const [error, setError] = useState<string | null>(null);
   const [isFormSubmitted, setIsFormSubmitted] = useState(false); // Состояние для блокировки формы после успешной отправки
   const [successMessage, setSuccessMessage] = useState<string | null>(null); // Состояние для отображения сообщения об успехе
+  const formRef = useRef<HTMLFormElement>(null); // Ref для прокрутки формы вверх
   
   const {
     isOpen,
@@ -112,6 +113,13 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
     console.log('openModal вызван');
   };
   
+  // Функция для прокрутки формы вверх
+  const scrollToTop = () => {
+    if (formRef.current) {
+      formRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+  
   const handleConfirmSubmit = async () => {
     setIsSubmitting(true);
     setError(null);
@@ -127,6 +135,9 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
         throw new Error('InitData недоступны. Откройте форму через Telegram.');
       }
       
+      // Получаем message_id из sessionStorage если есть
+      const messageId = sessionStorage.getItem('webapp_message_id');
+      
       // Отправка данных на API
       const response = await fetch('/api/delivery', {
         method: 'POST',
@@ -137,6 +148,7 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
           ...deliveryData,
           prize_id: prizeId,
           initData: initDataRaw,
+          message_id: messageId ? parseInt(messageId, 10) : undefined,
         }),
       });
       
@@ -159,7 +171,7 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
       setIsFormSubmitted(true);
       
       // Показываем уведомление и закрываем WebApp
-      WebApp.showAlert('Данные успешно сохранены!', () => {
+      WebApp.showAlert('Спасибо, данные сохранены.', () => {
         WebApp.close();
       });
       
@@ -176,7 +188,7 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
   
   return (
     <>
-      <form onSubmit={handleSubmit(onSubmit)} className="min-h-screen" style={{ backgroundColor: 'var(--tg-theme-secondary-bg-color, #efeff4)' }}>
+      <form ref={formRef} onSubmit={handleSubmit(onSubmit)} className="min-h-screen" style={{ backgroundColor: 'var(--tg-theme-secondary-bg-color, #efeff4)' }}>
         <style jsx>{`
           input::placeholder,
           textarea::placeholder {
@@ -644,7 +656,10 @@ export function DeliveryForm({ prizeId }: DeliveryFormProps) {
     {isOpen && deliveryData && (
       <ConfirmationModal
         isOpen={isOpen}
-        onClose={closeModal}
+        onClose={() => {
+          closeModal();
+          scrollToTop();
+        }}
         onConfirm={handleConfirmSubmit}
         deliveryData={deliveryData}
         isSubmitting={isSubmitting}

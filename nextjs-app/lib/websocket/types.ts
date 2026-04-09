@@ -79,6 +79,10 @@ export interface NewMessageMessage {
     message_text: string;
     created_at: string;
     is_read: boolean;
+    media_type?: string;
+    file_path?: string;
+    caption?: string;
+    file_size?: number;
   };
 }
 

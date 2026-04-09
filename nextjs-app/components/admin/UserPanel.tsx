@@ -120,19 +120,70 @@ export const UserPanel: React.FC<UserPanelProps> = ({
   const avatarLetter = generateAvatarLetter(user.name);
 
   return (
-    <div className="w-full md:w-80 bg-telegram-bg border-l border-telegram-border flex flex-col h-full">
+    <div className="w-full md:w-80 flex flex-col h-full" style={{ 
+      backgroundColor: 'var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #ffffff))',
+      borderLeft: '1px solid var(--tg-theme-section-separator-color, #c8c7cc)',
+    }}>
+      <style jsx>{`
+        .tg-input {
+          background-color: var(--tg-theme-secondary-bg-color, #efeff4);
+          color: var(--tg-theme-text-color, #000000);
+          border: none;
+          border-radius: 10px;
+          padding: 8px 12px;
+          transition: background-color 0.2s ease;
+        }
+        
+        .tg-input:focus {
+          outline: none;
+          background-color: var(--tg-theme-section-separator-color, #c8c7cc);
+        }
+        
+        .tg-input::placeholder {
+          color: var(--tg-theme-hint-color, #8e8e93);
+        }
+        
+        .tg-textarea {
+          background-color: var(--tg-theme-secondary-bg-color, #efeff4);
+          color: var(--tg-theme-text-color, #000000);
+          border: none;
+          border-radius: 10px;
+          padding: 8px 12px;
+          transition: background-color 0.2s ease;
+          resize: none;
+        }
+        
+        .tg-textarea:focus {
+          outline: none;
+          background-color: var(--tg-theme-section-separator-color, #c8c7cc);
+        }
+        
+        .tg-textarea::placeholder {
+          color: var(--tg-theme-hint-color, #8e8e93);
+        }
+      `}</style>
+      
       {/* Заголовок с кнопкой закрытия */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-telegram-border">
-        <h2 className="text-lg font-semibold text-telegram-text">
+      <div className="flex items-center justify-between px-4 py-3" style={{ 
+        borderBottom: '1px solid var(--tg-theme-section-separator-color, #c8c7cc)',
+      }}>
+        <h2 className="text-lg font-semibold" style={{ color: 'var(--tg-theme-text-color, #000000)' }}>
           Информация о пользователе
         </h2>
         {onClose && (
           <button
             onClick={onClose}
-            className="p-1 hover:bg-telegram-sidebar rounded-lg transition-telegram"
+            className="p-1 rounded-lg transition-all duration-200"
+            style={{ backgroundColor: 'transparent' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--tg-theme-secondary-bg-color, #efeff4)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
             aria-label="Закрыть панель"
           >
-            <X className="w-5 h-5 text-telegram-secondary" />
+            <X className="w-5 h-5" style={{ color: 'var(--tg-theme-hint-color, #8e8e93)' }} />
           </button>
         )}
       </div>
@@ -140,7 +191,9 @@ export const UserPanel: React.FC<UserPanelProps> = ({
       {/* Основной контент */}
       <div className="flex-1 overflow-y-auto">
         {/* Информация о пользователе */}
-        <div className="p-4 border-b border-telegram-border">
+        <div className="p-4" style={{ 
+          borderBottom: '1px solid var(--tg-theme-section-separator-color, #c8c7cc)',
+        }}>
           {/* Аватар и статус */}
           <div className="flex flex-col items-center mb-4">
             <div className="relative mb-3">
@@ -148,12 +201,16 @@ export const UserPanel: React.FC<UserPanelProps> = ({
                 <img
                   src={user.avatar}
                   alt={user.name}
-                  className="w-24 h-24 rounded-full object-cover border-4 border-telegram-blue"
+                  className="w-24 h-24 rounded-full object-cover border-4"
+                  style={{ borderColor: 'var(--tg-theme-button-color, #3390ec)' }}
                 />
               ) : (
                 <div
-                  className="w-24 h-24 rounded-full flex items-center justify-center text-white text-3xl font-bold border-4 border-telegram-blue"
-                  style={{ background: avatarGradient }}
+                  className="w-24 h-24 rounded-full flex items-center justify-center text-white text-3xl font-bold border-4"
+                  style={{ 
+                    background: avatarGradient,
+                    borderColor: 'var(--tg-theme-button-color, #3390ec)',
+                  }}
                 >
                   {avatarLetter}
                 </div>
@@ -161,17 +218,19 @@ export const UserPanel: React.FC<UserPanelProps> = ({
 
               {/* Индикатор онлайн статуса */}
               <div
-                className={`absolute bottom-0 right-0 w-6 h-6 rounded-full border-4 border-telegram-bg ${
-                  user.online ? 'bg-telegram-green' : 'bg-telegram-tertiary'
-                }`}
+                className="absolute bottom-0 right-0 w-6 h-6 rounded-full border-4"
+                style={{
+                  backgroundColor: user.online ? '#34c759' : 'var(--tg-theme-hint-color, #8e8e93)',
+                  borderColor: 'var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #ffffff))',
+                }}
               />
             </div>
 
             {/* Имя и статус */}
-            <h3 className="text-xl font-bold text-telegram-text text-center">
+            <h3 className="text-xl font-bold text-center" style={{ color: 'var(--tg-theme-text-color, #000000)' }}>
               {user.name}
             </h3>
-            <p className="text-sm text-telegram-secondary text-center mt-1">
+            <p className="text-sm text-center mt-1" style={{ color: 'var(--tg-theme-hint-color, #8e8e93)' }}>
               {user.online ? 'Онлайн' : `Был в сети: ${user.lastSeen || 'неизвестно'}`}
             </p>
           </div>
@@ -180,10 +239,10 @@ export const UserPanel: React.FC<UserPanelProps> = ({
           <div className="space-y-3">
             {/* Telegram ID */}
             <div className="flex items-start gap-3">
-              <span className="text-sm font-medium text-telegram-secondary min-w-fit">
+              <span className="text-sm font-medium min-w-fit" style={{ color: 'var(--tg-theme-hint-color, #8e8e93)' }}>
                 ID:
               </span>
-              <span className="text-sm text-telegram-text break-all">
+              <span className="text-sm break-all" style={{ color: 'var(--tg-theme-text-color, #000000)' }}>
                 {user.telegramId}
               </span>
             </div>
@@ -191,10 +250,10 @@ export const UserPanel: React.FC<UserPanelProps> = ({
             {/* Username */}
             {user.username && (
               <div className="flex items-start gap-3">
-                <span className="text-sm font-medium text-telegram-secondary min-w-fit">
+                <span className="text-sm font-medium min-w-fit" style={{ color: 'var(--tg-theme-hint-color, #8e8e93)' }}>
                   Username:
                 </span>
-                <span className="text-sm text-telegram-text break-all">
+                <span className="text-sm break-all" style={{ color: 'var(--tg-theme-text-color, #000000)' }}>
                   @{user.username}
                 </span>
               </div>
@@ -203,10 +262,10 @@ export const UserPanel: React.FC<UserPanelProps> = ({
             {/* Телефон */}
             {user.phone && (
               <div className="flex items-start gap-3">
-                <span className="text-sm font-medium text-telegram-secondary min-w-fit">
+                <span className="text-sm font-medium min-w-fit" style={{ color: 'var(--tg-theme-hint-color, #8e8e93)' }}>
                   Телефон:
                 </span>
-                <span className="text-sm text-telegram-text break-all">
+                <span className="text-sm break-all" style={{ color: 'var(--tg-theme-text-color, #000000)' }}>
                   {user.phone}
                 </span>
               </div>
@@ -215,10 +274,10 @@ export const UserPanel: React.FC<UserPanelProps> = ({
             {/* Email */}
             {user.email && (
               <div className="flex items-start gap-3">
-                <span className="text-sm font-medium text-telegram-secondary min-w-fit">
+                <span className="text-sm font-medium min-w-fit" style={{ color: 'var(--tg-theme-hint-color, #8e8e93)' }}>
                   Email:
                 </span>
-                <span className="text-sm text-telegram-text break-all">
+                <span className="text-sm break-all" style={{ color: 'var(--tg-theme-text-color, #000000)' }}>
                   {user.email}
                 </span>
               </div>
@@ -226,20 +285,20 @@ export const UserPanel: React.FC<UserPanelProps> = ({
 
             {/* Первый контакт */}
             <div className="flex items-start gap-3">
-              <span className="text-sm font-medium text-telegram-secondary min-w-fit">
+              <span className="text-sm font-medium min-w-fit" style={{ color: 'var(--tg-theme-hint-color, #8e8e93)' }}>
                 Первый контакт:
               </span>
-              <span className="text-sm text-telegram-text">
+              <span className="text-sm" style={{ color: 'var(--tg-theme-text-color, #000000)' }}>
                 {new Date(user.firstContact).toLocaleDateString('ru-RU')}
               </span>
             </div>
 
             {/* Всего сообщений */}
             <div className="flex items-start gap-3">
-              <span className="text-sm font-medium text-telegram-secondary min-w-fit">
+              <span className="text-sm font-medium min-w-fit" style={{ color: 'var(--tg-theme-hint-color, #8e8e93)' }}>
                 Сообщений:
               </span>
-              <span className="text-sm text-telegram-text">
+              <span className="text-sm" style={{ color: 'var(--tg-theme-text-color, #000000)' }}>
                 {user.totalMessages}
               </span>
             </div>
@@ -249,7 +308,11 @@ export const UserPanel: React.FC<UserPanelProps> = ({
           <div className="flex gap-2 mt-4">
             <button
               onClick={onOpenTelegramProfile}
-              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-telegram-blue hover:bg-telegram-dark-blue text-white rounded-lg text-sm font-medium transition-telegram"
+              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200"
+              style={{
+                backgroundColor: 'var(--tg-theme-button-color, #3390ec)',
+                color: 'var(--tg-theme-button-text-color, #ffffff)',
+              }}
             >
               <ExternalLink className="w-4 h-4" />
               Профиль
@@ -257,11 +320,15 @@ export const UserPanel: React.FC<UserPanelProps> = ({
 
             <button
               onClick={handleToggleNotifications}
-              className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-telegram ${
-                notificationsEnabled
-                  ? 'bg-telegram-blue hover:bg-telegram-dark-blue text-white'
-                  : 'bg-telegram-sidebar hover:bg-telegram-border text-telegram-text'
-              }`}
+              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200"
+              style={{
+                backgroundColor: notificationsEnabled 
+                  ? 'var(--tg-theme-button-color, #3390ec)' 
+                  : 'var(--tg-theme-secondary-bg-color, #efeff4)',
+                color: notificationsEnabled 
+                  ? 'var(--tg-theme-button-text-color, #ffffff)' 
+                  : 'var(--tg-theme-text-color, #000000)',
+              }}
             >
               {notificationsEnabled ? (
                 <>

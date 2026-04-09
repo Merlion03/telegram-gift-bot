@@ -14,6 +14,7 @@ from services.support_service import SupportService
 from fsm.states import SupportStates
 from keyboards.reply_keyboards import get_support_end_keyboard
 from handlers.media_handler import MediaHandler
+from utils.keyboard_utils import remove_inline_keyboard
 from constants import (
     SUPPORT_SESSION_STARTED,
     SUPPORT_START_ERROR,
@@ -164,28 +165,49 @@ class SupportHandler:
         try:
             # Получение session_id из FSM
             data = await state.get_data()
-            session_id = data.get('support_session_id')
+            support_session_id = data.get('support_session_id')
             
-            if not session_id:
-                logger.error(
-                    "no_session_id_in_fsm",
+            # Если сессии поддержки нет, создаём её автоматически
+            if not support_session_id:
+                logger.info(
+                    "auto_creating_support_session",
                     telegram_id=telegram_id
                 )
-                await message.answer(SUPPORT_NO_SESSION_ERROR)
-                await state.clear()
-                return
+                
+                # Проверяем, нет ли уже активной сессии
+                existing_session = await self.support_service.get_user_active_session(telegram_id)
+                
+                if existing_session:
+                    support_session_id = existing_session.id
+                    logger.info(
+                        "reusing_existing_support_session",
+                        telegram_id=telegram_id,
+                        session_id=support_session_id
+                    )
+                else:
+                    # Создаём новую сессию поддержки
+                    support_session_id = await self.support_service.create_session(telegram_id)
+                    logger.info(
+                        "support_session_auto_created",
+                        telegram_id=telegram_id,
+                        session_id=support_session_id
+                    )
+                
+                # Сохраняем session_id в FSM
+                await state.update_data(support_session_id=support_session_id)
+                await state.set_state(SupportStates.in_support)
             
             # Делегируем обработку MediaHandler
             await self.media_handler.handle_media_message(
                 message=message,
                 state=state,
-                session_id=session_id
+                session_id=support_session_id
             )
             
             logger.info(
                 "support_message_handled",
                 telegram_id=telegram_id,
-                session_id=session_id
+                session_id=support_session_id
             )
         
         except Exception as e:
@@ -206,6 +228,9 @@ class SupportHandler:
             state: FSM контекст
         """
         telegram_id = callback.from_user.id
+        
+        # Удаляем inline-клавиатуру из сообщения
+        await remove_inline_keyboard(callback, logger)
         
         logger.info(
             "ending_support_session",

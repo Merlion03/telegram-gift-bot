@@ -36,6 +36,86 @@ export default function AdminPage() {
   }, []);
 
   /**
+   * Запуск админки в полноэкранном режиме
+   */
+  useEffect(() => {
+    // Ждём инициализации Telegram WebApp
+    const initFullscreen = async () => {
+      // Ждём загрузки Telegram WebApp SDK
+      let attempts = 0;
+      const maxAttempts = 30;
+      
+      while (!window.Telegram?.WebApp && attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
+      }
+
+      const WebApp = window.Telegram?.WebApp;
+      
+      if (WebApp) {
+        // Устанавливаем цвет заголовка для полноэкранного режима
+        // Используем setBackgroundColor вместо setHeaderColor
+        if (typeof (WebApp as any).setBackgroundColor === 'function') {
+          try {
+            (WebApp as any).setBackgroundColor('secondary_bg_color');
+          } catch (error) {
+            console.warn('Ошибка установки цвета фона:', error);
+          }
+        }
+        
+        // Запрашиваем полноэкранный режим
+        if (typeof (WebApp as any).requestFullscreen === 'function') {
+          try {
+            (WebApp as any).requestFullscreen();
+            console.log('Полноэкранный режим активирован');
+          } catch (error) {
+            console.error('Ошибка активации полноэкранного режима:', error);
+          }
+        } else {
+          console.warn('requestFullscreen не поддерживается в этой версии Telegram');
+        }
+
+        // Разворачиваем WebApp на весь экран
+        if (WebApp.expand) {
+          WebApp.expand();
+        }
+
+        // Включаем вертикальные свайпы для закрытия
+        if (typeof (WebApp as any).enableVerticalSwipes === 'function') {
+          (WebApp as any).enableVerticalSwipes();
+        }
+        
+        // Добавляем обработчик для кнопки "Назад" для выхода из полноэкранного режима
+        if (WebApp.BackButton) {
+          WebApp.BackButton.onClick(() => {
+            if (typeof (WebApp as any).exitFullscreen === 'function') {
+              try {
+                (WebApp as any).exitFullscreen();
+                console.log('Выход из полноэкранного режима');
+              } catch (error) {
+                console.error('Ошибка выхода из полноэкранного режима:', error);
+              }
+            }
+          });
+          
+          // Показываем кнопку "Назад"
+          WebApp.BackButton.show();
+        }
+      }
+    };
+
+    initFullscreen();
+    
+    // Cleanup при размонтировании
+    return () => {
+      const WebApp = window.Telegram?.WebApp;
+      if (WebApp?.BackButton) {
+        WebApp.BackButton.hide();
+      }
+    };
+  }, []);
+
+  /**
    * Проверяет аутентификацию и Telegram WebApp контекст
    */
   const checkAuth = async () => {
@@ -198,8 +278,8 @@ export default function AdminPage() {
   // Показываем загрузку пока проверяем аутентификацию
   if (isAuthenticated === null) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-100">
-        <div className="text-gray-600">Проверка доступа...</div>
+      <div className="flex items-center justify-center h-screen" style={{ backgroundColor: 'var(--tg-theme-secondary-bg-color, #efeff4)' }}>
+        <div style={{ color: 'var(--tg-theme-hint-color, #8e8e93)' }}>Проверка доступа...</div>
       </div>
     );
   }
@@ -207,8 +287,8 @@ export default function AdminPage() {
   // Если не аутентифицирован, показываем загрузку (редирект в процессе)
   if (isAuthenticated === false) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-100">
-        <div className="text-gray-600">Перенаправление...</div>
+      <div className="flex items-center justify-center h-screen" style={{ backgroundColor: 'var(--tg-theme-secondary-bg-color, #efeff4)' }}>
+        <div style={{ color: 'var(--tg-theme-hint-color, #8e8e93)' }}>Перенаправление...</div>
       </div>
     );
   }
@@ -216,9 +296,13 @@ export default function AdminPage() {
   // Показываем ошибку если есть
   if (error) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-100">
-        <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8">
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+      <div className="flex items-center justify-center h-screen" style={{ backgroundColor: 'var(--tg-theme-secondary-bg-color, #efeff4)' }}>
+        <div className="max-w-md w-full rounded-lg shadow-md p-8" style={{ backgroundColor: 'var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #ffffff))' }}>
+          <div className="px-4 py-3 rounded" style={{ 
+            backgroundColor: '#ff3b3020',
+            border: '1px solid #ff3b30',
+            color: '#ff3b30',
+          }}>
             {error}
           </div>
         </div>
@@ -228,12 +312,17 @@ export default function AdminPage() {
 
   return (
     <ErrorBoundary>
-      <div className="flex flex-col h-screen bg-telegram-bg">
+      <div className="flex flex-col h-screen" style={{ backgroundColor: 'var(--tg-theme-secondary-bg-color, #efeff4)' }}>
         {/* Заголовок приложения */}
         <ErrorBoundary
           fallback={
-            <div className="bg-white border-b border-gray-200 px-4 py-3">
-              <h1 className="text-lg font-medium">Админка поддержки</h1>
+            <div className="px-4 py-3" style={{ 
+              backgroundColor: 'var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #ffffff))',
+              borderBottom: '1px solid var(--tg-theme-section-separator-color, #c8c7cc)',
+            }}>
+              <h1 className="text-lg font-medium" style={{ color: 'var(--tg-theme-text-color, #000000)' }}>
+                Админка поддержки
+              </h1>
             </div>
           }
         >
@@ -251,7 +340,11 @@ export default function AdminPage() {
           {/* Боковая панель со списком сессий */}
           <ErrorBoundary
             fallback={
-              <div className="w-80 bg-white border-r border-gray-200 p-4 text-center text-red-600">
+              <div className="w-80 p-4 text-center" style={{ 
+                backgroundColor: 'var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #ffffff))',
+                borderRight: '1px solid var(--tg-theme-section-separator-color, #c8c7cc)',
+                color: 'var(--tg-theme-destructive-text-color, #ff3b30)',
+              }}>
                 <p className="text-sm">Ошибка загрузки списка сессий</p>
               </div>
             }
@@ -267,8 +360,8 @@ export default function AdminPage() {
             {selectedSession ? (
               <ErrorBoundary
                 fallback={
-                  <div className="flex-1 flex items-center justify-center bg-gray-50">
-                    <div className="text-center text-red-600">
+                  <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: 'var(--tg-theme-secondary-bg-color, #efeff4)' }}>
+                    <div className="text-center" style={{ color: 'var(--tg-theme-destructive-text-color, #ff3b30)' }}>
                       <p className="text-lg font-medium">Ошибка загрузки чата</p>
                       <p className="text-sm mt-2">Попробуйте выбрать другую сессию</p>
                     </div>
@@ -278,10 +371,11 @@ export default function AdminPage() {
                 <ChatWindow session={selectedSession} />
               </ErrorBoundary>
             ) : (
-              <div className="flex-1 flex items-center justify-center bg-gray-50">
+              <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: 'var(--tg-theme-secondary-bg-color, #efeff4)' }}>
                 <div className="text-center">
                   <svg
-                    className="mx-auto h-12 w-12 text-gray-400"
+                    className="mx-auto h-12 w-12"
+                    style={{ color: 'var(--tg-theme-hint-color, #8e8e93)' }}
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -293,10 +387,10 @@ export default function AdminPage() {
                       d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
                     />
                   </svg>
-                  <h3 className="mt-4 text-lg font-medium text-gray-900">
+                  <h3 className="mt-4 text-lg font-medium" style={{ color: 'var(--tg-theme-text-color, #000000)' }}>
                     Выберите сессию
                   </h3>
-                  <p className="mt-2 text-sm text-gray-500">
+                  <p className="mt-2 text-sm" style={{ color: 'var(--tg-theme-hint-color, #8e8e93)' }}>
                     Выберите сессию из списка слева, чтобы начать переписку
                   </p>
                 </div>
@@ -308,7 +402,11 @@ export default function AdminPage() {
           {showUserPanel && userInfo && (
             <ErrorBoundary
               fallback={
-                <div className="hidden md:flex w-80 bg-white border-l border-gray-200 p-4 text-center text-red-600">
+                <div className="hidden md:flex w-80 p-4 text-center" style={{ 
+                  backgroundColor: 'var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #ffffff))',
+                  borderLeft: '1px solid var(--tg-theme-section-separator-color, #c8c7cc)',
+                  color: 'var(--tg-theme-destructive-text-color, #ff3b30)',
+                }}>
                   <p className="text-sm">Ошибка загрузки информации о пользователе</p>
                 </div>
               }

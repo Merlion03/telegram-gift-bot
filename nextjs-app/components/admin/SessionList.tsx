@@ -362,10 +362,20 @@ export function SessionList({ onSelectSession, selectedSessionId }: SessionListP
   // Пустой список
   if (sessions.length === 0) {
     return (
-      <div className="flex flex-col h-full bg-white">
+      <div className="flex flex-col h-full" style={{ backgroundColor: 'var(--tg-theme-secondary-bg-color, #efeff4)' }}>
+        <style jsx>{`
+          .tg-section {
+            background-color: var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #ffffff));
+            border-radius: 12px;
+            overflow: hidden;
+          }
+        `}</style>
+        
         {/* Заголовок и поиск */}
-        <div className="p-4 border-b border-telegram-border">
-          <h2 className="text-lg font-semibold text-telegram-text mb-3">Сессии</h2>
+        <div className="px-4 pt-4 pb-2">
+          <h2 className="text-lg font-semibold mb-3" style={{ color: 'var(--tg-theme-text-color, #000000)' }}>
+            Сессии
+          </h2>
           
           {/* Фильтры */}
           <SessionFilters
@@ -378,14 +388,18 @@ export function SessionList({ onSelectSession, selectedSessionId }: SessionListP
           />
         </div>
 
-        <div className="flex-1 flex items-center justify-center p-4 text-center text-telegram-secondary">
-          <div>
-            <p className="text-base">Нет сессий</p>
-            <p className="text-sm mt-2">
-              {filters.status === 'active' && filters.type === 'all' 
-                ? 'Сессии появятся здесь, когда пользователи обратятся в поддержку'
-                : 'Попробуйте изменить фильтры'}
-            </p>
+        <div className="flex-1 flex items-center justify-center px-4">
+          <div className="tg-section w-full">
+            <div className="p-8 text-center">
+              <p className="text-base" style={{ color: 'var(--tg-theme-text-color, #000000)' }}>
+                Нет сессий
+              </p>
+              <p className="text-sm mt-2" style={{ color: 'var(--tg-theme-hint-color, #8e8e93)' }}>
+                {filters.status === 'active' && filters.type === 'all' 
+                  ? 'Сессии появятся здесь, когда пользователи обратятся в поддержку'
+                  : 'Попробуйте изменить фильтры'}
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -394,10 +408,33 @@ export function SessionList({ onSelectSession, selectedSessionId }: SessionListP
 
   // Список сессий
   return (
-    <div className="flex flex-col h-full bg-white">
+    <div className="flex flex-col h-full" style={{ backgroundColor: 'var(--tg-theme-secondary-bg-color, #efeff4)' }}>
+      <style jsx>{`
+        .tg-section {
+          background-color: var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #ffffff));
+          border-radius: 12px;
+          overflow: hidden;
+        }
+        
+        .tg-separator {
+          height: 1px;
+          background-color: var(--tg-theme-section-separator-color, #c8c7cc);
+        }
+        
+        .tg-session-item {
+          transition: background-color 0.2s ease;
+        }
+        
+        .tg-session-item:hover {
+          background-color: var(--tg-theme-secondary-bg-color, #efeff4);
+        }
+      `}</style>
+      
       {/* Заголовок и поиск */}
-      <div className="p-4 border-b border-telegram-border">
-        <h2 className="text-lg font-semibold text-telegram-text mb-3">Сессии</h2>
+      <div className="px-4 pt-4 pb-2">
+        <h2 className="text-lg font-semibold mb-3" style={{ color: 'var(--tg-theme-text-color, #000000)' }}>
+          Сессии
+        </h2>
         
         {/* Фильтры */}
         <SessionFilters
@@ -411,93 +448,118 @@ export function SessionList({ onSelectSession, selectedSessionId }: SessionListP
       </div>
 
       {/* Список сессий с telegram-дизайном */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto px-4">
         {filteredSessions.length === 0 ? (
-          <div className="flex items-center justify-center p-4 text-center text-telegram-secondary h-full">
-            <div>
-              <p className="text-base">Сессии не найдены</p>
-              <p className="text-sm mt-2">Попробуйте изменить параметры поиска или фильтры</p>
+          <div className="tg-section">
+            <div className="flex items-center justify-center p-8 text-center">
+              <div>
+                <p className="text-base" style={{ color: 'var(--tg-theme-text-color, #000000)' }}>
+                  Сессии не найдены
+                </p>
+                <p className="text-sm mt-2" style={{ color: 'var(--tg-theme-hint-color, #8e8e93)' }}>
+                  Попробуйте изменить параметры поиска или фильтры
+                </p>
+              </div>
             </div>
           </div>
         ) : (
-          <div className="divide-y divide-telegram-border">
-            {filteredSessions.map((session) => {
+          <div className="tg-section mb-4">
+            {filteredSessions.map((session, index) => {
               const typeDisplay = getSessionTypeDisplay(session.session_type);
               const statusIndicator = getStatusIndicator(session.status);
               const avatarGradient = createTelegramGradient(session.telegram_id.toString());
               const avatarLetter = generateAvatarLetter(session.user_name || `User${session.telegram_id}`);
               
               return (
-                <button
-                  key={session.id}
-                  onClick={() => onSelectSession(session)}
-                  className={`w-full p-3 text-left transition-all duration-200 hover:bg-telegram-sidebar ${
-                    selectedSessionId === session.id 
-                      ? 'bg-telegram-chat border-l-4 border-telegram-blue' 
-                      : 'hover:bg-telegram-sidebar'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    {/* Аватар с градиентом */}
-                    <div className="flex-shrink-0 relative">
-                      <div
-                        className="w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold text-sm shadow-md transition-transform duration-200 hover:scale-105"
-                        style={{ background: avatarGradient }}
-                      >
-                        {avatarLetter}
-                      </div>
-                      
-                      {/* Индикатор статуса онлайн */}
-                      {session.user_online && (
-                        <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full ${statusIndicator.color} border-2 border-white`} />
-                      )}
-                    </div>
-
-                    {/* Информация о сессии */}
-                    <div className="flex-1 min-w-0">
-                      {/* Заголовок с типом и статусом */}
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-sm font-semibold text-telegram-text truncate">
-                          {session.user_name || `Пользователь ${session.telegram_id}`}
-                        </span>
+                <div key={session.id}>
+                  {index > 0 && <div className="tg-separator"></div>}
+                  <button
+                    onClick={() => onSelectSession(session)}
+                    className={`w-full p-3 text-left tg-session-item ${
+                      selectedSessionId === session.id 
+                        ? 'border-l-4' 
+                        : ''
+                    }`}
+                    style={{
+                      borderLeftColor: selectedSessionId === session.id 
+                        ? 'var(--tg-theme-link-color, #3390ec)' 
+                        : 'transparent',
+                      backgroundColor: selectedSessionId === session.id 
+                        ? 'var(--tg-theme-secondary-bg-color, #efeff4)' 
+                        : 'transparent',
+                    }}
+                  >
+                    <div className="flex items-start gap-3">
+                      {/* Аватар с градиентом */}
+                      <div className="flex-shrink-0 relative">
+                        <div
+                          className="w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold text-sm shadow-md transition-transform duration-200 hover:scale-105"
+                          style={{ background: avatarGradient }}
+                        >
+                          {avatarLetter}
+                        </div>
                         
-                        {/* Бейдж типа сессии */}
-                        <span className={`text-xs px-2 py-0.5 rounded-full border flex-shrink-0 ${typeDisplay.bgColor} ${typeDisplay.textColor} ${typeDisplay.borderColor}`}>
-                          {typeDisplay.icon} {typeDisplay.label}
-                        </span>
+                        {/* Индикатор статуса онлайн */}
+                        {session.user_online && (
+                          <div className="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2" style={{
+                            backgroundColor: statusIndicator.color === 'bg-telegram-green' ? '#34c759' : '#8e8e93',
+                            borderColor: 'var(--tg-theme-section-bg-color, #ffffff)',
+                          }} />
+                        )}
                       </div>
 
-                      {/* Username и ID */}
-                      <p className="text-xs text-telegram-secondary mb-1">
-                        {session.user_username ? `@${session.user_username}` : session.user_name ? `${session.user_name}` : `ID: ${session.telegram_id}`}
-                      </p>
+                      {/* Информация о сессии */}
+                      <div className="flex-1 min-w-0">
+                        {/* Заголовок с типом и статусом */}
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-sm font-semibold truncate" style={{ color: 'var(--tg-theme-text-color, #000000)' }}>
+                            {session.user_name || `Пользователь ${session.telegram_id}`}
+                          </span>
+                          
+                          {/* Бейдж типа сессии */}
+                          <span className="text-xs px-2 py-0.5 rounded-full flex-shrink-0" style={{
+                            backgroundColor: typeDisplay.bgColor === 'bg-purple-100' ? '#9013fe20' : '#3390ec20',
+                            color: typeDisplay.bgColor === 'bg-purple-100' ? '#9013fe' : '#3390ec',
+                          }}>
+                            {typeDisplay.icon} {typeDisplay.label}
+                          </span>
+                        </div>
 
-                      {/* Время последнего сообщения или создания */}
-                      <p className="text-xs text-telegram-tertiary mb-1">
-                        {session.last_message_at 
-                          ? formatLastMessageTime(session.last_message_at)
-                          : `Создана: ${formatDate(session.created_at)}`
-                        }
-                      </p>
-
-                      {/* Последнее сообщение (если есть) */}
-                      {session.last_message && (
-                        <p className="text-xs text-telegram-secondary truncate">
-                          {truncateText(session.last_message, 50)}
+                        {/* Username и ID */}
+                        <p className="text-xs mb-1" style={{ color: 'var(--tg-theme-hint-color, #8e8e93)' }}>
+                          {session.user_username ? `@${session.user_username}` : session.user_name ? `${session.user_name}` : `ID: ${session.telegram_id}`}
                         </p>
+
+                        {/* Время последнего сообщения или создания */}
+                        <p className="text-xs mb-1" style={{ color: 'var(--tg-theme-hint-color, #8e8e93)' }}>
+                          {session.last_message_at 
+                            ? formatLastMessageTime(session.last_message_at)
+                            : `Создана: ${formatDate(session.created_at)}`
+                          }
+                        </p>
+
+                        {/* Последнее сообщение (если есть) */}
+                        {session.last_message && (
+                          <p className="text-xs truncate" style={{ color: 'var(--tg-theme-hint-color, #8e8e93)' }}>
+                            {truncateText(session.last_message, 50)}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Счётчик непрочитанных сообщений */}
+                      {session.unread_count !== undefined && session.unread_count > 0 && (
+                        <div className="flex-shrink-0 flex flex-col items-end gap-1">
+                          <span className="flex items-center justify-center text-xs font-bold rounded-full w-6 h-6 min-w-[24px]" style={{
+                            backgroundColor: '#ff3b30',
+                            color: '#ffffff',
+                          }}>
+                            {session.unread_count > 99 ? '99+' : session.unread_count}
+                          </span>
+                        </div>
                       )}
                     </div>
-
-                    {/* Счётчик непрочитанных сообщений */}
-                    {session.unread_count !== undefined && session.unread_count > 0 && (
-                      <div className="flex-shrink-0 flex flex-col items-end gap-1">
-                        <span className="flex items-center justify-center bg-telegram-red text-white text-xs font-bold rounded-full w-6 h-6 min-w-[24px]">
-                          {session.unread_count > 99 ? '99+' : session.unread_count}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </button>
+                  </button>
+                </div>
               );
             })}
           </div>

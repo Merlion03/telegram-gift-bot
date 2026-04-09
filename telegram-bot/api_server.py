@@ -402,6 +402,7 @@ class DeliveryNotificationRequest(BaseModel):
     """Модель запроса на отправку уведомлений о доставке"""
     telegram_id: int = Field(..., description="Telegram ID пользователя")
     prize_id: int = Field(..., description="ID приза")
+    message_id: Optional[int] = Field(None, description="ID сообщения с кнопкой для удаления")
 
 
 @app.post(
@@ -478,6 +479,33 @@ async def send_delivery_notification(request: DeliveryNotificationRequest):
         
         # Создаём бота
         bot = Bot(token=config.bot.token)
+        
+        # Удаляем WebApp клавиатуру перед отправкой уведомлений, если message_id передан
+        if request.message_id:
+            try:
+                from utils.keyboard_utils import remove_inline_keyboard_by_id
+                
+                removal_success = await remove_inline_keyboard_by_id(
+                    bot=bot,
+                    chat_id=request.telegram_id,
+                    message_id=request.message_id,
+                    logger=logger
+                )
+                logger.info(
+                    "webapp_keyboard_removed_via_api",
+                    telegram_id=request.telegram_id,
+                    message_id=request.message_id,
+                    success=removal_success
+                )
+            except Exception as keyboard_error:
+                logger.error(
+                    "failed_to_remove_keyboard_via_api",
+                    telegram_id=request.telegram_id,
+                    message_id=request.message_id,
+                    error=str(keyboard_error),
+                    exc_info=True
+                )
+                # Продолжаем выполнение, так как это не критично
         
         # Создаём NotificationService
         notification_service = NotificationService(bot=bot, session_manager=None)

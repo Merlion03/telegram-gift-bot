@@ -25,8 +25,9 @@ function WebAppContent() {
     
     initWebApp();
 
-    // Получение prize_id из query параметров
+    // Получение prize_id и message_id из query параметров
     const prizeIdParam = searchParams.get('prize_id');
+    const messageIdParam = searchParams.get('message_id');
     
     if (!prizeIdParam) {
       setError('Отсутствует параметр prize_id. Откройте форму через бота.');
@@ -41,6 +42,15 @@ function WebAppContent() {
     }
 
     setPrizeId(parsedPrizeId);
+    
+    // Сохраняем message_id если он есть
+    if (messageIdParam) {
+      const parsedMessageId = parseInt(messageIdParam, 10);
+      if (!isNaN(parsedMessageId) && parsedMessageId > 0) {
+        // Сохраняем в sessionStorage для использования в форме
+        sessionStorage.setItem('webapp_message_id', messageIdParam);
+      }
+    }
   }, [searchParams]);
 
   if (!isReady) {

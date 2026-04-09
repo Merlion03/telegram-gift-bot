@@ -40,15 +40,17 @@
 3. THE Callback_Handler SHALL удалить клавиатуру до отправки следующего сообщения пользователю
 4. IF удаление клавиатуры завершается ошибкой, THEN THE Callback_Handler SHALL залогировать ошибку и продолжить обработку
 
-### Requirement 3: Автоматическое удаление клавиатуры после нажатия кнопок действий с доставкой
+### Requirement 3: Автоматическое удаление кнопки WebApp после отправки данных доставки
 
-**User Story:** Как пользователь, я хочу, чтобы кнопки действий с данными доставки исчезали после нажатия, чтобы не было дублирования интерфейса
+**User Story:** Как пользователь, я хочу, чтобы кнопка "📦 Указать данные доставки" исчезала после того, как я отправил данные через WebApp, чтобы не было путаницы и дублирования интерфейса
 
 #### Acceptance Criteria
 
-1. WHEN пользователь нажимает на inline-кнопку "Назад" в меню действий с доставкой (callback_data="confirm_delivery:{prize_id}"), THE Callback_Handler SHALL удалить Reply_Markup из Bot_Message
-2. THE Callback_Handler SHALL удалить клавиатуру до отправки подтверждающего сообщения
-3. IF удаление клавиатуры завершается ошибкой, THEN THE Callback_Handler SHALL залогировать ошибку и продолжить обработку
+1. WHEN DeliveryHandler получает web_app_data с данными доставки, THE DeliveryHandler SHALL удалить Reply_Markup из сообщения с WebApp кнопкой
+2. THE DeliveryHandler SHALL удалить клавиатуру в методе handle_delivery_data() после успешной валидации prize_id
+3. THE DeliveryHandler SHALL удалить клавиатуру ДО вызова NotificationService.send_delivery_notifications()
+4. THE DeliveryHandler SHALL удалить клавиатуру ДО отправки подтверждающих сообщений пользователю
+5. IF удаление клавиатуры завершается ошибкой, THEN THE DeliveryHandler SHALL залогировать ошибку и продолжить обработку данных доставки
 
 ### Requirement 4: Универсальный механизм удаления клавиатур
 

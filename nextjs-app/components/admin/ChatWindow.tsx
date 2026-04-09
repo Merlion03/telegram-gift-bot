@@ -10,7 +10,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { getRealtimeClient } from '@/lib/database/realtimeClient';
-import type { SupportMessage, SupportSession } from '@/types/support';
+import type { SupportMessage, SupportSession, MediaType } from '@/types/support';
 import { ErrorMessage, getReadableErrorMessage } from '@/components/common/ErrorMessage';
 import {
   formatTime,
@@ -100,10 +100,10 @@ export function ChatWindow({ session }: ChatWindowProps) {
               message_text: serverMessage.data.message_text,
               created_at: serverMessage.data.created_at,
               delivered: serverMessage.data.is_read || false,
-              media_type: (serverMessage.data as any).media_type || 'text',
-              file_path: (serverMessage.data as any).file_path,
-              caption: (serverMessage.data as any).caption,
-              file_size: (serverMessage.data as any).file_size,
+              media_type: (serverMessage.data.media_type as MediaType) || 'text',
+              file_path: serverMessage.data.file_path,
+              caption: serverMessage.data.caption,
+              file_size: serverMessage.data.file_size,
             };
             
             // Добавляем новое сообщение в список
@@ -390,48 +390,75 @@ export function ChatWindow({ session }: ChatWindowProps) {
   const messageGroups = groupMessagesByDate(messages);
 
   return (
-    <div className="flex flex-col h-full bg-gray-50">
+    <div className="flex flex-col h-full" style={{ backgroundColor: 'var(--tg-theme-secondary-bg-color, #efeff4)' }}>
+      <style jsx>{`
+        .tg-section {
+          background-color: var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #ffffff));
+          border-radius: 12px;
+          overflow: hidden;
+        }
+        
+        .tg-separator {
+          height: 1px;
+          background-color: var(--tg-theme-section-separator-color, #c8c7cc);
+          margin: 0 16px;
+        }
+      `}</style>
+      
       {/* Заголовок чата */}
-      <div className="bg-white border-b px-4 py-3 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="font-semibold text-gray-900">
-              Пользователь: {session.telegram_id}
-            </h2>
-            <div className="flex items-center gap-2 mt-1">
-              <p className="text-sm text-gray-500">
-                Сессия #{session.id}
-              </p>
-              <span className="text-gray-400">•</span>
-              <span className={`text-sm font-medium ${
-                currentSessionType === 'support' ? 'text-blue-600' : 'text-gray-600'
-              }`}>
-                {currentSessionType === 'support' ? 'Поддержка' : 'Обычный диалог'}
-              </span>
-              <span className="text-gray-400">•</span>
-              <span className={`text-sm ${
-                session.status === 'active' ? 'text-green-600' : 'text-gray-500'
-              }`}>
-                {session.status === 'active' ? 'Активна' : 'Завершена'}
-              </span>
+      <div className="tg-section mx-4 mt-4 mb-2">
+        <div className="px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-semibold" style={{ color: 'var(--tg-theme-text-color, #000000)' }}>
+                Пользователь: {session.telegram_id}
+              </h2>
+              <div className="flex items-center gap-2 mt-1">
+                <p className="text-sm" style={{ color: 'var(--tg-theme-hint-color, #8e8e93)' }}>
+                  Сессия #{session.id}
+                </p>
+                <span style={{ color: 'var(--tg-theme-hint-color, #8e8e93)' }}>•</span>
+                <span className={`text-sm font-medium`} style={{ 
+                  color: currentSessionType === 'support' 
+                    ? 'var(--tg-theme-link-color, #3390ec)' 
+                    : 'var(--tg-theme-hint-color, #8e8e93)'
+                }}>
+                  {currentSessionType === 'support' ? 'Поддержка' : 'Обычный диалог'}
+                </span>
+                <span style={{ color: 'var(--tg-theme-hint-color, #8e8e93)' }}>•</span>
+                <span className="text-sm" style={{ 
+                  color: session.status === 'active' 
+                    ? '#34c759' 
+                    : 'var(--tg-theme-hint-color, #8e8e93)'
+                }}>
+                  {session.status === 'active' ? 'Активна' : 'Завершена'}
+                </span>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {/* Кнопка подключения к Chat_Session (Requirements 4.1) */}
-            {currentSessionType === 'chat' && session.status === 'active' && (
-              <button
-                onClick={handleConnectToChat}
-                disabled={isConnecting}
-                className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {isConnecting ? 'Подключение...' : 'Подключиться к диалогу'}
-              </button>
-            )}
-            {session.status === 'active' && (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                Онлайн
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {/* Кнопка подключения к Chat_Session (Requirements 4.1) */}
+              {currentSessionType === 'chat' && session.status === 'active' && (
+                <button
+                  onClick={handleConnectToChat}
+                  disabled={isConnecting}
+                  className="px-4 py-2 text-sm rounded-xl font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{
+                    backgroundColor: 'var(--tg-theme-button-color, #3390ec)',
+                    color: 'var(--tg-theme-button-text-color, #ffffff)',
+                  }}
+                >
+                  {isConnecting ? 'Подключение...' : 'Подключиться к диалогу'}
+                </button>
+              )}
+              {session.status === 'active' && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium" style={{
+                  backgroundColor: '#34c75920',
+                  color: '#34c759',
+                }}>
+                  Онлайн
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -595,39 +622,55 @@ export function ChatWindow({ session }: ChatWindowProps) {
 
       {/* Форма отправки сообщения */}
       {session.status === 'active' && (
-        <form onSubmit={handleSendMessage} className="bg-white border-t p-4">
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              placeholder="Введите сообщение..."
-              className="flex-1 rounded-lg border border-gray-300 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              disabled={isSending}
-              maxLength={4000}
-            />
-            <button
-              type="submit"
-              disabled={isSending || !newMessage.trim()}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {isSending ? 'Отправка...' : 'Отправить'}
-            </button>
-          </div>
-          
-          {/* Счётчик символов */}
-          <div className="mt-2 text-xs text-gray-500 text-right">
-            {newMessage.length} / 4000
+        <form onSubmit={handleSendMessage} className="mx-4 mb-4">
+          <div className="tg-section">
+            <div className="px-4 py-3">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  placeholder="Введите сообщение..."
+                  className="flex-1 px-0 py-1 border-0 focus:outline-none text-base"
+                  style={{ 
+                    backgroundColor: 'transparent',
+                    color: 'var(--tg-theme-text-color, #000000)',
+                  }}
+                  disabled={isSending}
+                  maxLength={4000}
+                />
+                <button
+                  type="submit"
+                  disabled={isSending || !newMessage.trim()}
+                  className="px-6 py-2 rounded-xl font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{
+                    backgroundColor: 'var(--tg-theme-button-color, #3390ec)',
+                    color: 'var(--tg-theme-button-text-color, #ffffff)',
+                  }}
+                >
+                  {isSending ? 'Отправка...' : 'Отправить'}
+                </button>
+              </div>
+              
+              {/* Счётчик символов */}
+              <div className="mt-2 text-xs text-right" style={{ color: 'var(--tg-theme-hint-color, #8e8e93)' }}>
+                {newMessage.length} / 4000
+              </div>
+            </div>
           </div>
         </form>
       )}
 
       {/* Сообщение о завершённой сессии */}
       {session.status === 'closed' && (
-        <div className="bg-gray-100 border-t p-4 text-center">
-          <p className="text-sm text-gray-600">
-            Сессия завершена. Отправка сообщений недоступна.
-          </p>
+        <div className="mx-4 mb-4">
+          <div className="tg-section">
+            <div className="px-4 py-3 text-center">
+              <p className="text-sm" style={{ color: 'var(--tg-theme-hint-color, #8e8e93)' }}>
+                Сессия завершена. Отправка сообщений недоступна.
+              </p>
+            </div>
+          </div>
         </div>
       )}
     </div>

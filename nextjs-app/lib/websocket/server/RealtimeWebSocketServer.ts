@@ -382,13 +382,20 @@ export class RealtimeWebSocketServer {
       console.log('[RealtimeWebSocketServer] ✅ PostgreSQL LISTEN подключение установлено');
       
       // Подписка на каналы уведомлений
+      // ВАЖНО: Названия каналов должны совпадать с NOTIFY в PostgreSQL триггерах
       await this.pgListenClient.query('LISTEN new_message');
       await this.pgListenClient.query('LISTEN session_status_change');
       await this.pgListenClient.query('LISTEN session_type_change');
-      console.log('[RealtimeWebSocketServer] ✅ LISTEN подписки активированы');
+      console.log('[RealtimeWebSocketServer] ✅ LISTEN подписки активированы на каналы: new_message, session_status_change, session_type_change');
       
       // Настройка обработчика уведомлений
       this.pgListenClient.on('notification', (msg) => {
+        console.log('[RealtimeWebSocketServer] 🔔 PostgreSQL NOTIFY получен:', {
+          channel: msg.channel,
+          payloadLength: msg.payload?.length || 0,
+          payloadPreview: msg.payload?.substring(0, 100) || '',
+          timestamp: new Date().toISOString(),
+        });
         this.handlePostgresNotification(msg.channel, msg.payload || '');
       });
       

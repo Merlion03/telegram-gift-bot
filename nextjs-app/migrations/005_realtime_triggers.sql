@@ -24,6 +24,10 @@ BEGIN
             'message_type', NEW.message_type,
             'message_text', NEW.message_text,
             'file_id', NEW.file_id,
+            'media_type', NEW.media_type,
+            'file_path', NEW.file_path,
+            'caption', NEW.caption,
+            'file_size', NEW.file_size,
             'created_at', NEW.created_at,
             'delivered', NEW.delivered
         )

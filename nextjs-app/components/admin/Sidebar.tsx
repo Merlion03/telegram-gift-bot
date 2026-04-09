@@ -44,29 +44,43 @@ export function Sidebar({ onSelectSession, selectedSessionId }: SidebarProps) {
   }, [isMobile]);
 
   return (
-    <div className="flex h-full bg-white">
+    <div className="flex h-full" style={{ backgroundColor: 'var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #ffffff))' }}>
       {/* Основная панель */}
       <div
-        className={`transition-all duration-300 ease-out flex flex-col border-r border-telegram-border ${
+        className={`transition-all duration-300 ease-out flex flex-col ${
           isCollapsed ? 'w-20' : 'w-80'
         }`}
+        style={{ 
+          borderRight: '1px solid var(--tg-theme-section-separator-color, #c8c7cc)',
+        }}
       >
         {/* Кнопка сворачивания */}
-        <div className="flex items-center justify-between p-2 border-b border-telegram-border">
+        <div className="flex items-center justify-between p-2" style={{ 
+          borderBottom: '1px solid var(--tg-theme-section-separator-color, #c8c7cc)',
+        }}>
           {!isCollapsed && (
-            <div className="px-2 py-1 text-sm font-semibold text-telegram-text">
+            <div className="px-2 py-1 text-sm font-semibold" style={{ color: 'var(--tg-theme-text-color, #000000)' }}>
               Сессии
             </div>
           )}
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="p-2 hover:bg-telegram-sidebar rounded-lg transition-colors duration-200 ml-auto"
+            className="p-2 rounded-lg transition-all duration-200 ml-auto"
+            style={{
+              backgroundColor: 'transparent',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--tg-theme-secondary-bg-color, #efeff4)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
             title={isCollapsed ? 'Развернуть' : 'Свернуть'}
           >
             {isCollapsed ? (
-              <ChevronRight className="w-5 h-5 text-telegram-blue" />
+              <ChevronRight className="w-5 h-5" style={{ color: 'var(--tg-theme-link-color, #3390ec)' }} />
             ) : (
-              <ChevronLeft className="w-5 h-5 text-telegram-blue" />
+              <ChevronLeft className="w-5 h-5" style={{ color: 'var(--tg-theme-link-color, #3390ec)' }} />
             )}
           </button>
         </div>
@@ -129,7 +143,7 @@ function CollapsedSessionList({
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="animate-pulse text-telegram-secondary">...</div>
+        <div className="animate-pulse" style={{ color: 'var(--tg-theme-hint-color, #8e8e93)' }}>...</div>
       </div>
     );
   }
@@ -169,24 +183,31 @@ function CollapsedSessionItem({
   return (
     <button
       onClick={onSelect}
-      className={`relative w-14 h-14 rounded-full flex items-center justify-center text-white font-semibold transition-all duration-200 hover:scale-110 ${
-        isSelected ? 'ring-2 ring-telegram-blue' : ''
-      }`}
-      style={{ background: avatarGradient }}
+      className="relative w-14 h-14 rounded-full flex items-center justify-center text-white font-semibold transition-all duration-200 hover:scale-110"
+      style={{ 
+        background: avatarGradient,
+        boxShadow: isSelected ? '0 0 0 2px var(--tg-theme-link-color, #3390ec)' : 'none',
+      }}
       title={session.user_name || `Пользователь ${session.telegram_id}`}
     >
       {avatarLetter}
 
       {/* Индикатор непрочитанных сообщений */}
       {session.unread_count !== undefined && session.unread_count > 0 && (
-        <span className="absolute -top-1 -right-1 flex items-center justify-center bg-telegram-red text-white text-xs font-bold rounded-full w-5 h-5">
+        <span className="absolute -top-1 -right-1 flex items-center justify-center text-xs font-bold rounded-full w-5 h-5" style={{
+          backgroundColor: '#ff3b30',
+          color: '#ffffff',
+        }}>
           {session.unread_count > 9 ? '9+' : session.unread_count}
         </span>
       )}
 
       {/* Индикатор статуса онлайн */}
       {session.user_online && (
-        <div className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-telegram-green border-2 border-white" />
+        <div className="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2" style={{
+          backgroundColor: '#34c759',
+          borderColor: 'var(--tg-theme-section-bg-color, #ffffff)',
+        }} />
       )}
     </button>
   );

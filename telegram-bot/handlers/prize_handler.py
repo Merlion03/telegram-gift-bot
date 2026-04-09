@@ -280,8 +280,10 @@ class PrizeHandler:
         # Создаём Inline-кнопку с WebApp
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(
-                text="📦 Указать данные доставки",
-                web_app=WebAppInfo(url=webapp_url)
+                text="Заполнить форму", 
+                web_app=WebAppInfo(url=webapp_url),
+                icon_custom_emoji_id="5274056321493115109",
+                style="success"
             )]
         ])
         

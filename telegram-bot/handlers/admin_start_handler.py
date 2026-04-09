@@ -8,7 +8,7 @@
 
 from typing import Optional
 from aiogram import Bot
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, ReplyKeyboardRemove
 
 from database.repositories.admin_repository import AdminRepository
 from services.session_manager import SessionManager
@@ -164,13 +164,25 @@ class AdminStartHandler:
         )
         
         # Формируем приветственное сообщение
+        # Получаем информацию об администраторе для отображения роли
+        admin = await self._admin_repo.get_by_tg_id(message.from_user.id)
+        
+        role_names = {
+            0: "Разработчик",
+            1: "Ассистент", 
+            2: "Администратор",
+            3: "Оператор"
+        }
+        role_name = role_names.get(admin.role, "Администратор") if admin else "Администратор"
+        
         welcome_text = (
-            f"👋 Добро пожаловать, {message.from_user.first_name}!\n\n"
-            f"Вы вошли как администратор.\n"
+            f"🎉 Поздравляем, {message.from_user.first_name}!\n\n"
+            f"Вам предоставлены права администратора.\n"
+            f"Ваша роль: {role_name}\n\n"
             f"Нажмите кнопку ниже для доступа к административной панели."
         )
         
-        # Отправляем сообщение с клавиатурой
+        # Отправляем сообщение с inline-клавиатурой и удаляем ReplyKeyboard
         await message.answer(
             text=welcome_text,
             reply_markup=keyboard

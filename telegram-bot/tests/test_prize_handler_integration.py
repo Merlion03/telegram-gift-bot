@@ -64,23 +64,29 @@ class TestPrizeHandlerIntegration:
         # Act
         await prize_handler._send_digital_prize(mock_message, prize_result)
         
-        # Assert
-        assert mock_message.answer.call_count == 1
-        sent_message = mock_message.answer.call_args[0][0]
+        # Assert - теперь должно быть 2 сообщения
+        assert mock_message.answer.call_count == 2
         
-        # Проверяем структуру сообщения
-        assert "Поздравляем с победой" in sent_message
-        assert "<code>SUMMER2024</code>" in sent_message
-        assert "Скидка 10% на первый заказ" in sent_message
-        assert "Вот ваш промокод —" in sent_message
-        assert "Также вот ещё —" not in sent_message  # Не должно быть для одного
-        assert "Если вы выиграли в конкурсе" in sent_message
+        # Первое сообщение - промокод БЕЗ кнопки
+        first_message = mock_message.answer.call_args_list[0][0][0]
+        first_keyboard = mock_message.answer.call_args_list[0][1]["reply_markup"]
         
-        # Проверяем parse_mode
-        assert mock_message.answer.call_args[1]["parse_mode"] == "HTML"
+        assert "Поздравляем с победой" in first_message
+        assert "<code>SUMMER2024</code>" in first_message
+        assert "Скидка 10% на первый заказ" in first_message
+        assert "Вы выиграли промокод —" in first_message
+        assert "И дарим второй промокод —" not in first_message  # Не должно быть для одного
+        assert first_keyboard is None  # Кнопки нет в первом сообщении
         
-        # Проверяем наличие клавиатуры
-        assert mock_message.answer.call_args[1]["reply_markup"] is not None
+        # Второе сообщение - приветствие С кнопкой
+        second_message = mock_message.answer.call_args_list[1][0][0]
+        second_keyboard = mock_message.answer.call_args_list[1][1]["reply_markup"]
+        
+        assert "Если вы выиграли в конкурсе" in second_message
+        assert second_keyboard is not None  # Кнопка есть во втором сообщении
+        
+        # Проверяем parse_mode первого сообщения
+        assert mock_message.answer.call_args_list[0][1]["parse_mode"] == "HTML"
     
     @pytest.mark.asyncio
     async def test_send_multiple_promo_codes(self, prize_handler, mock_message):
@@ -98,29 +104,38 @@ class TestPrizeHandlerIntegration:
         # Act
         await prize_handler._send_digital_prize(mock_message, prize_result)
         
-        # Assert
-        assert mock_message.answer.call_count == 1
-        sent_message = mock_message.answer.call_args[0][0]
+        # Assert - теперь должно быть 2 сообщения
+        assert mock_message.answer.call_count == 2
+        
+        # Первое сообщение - промокоды БЕЗ кнопки
+        first_message = mock_message.answer.call_args_list[0][0][0]
+        first_keyboard = mock_message.answer.call_args_list[0][1]["reply_markup"]
         
         # Проверяем структуру сообщения
-        assert "Поздравляем с победой" in sent_message
-        assert sent_message.count("<code>") == 3
-        assert sent_message.count("</code>") == 3
-        assert "Вот ваш промокод —" in sent_message
-        assert sent_message.count("Также вот ещё —") == 2
+        assert "Поздравляем с победой" in first_message
+        assert first_message.count("<code>") == 3
+        assert first_message.count("</code>") == 3
+        assert "Вы выиграли промокод —" in first_message
+        assert "И дарим второй промокод —" in first_message
+        assert "Ещё промокод —" in first_message
+        assert first_keyboard is None  # Кнопки нет в первом сообщении
         
         # Проверяем наличие всех промокодов
-        assert "<code>CODE1</code>" in sent_message
-        assert "<code>CODE2</code>" in sent_message
-        assert "<code>CODE3</code>" in sent_message
+        assert "<code>CODE1</code>" in first_message
+        assert "<code>CODE2</code>" in first_message
+        assert "<code>CODE3</code>" in first_message
         
         # Проверяем наличие всех инструкций
-        assert "Инструкция1" in sent_message
-        assert "Инструкция2" in sent_message
-        assert "Инструкция3" in sent_message
+        assert "Инструкция1" in first_message
+        assert "Инструкция2" in first_message
+        assert "Инструкция3" in first_message
         
-        # Проверяем текст кнопки меню
-        assert "Если вы выиграли в конкурсе" in sent_message
+        # Второе сообщение - приветствие С кнопкой
+        second_message = mock_message.answer.call_args_list[1][0][0]
+        second_keyboard = mock_message.answer.call_args_list[1][1]["reply_markup"]
+        
+        assert "Если вы выиграли в конкурсе" in second_message
+        assert second_keyboard is not None  # Кнопка есть во втором сообщении
     
     @pytest.mark.asyncio
     async def test_handle_missing_promo_codes(self, prize_handler, mock_message):

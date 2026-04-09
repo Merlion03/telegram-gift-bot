@@ -121,6 +121,7 @@ const deliverySchema = z.object({
     .int('Prize ID должен быть целым числом')
     .positive('Prize ID должен быть положительным числом'),
   initData: z.string().min(1, 'InitData обязателен'),
+  message_id: z.number().int().positive().optional(), // ID сообщения с кнопкой для удаления
 });
 
 /**
@@ -414,6 +415,7 @@ export async function POST(request: NextRequest) {
           body: JSON.stringify({
             telegram_id: telegramId,
             prize_id: validatedData.prize_id,
+            message_id: validatedData.message_id, // Передаём message_id для удаления клавиатуры
           }),
         });
 

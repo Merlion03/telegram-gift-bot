@@ -16,6 +16,7 @@ from database.repositories.prize_repository import PrizeRepository, DatabaseUnav
 from database.connection import get_database
 from utils.retry import retry_with_backoff
 from utils.logging_config import get_logger
+from utils.keyboard_utils import remove_inline_keyboard_by_id
 from keyboards.reply_keyboards import get_main_menu_keyboard
 from constants import (
     ERROR_MISSING_PRIZE_ID,
@@ -153,6 +154,37 @@ class DeliveryHandler:
                     session_id
                 )
                 return
+            
+            # Удаляем WebApp клавиатуру из сообщения (Requirement 3.1, 3.2, 3.3)
+            data_state = await state.get_data()
+            webapp_message_id = data_state.get('webapp_message_id')
+            
+            logger.info(
+                "attempting_to_remove_webapp_keyboard",
+                telegram_id=telegram_id,
+                webapp_message_id=webapp_message_id,
+                has_webapp_message_id=webapp_message_id is not None
+            )
+            
+            if webapp_message_id:
+                removal_success = await remove_inline_keyboard_by_id(
+                    bot=message.bot,
+                    chat_id=telegram_id,
+                    message_id=webapp_message_id,
+                    logger=logger
+                )
+                logger.info(
+                    "webapp_keyboard_removal_result",
+                    telegram_id=telegram_id,
+                    webapp_message_id=webapp_message_id,
+                    success=removal_success
+                )
+            else:
+                logger.warning(
+                    "webapp_message_id_not_found_in_state",
+                    telegram_id=telegram_id,
+                    state_data=data_state
+                )
             
             # Получаем приз из БД по prize_id (row_id)
             try:
