@@ -99,20 +99,11 @@ class AdminStartHandler:
                 await self._send_admin_keyboard(message)
                 
                 # Сохраняем ответ бота, если есть session_id
-                if session_id:
-                    try:
-                        await self._session_manager.save_bot_message(
-                            session_id=session_id,
-                            message_text="Добро пожаловать в админ-панель!"
-                        )
-                    except Exception as e:
-                        logger.error(
-                            "failed_to_save_bot_response",
-                            extra={
-                                "session_id": session_id,
-                                "error": str(e)
-                            }
-                        )
+                if self._session_manager:
+                    await self._session_manager.save_bot_response_safe(
+                        session_id=session_id,
+                        message_text="Добро пожаловать в админ-панель!",
+                    )
                 
                 return True  # Обработано как администратор
             

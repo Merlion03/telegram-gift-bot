@@ -97,19 +97,11 @@ class SupportHandler:
             )
             
             # Сохраняем ответ бота
-            if self.session_manager and session_id:
-                try:
-                    await self.session_manager.save_bot_message(
-                        session_id=session_id,
-                        message_text=SUPPORT_SESSION_STARTED
-                    )
-                except Exception as e:
-                    logger.error(
-                        "failed_to_save_bot_response",
-                        session_id=session_id,
-                        error=str(e)
-                    )
-            
+            if self.session_manager:
+                await self.session_manager.save_bot_response_safe(
+                    session_id=session_id,
+                    message_text=SUPPORT_SESSION_STARTED,
+                )
             logger.info(
                 "support_session_started",
                 telegram_id=telegram_id,
@@ -126,19 +118,11 @@ class SupportHandler:
             await message.answer(SUPPORT_START_ERROR)
             
             # Сохраняем ответ бота об ошибке
-            if self.session_manager and session_id:
-                try:
-                    await self.session_manager.save_bot_message(
-                        session_id=session_id,
-                        message_text=SUPPORT_START_ERROR
-                    )
-                except Exception as save_error:
-                    logger.error(
-                        "failed_to_save_bot_response",
-                        session_id=session_id,
-                        error=str(save_error)
-                    )
-    
+            if self.session_manager:
+                await self.session_manager.save_bot_response_safe(
+                    session_id=session_id,
+                    message_text=SUPPORT_START_ERROR,
+                )
     async def handle_support_message(self, message: Message, state: FSMContext, session_id: Optional[int] = None) -> None:
         """
         Обрабатывает сообщение в режиме поддержки
@@ -264,19 +248,11 @@ class SupportHandler:
             await callback.message.answer(SUPPORT_SESSION_ENDED)
             
             # Сохраняем ответ бота
-            if self.session_manager and session_id:
-                try:
-                    await self.session_manager.save_bot_message(
-                        session_id=session_id,
-                        message_text=SUPPORT_SESSION_ENDED
-                    )
-                except Exception as e:
-                    logger.error(
-                        "failed_to_save_bot_response",
-                        session_id=session_id,
-                        error=str(e)
-                    )
-            
+            if self.session_manager:
+                await self.session_manager.save_bot_response_safe(
+                    session_id=session_id,
+                    message_text=SUPPORT_SESSION_ENDED,
+                )
             logger.info(
                 "support_session_cleanup_complete",
                 telegram_id=telegram_id
@@ -295,19 +271,11 @@ class SupportHandler:
             await callback.message.answer(SUPPORT_END_ERROR)
             
             # Сохраняем ответ бота
-            if self.session_manager and session_id:
-                try:
-                    await self.session_manager.save_bot_message(
-                        session_id=session_id,
-                        message_text=SUPPORT_END_ERROR
-                    )
-                except Exception as save_error:
-                    logger.error(
-                        "failed_to_save_bot_response",
-                        session_id=session_id,
-                        error=str(save_error)
-                    )
-        
+            if self.session_manager:
+                await self.session_manager.save_bot_response_safe(
+                    session_id=session_id,
+                    message_text=SUPPORT_END_ERROR,
+                )
         # Подтверждаем callback
         await callback.answer()
     
@@ -353,19 +321,11 @@ class SupportHandler:
             await message.answer(SUPPORT_SESSION_ENDED)
             
             # Сохраняем ответ бота
-            if self.session_manager and session_id:
-                try:
-                    await self.session_manager.save_bot_message(
-                        session_id=session_id,
-                        message_text=SUPPORT_SESSION_ENDED
-                    )
-                except Exception as e:
-                    logger.error(
-                        "failed_to_save_bot_response",
-                        session_id=session_id,
-                        error=str(e)
-                    )
-            
+            if self.session_manager:
+                await self.session_manager.save_bot_response_safe(
+                    session_id=session_id,
+                    message_text=SUPPORT_SESSION_ENDED,
+                )
             logger.info(
                 "support_session_cleanup_complete",
                 telegram_id=telegram_id
@@ -384,15 +344,8 @@ class SupportHandler:
             await message.answer(SUPPORT_END_ERROR)
             
             # Сохраняем ответ бота
-            if self.session_manager and session_id:
-                try:
-                    await self.session_manager.save_bot_message(
-                        session_id=session_id,
-                        message_text=SUPPORT_END_ERROR
-                    )
-                except Exception as save_error:
-                    logger.error(
-                        "failed_to_save_bot_response",
-                        session_id=session_id,
-                        error=str(save_error)
-                    )
+            if self.session_manager:
+                await self.session_manager.save_bot_response_safe(
+                    session_id=session_id,
+                    message_text=SUPPORT_END_ERROR,
+                )

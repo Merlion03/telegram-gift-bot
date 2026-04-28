@@ -99,19 +99,11 @@ class CommonHandler:
                 await message.answer(welcome_text, reply_markup=keyboard)
             
             # Сохраняем ответ бота, если есть session_manager и session_id
-            if self.session_manager and session_id:
-                try:
-                    await self.session_manager.save_bot_message(
-                        session_id=session_id,
-                        message_text=welcome_text
-                    )
-                except Exception as e:
-                    logger.error(
-                        "failed_to_save_bot_response",
-                        session_id=session_id,
-                        error=str(e)
-                    )
-        
+            if self.session_manager:
+                await self.session_manager.save_bot_response_safe(
+                    session_id=session_id,
+                    message_text=welcome_text,
+                )
         logger.info(
             "start_command_handled",
             telegram_id=telegram_id
@@ -135,19 +127,11 @@ class CommonHandler:
         await message.answer(HELP_MESSAGE)
         
         # Сохраняем ответ бота, если есть session_manager и session_id
-        if self.session_manager and session_id:
-            try:
-                await self.session_manager.save_bot_message(
-                    session_id=session_id,
-                    message_text=HELP_MESSAGE
-                )
-            except Exception as e:
-                logger.error(
-                    "failed_to_save_bot_response",
-                    session_id=session_id,
-                    error=str(e)
-                )
-        
+        if self.session_manager:
+            await self.session_manager.save_bot_response_safe(
+                session_id=session_id,
+                message_text=HELP_MESSAGE,
+            )
         logger.info(
             "help_command_handled",
             telegram_id=telegram_id

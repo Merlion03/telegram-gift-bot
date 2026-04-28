@@ -44,7 +44,6 @@ from database.connection import DatabaseConnection
 from database.repository import SupportRepository
 
 # Импорт утилит
-from utils.logger import configure_logging
 from utils.error_handler import setup_error_handlers
 
 
@@ -67,13 +66,12 @@ class BotApplication:
         # Загрузка конфигурации
         self.config = get_config()
         
-        # Настройка логирования через старый модуль (для совместимости)
-        from utils.logger import configure_logging as old_configure_logging
-        old_configure_logging(
+        # Перенастраиваем логирование с уровнем из конфига
+        configure_logging(
             log_level=self.config.app.log_level,
-            json_format=True
+            json_logs=True,
         )
-        
+
         # Получаем logger после настройки
         self.logger = get_logger(__name__)
         
@@ -689,9 +687,7 @@ async def main():
     log_level = os.getenv('LOG_LEVEL', 'INFO')
     json_logs = os.getenv('JSON_LOGS', 'false').lower() == 'true'
     
-    # Используем новую конфигурацию логирования
-    from utils.logging_config import configure_logging as new_configure_logging
-    new_configure_logging(log_level=log_level, json_logs=json_logs)
+    configure_logging(log_level=log_level, json_logs=json_logs)
     
     logger = get_logger(__name__)
     logger.info("bot_starting")

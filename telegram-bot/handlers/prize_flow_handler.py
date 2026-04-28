@@ -162,19 +162,11 @@ class PrizeFlowHandler:
                 )
                 
                 # Сохраняем ответ бота
-                if self.session_manager and session_id:
-                    try:
-                        await self.session_manager.save_bot_message(
-                            session_id=session_id,
-                            message_text=USER_NOT_FOUND_IN_PRIZE_TABLE
-                        )
-                    except Exception as e:
-                        logger.error(
-                            "failed_to_save_bot_response",
-                            session_id=session_id,
-                            error=str(e)
-                        )
-                
+                if self.session_manager:
+                    await self.session_manager.save_bot_response_safe(
+                        session_id=session_id,
+                        message_text=USER_NOT_FOUND_IN_PRIZE_TABLE,
+                    )
                 logger.info(
                     "user_not_found_in_prize_table",
                     telegram_id=telegram_id
@@ -196,19 +188,11 @@ class PrizeFlowHandler:
                 await state.set_state(PrizeFlowStates.waiting_for_consent)
                 
                 # Сохраняем ответ бота
-                if self.session_manager and session_id:
-                    try:
-                        await self.session_manager.save_bot_message(
-                            session_id=session_id,
-                            message_text=GDPR_CONSENT_REQUEST
-                        )
-                    except Exception as e:
-                        logger.error(
-                            "failed_to_save_bot_response",
-                            session_id=session_id,
-                            error=str(e)
-                        )
-                
+                if self.session_manager:
+                    await self.session_manager.save_bot_response_safe(
+                        session_id=session_id,
+                        message_text=GDPR_CONSENT_REQUEST,
+                    )
                 logger.info(
                     "gdpr_consent_requested",
                     telegram_id=telegram_id
@@ -223,19 +207,11 @@ class PrizeFlowHandler:
             await state.update_data(invalid_code_attempts=0, last_error_message_id=None)
             
             # Сохраняем ответ бота
-            if self.session_manager and session_id:
-                try:
-                    await self.session_manager.save_bot_message(
-                        session_id=session_id,
-                        message_text=CODE_WORD_REQUEST
-                    )
-                except Exception as e:
-                    logger.error(
-                        "failed_to_save_bot_response",
-                        session_id=session_id,
-                        error=str(e)
-                    )
-            
+            if self.session_manager:
+                await self.session_manager.save_bot_response_safe(
+                    session_id=session_id,
+                    message_text=CODE_WORD_REQUEST,
+                )
             logger.info(
                 "code_word_requested",
                 telegram_id=telegram_id
@@ -249,19 +225,11 @@ class PrizeFlowHandler:
             )
             
             # Сохраняем ответ бота
-            if self.session_manager and session_id:
-                try:
-                    await self.session_manager.save_bot_message(
-                        session_id=session_id,
-                        message_text=ERROR_SERVICE_UNAVAILABLE
-                    )
-                except Exception as save_error:
-                    logger.error(
-                        "failed_to_save_bot_response",
-                        session_id=session_id,
-                        error=str(save_error)
-                    )
-            
+            if self.session_manager:
+                await self.session_manager.save_bot_response_safe(
+                    session_id=session_id,
+                    message_text=ERROR_SERVICE_UNAVAILABLE,
+                )
             logger.error(
                 "database_unavailable_during_prize_flow",
                 telegram_id=telegram_id,
@@ -313,19 +281,11 @@ class PrizeFlowHandler:
                 )
                 
                 # Сохраняем ответ бота
-                if self.session_manager and session_id:
-                    try:
-                        await self.session_manager.save_bot_message(
-                            session_id=session_id,
-                            message_text=USER_NOT_FOUND_IN_PRIZE_TABLE
-                        )
-                    except Exception as e:
-                        logger.error(
-                            "failed_to_save_bot_response",
-                            session_id=session_id,
-                            error=str(e)
-                        )
-                
+                if self.session_manager:
+                    await self.session_manager.save_bot_response_safe(
+                        session_id=session_id,
+                        message_text=USER_NOT_FOUND_IN_PRIZE_TABLE,
+                    )
                 logger.info(
                     "user_not_found_in_prize_table",
                     telegram_id=telegram_id
@@ -347,19 +307,11 @@ class PrizeFlowHandler:
                 await state.set_state(PrizeFlowStates.waiting_for_consent)
                 
                 # Сохраняем ответ бота
-                if self.session_manager and session_id:
-                    try:
-                        await self.session_manager.save_bot_message(
-                            session_id=session_id,
-                            message_text=GDPR_CONSENT_REQUEST
-                        )
-                    except Exception as e:
-                        logger.error(
-                            "failed_to_save_bot_response",
-                            session_id=session_id,
-                            error=str(e)
-                        )
-                
+                if self.session_manager:
+                    await self.session_manager.save_bot_response_safe(
+                        session_id=session_id,
+                        message_text=GDPR_CONSENT_REQUEST,
+                    )
                 logger.info(
                     "gdpr_consent_requested",
                     telegram_id=telegram_id
@@ -376,19 +328,11 @@ class PrizeFlowHandler:
                 await state.update_data(invalid_code_attempts=0, last_error_message_id=None)
                 
                 # Сохраняем ответ бота
-                if self.session_manager and session_id:
-                    try:
-                        await self.session_manager.save_bot_message(
-                            session_id=session_id,
-                            message_text=CODE_WORD_REQUEST
-                        )
-                    except Exception as e:
-                        logger.error(
-                            "failed_to_save_bot_response",
-                            session_id=session_id,
-                            error=str(e)
-                        )
-                
+                if self.session_manager:
+                    await self.session_manager.save_bot_response_safe(
+                        session_id=session_id,
+                        message_text=CODE_WORD_REQUEST,
+                    )
                 logger.info(
                     "code_word_requested",
                     telegram_id=telegram_id
@@ -409,19 +353,11 @@ class PrizeFlowHandler:
             await state.clear()
             
             # Сохраняем ответ бота
-            if self.session_manager and session_id:
-                try:
-                    await self.session_manager.save_bot_message(
-                        session_id=session_id,
-                        message_text=error_text
-                    )
-                except Exception as save_error:
-                    logger.error(
-                        "failed_to_save_bot_response",
-                        session_id=session_id,
-                        error=str(save_error)
-                    )
-            
+            if self.session_manager:
+                await self.session_manager.save_bot_response_safe(
+                    session_id=session_id,
+                    message_text=error_text,
+                )
             logger.error(
                 "database_unavailable_in_prize_flow",
                 telegram_id=telegram_id,
@@ -475,19 +411,11 @@ class PrizeFlowHandler:
                 await state.update_data(invalid_code_attempts=0, last_error_message_id=None)
                 
                 # Сохраняем ответ бота
-                if self.session_manager and session_id:
-                    try:
-                        await self.session_manager.save_bot_message(
-                            session_id=session_id,
-                            message_text=CODE_WORD_REQUEST
-                        )
-                    except Exception as e:
-                        logger.error(
-                            "failed_to_save_bot_response",
-                            session_id=session_id,
-                            error=str(e)
-                        )
-                
+                if self.session_manager:
+                    await self.session_manager.save_bot_response_safe(
+                        session_id=session_id,
+                        message_text=CODE_WORD_REQUEST,
+                    )
                 logger.info(
                     "gdpr_consent_accepted",
                     telegram_id=telegram_id
@@ -504,19 +432,11 @@ class PrizeFlowHandler:
                 await state.clear()
                 
                 # Сохраняем ответ бота
-                if self.session_manager and session_id:
-                    try:
-                        await self.session_manager.save_bot_message(
-                            session_id=session_id,
-                            message_text=ERROR_SERVICE_UNAVAILABLE
-                        )
-                    except Exception as save_error:
-                        logger.error(
-                            "failed_to_save_bot_response",
-                            session_id=session_id,
-                            error=str(save_error)
-                        )
-                
+                if self.session_manager:
+                    await self.session_manager.save_bot_response_safe(
+                        session_id=session_id,
+                        message_text=ERROR_SERVICE_UNAVAILABLE,
+                    )
                 logger.error(
                     "database_unavailable_during_consent_save",
                     telegram_id=telegram_id,
@@ -534,19 +454,11 @@ class PrizeFlowHandler:
             await state.clear()
             
             # Сохраняем ответ бота
-            if self.session_manager and session_id:
-                try:
-                    await self.session_manager.save_bot_message(
-                        session_id=session_id,
-                        message_text=CONSENT_BACK_MESSAGE
-                    )
-                except Exception as e:
-                    logger.error(
-                        "failed_to_save_bot_response",
-                        session_id=session_id,
-                        error=str(e)
-                    )
-            
+            if self.session_manager:
+                await self.session_manager.save_bot_response_safe(
+                    session_id=session_id,
+                    message_text=CONSENT_BACK_MESSAGE,
+                )
             logger.info(
                 "consent_cancelled_by_user",
                 telegram_id=telegram_id
@@ -594,19 +506,11 @@ class PrizeFlowHandler:
             )
             
             # Сохраняем ответ бота
-            if self.session_manager and session_id:
-                try:
-                    await self.session_manager.save_bot_message(
-                        session_id=session_id,
-                        message_text=INVALID_CONSENT_RESPONSE
-                    )
-                except Exception as e:
-                    logger.error(
-                        "failed_to_save_bot_response",
-                        session_id=session_id,
-                        error=str(e)
-                    )
-            
+            if self.session_manager:
+                await self.session_manager.save_bot_response_safe(
+                    session_id=session_id,
+                    message_text=INVALID_CONSENT_RESPONSE,
+                )
             logger.warning(
                 "invalid_consent_response",
                 telegram_id=telegram_id,
@@ -631,19 +535,11 @@ class PrizeFlowHandler:
                 await state.update_data(invalid_code_attempts=0, last_error_message_id=None)
                 
                 # Сохраняем ответ бота
-                if self.session_manager and session_id:
-                    try:
-                        await self.session_manager.save_bot_message(
-                            session_id=session_id,
-                            message_text=CODE_WORD_REQUEST
-                        )
-                    except Exception as e:
-                        logger.error(
-                            "failed_to_save_bot_response",
-                            session_id=session_id,
-                            error=str(e)
-                        )
-                
+                if self.session_manager:
+                    await self.session_manager.save_bot_response_safe(
+                        session_id=session_id,
+                        message_text=CODE_WORD_REQUEST,
+                    )
                 logger.info(
                     "gdpr_consent_accepted",
                     telegram_id=telegram_id
@@ -660,19 +556,11 @@ class PrizeFlowHandler:
                 await state.clear()
                 
                 # Сохраняем ответ бота
-                if self.session_manager and session_id:
-                    try:
-                        await self.session_manager.save_bot_message(
-                            session_id=session_id,
-                            message_text=ERROR_SERVICE_UNAVAILABLE
-                        )
-                    except Exception as save_error:
-                        logger.error(
-                            "failed_to_save_bot_response",
-                            session_id=session_id,
-                            error=str(save_error)
-                        )
-                
+                if self.session_manager:
+                    await self.session_manager.save_bot_response_safe(
+                        session_id=session_id,
+                        message_text=ERROR_SERVICE_UNAVAILABLE,
+                    )
                 logger.error(
                     "database_unavailable_during_consent_save",
                     telegram_id=telegram_id,
@@ -690,19 +578,11 @@ class PrizeFlowHandler:
             await state.clear()
             
             # Сохраняем ответ бота
-            if self.session_manager and session_id:
-                try:
-                    await self.session_manager.save_bot_message(
-                        session_id=session_id,
-                        message_text=CONSENT_BACK_MESSAGE
-                    )
-                except Exception as e:
-                    logger.error(
-                        "failed_to_save_bot_response",
-                        session_id=session_id,
-                        error=str(e)
-                    )
-            
+            if self.session_manager:
+                await self.session_manager.save_bot_response_safe(
+                    session_id=session_id,
+                    message_text=CONSENT_BACK_MESSAGE,
+                )
             logger.info(
                 "consent_cancelled_by_user",
                 telegram_id=telegram_id
@@ -745,19 +625,11 @@ class PrizeFlowHandler:
             await message.answer(EMPTY_CODE_WORD_HINT)
             
             # Сохраняем ответ бота
-            if self.session_manager and session_id:
-                try:
-                    await self.session_manager.save_bot_message(
-                        session_id=session_id,
-                        message_text=EMPTY_CODE_WORD_HINT
-                    )
-                except Exception as e:
-                    logger.error(
-                        "failed_to_save_bot_response",
-                        session_id=session_id,
-                        error=str(e)
-                    )
-            
+            if self.session_manager:
+                await self.session_manager.save_bot_response_safe(
+                    session_id=session_id,
+                    message_text=EMPTY_CODE_WORD_HINT,
+                )
             logger.warning(
                 "empty_code_word",
                 telegram_id=telegram_id
@@ -815,19 +687,11 @@ class PrizeFlowHandler:
                 # Состояние уже установлено, ничего не меняем
                 
                 # Сохраняем ответ бота
-                if self.session_manager and session_id:
-                    try:
-                        await self.session_manager.save_bot_message(
-                            session_id=session_id,
-                            message_text=error_message
-                        )
-                    except Exception as e:
-                        logger.error(
-                            "failed_to_save_bot_response",
-                            session_id=session_id,
-                            error=str(e)
-                        )
-                
+                if self.session_manager:
+                    await self.session_manager.save_bot_response_safe(
+                        session_id=session_id,
+                        message_text=error_message,
+                    )
                 logger.info(
                     "invalid_code_word",
                     telegram_id=telegram_id,
@@ -866,19 +730,11 @@ class PrizeFlowHandler:
                     await state.clear()
                     
                     # Сохраняем ответ бота
-                    if self.session_manager and session_id:
-                        try:
-                            await self.session_manager.save_bot_message(
-                                session_id=session_id,
-                                message_text=DELIVERY_DATA_ALREADY_FILLED
-                            )
-                        except Exception as e:
-                            logger.error(
-                                "failed_to_save_bot_response",
-                                session_id=session_id,
-                                error=str(e)
-                            )
-                    
+                    if self.session_manager:
+                        await self.session_manager.save_bot_response_safe(
+                            session_id=session_id,
+                            message_text=DELIVERY_DATA_ALREADY_FILLED,
+                        )
                     logger.info(
                         "delivery_data_already_filled_shown",
                         telegram_id=telegram_id,
@@ -900,19 +756,11 @@ class PrizeFlowHandler:
                 await state.clear()
                 
                 # Сохраняем ответ бота
-                if self.session_manager and session_id:
-                    try:
-                        await self.session_manager.save_bot_message(
-                            session_id=session_id,
-                            message_text=PRIZE_ERROR_AFTER_VALIDATION
-                        )
-                    except Exception as e:
-                        logger.error(
-                            "failed_to_save_bot_response",
-                            session_id=session_id,
-                            error=str(e)
-                        )
-                
+                if self.session_manager:
+                    await self.session_manager.save_bot_response_safe(
+                        session_id=session_id,
+                        message_text=PRIZE_ERROR_AFTER_VALIDATION,
+                    )
                 logger.error(
                     "prize_not_found_after_validation",
                     telegram_id=telegram_id,
@@ -934,19 +782,11 @@ class PrizeFlowHandler:
             await state.clear()
             
             # Сохраняем ответ бота
-            if self.session_manager and session_id:
-                try:
-                    await self.session_manager.save_bot_message(
-                        session_id=session_id,
-                        message_text=error_text
-                    )
-                except Exception as save_error:
-                    logger.error(
-                        "failed_to_save_bot_response",
-                        session_id=session_id,
-                        error=str(save_error)
-                    )
-            
+            if self.session_manager:
+                await self.session_manager.save_bot_response_safe(
+                    session_id=session_id,
+                    message_text=error_text,
+                )
             logger.error(
                 "database_unavailable_during_code_word_check",
                 telegram_id=telegram_id,
@@ -965,19 +805,11 @@ class PrizeFlowHandler:
             await state.clear()
             
             # Сохраняем ответ бота
-            if self.session_manager and session_id:
-                try:
-                    await self.session_manager.save_bot_message(
-                        session_id=session_id,
-                        message_text=MISSING_PROMO_CODE_ERROR
-                    )
-                except Exception as save_error:
-                    logger.error(
-                        "failed_to_save_bot_response",
-                        session_id=session_id,
-                        error=str(save_error)
-                    )
-            
+            if self.session_manager:
+                await self.session_manager.save_bot_response_safe(
+                    session_id=session_id,
+                    message_text=MISSING_PROMO_CODE_ERROR,
+                )
             logger.error(
                 "missing_promo_code_in_code_word_handler",
                 telegram_id=telegram_id,
@@ -1063,18 +895,11 @@ class PrizeFlowHandler:
             await state.clear()
             
             # Сохраняем ответ бота
-            if self.session_manager and session_id:
-                try:
-                    await self.session_manager.save_bot_message(
-                        session_id=session_id,
-                        message_text=MISSING_PROMO_CODE_ERROR
-                    )
-                except Exception as e:
-                    logger.error(
-                        "failed_to_save_bot_response",
-                        session_id=session_id,
-                        error=str(e)
-                    )
+            if self.session_manager:
+                await self.session_manager.save_bot_response_safe(
+                    session_id=session_id,
+                    message_text=MISSING_PROMO_CODE_ERROR,
+                )
             return
         
         # Объединение данных
@@ -1114,19 +939,11 @@ class PrizeFlowHandler:
             )
             
             # Сохранение ответа бота
-            if self.session_manager and session_id:
-                try:
-                    await self.session_manager.save_bot_message(
-                        session_id=session_id,
-                        message_text=part
-                    )
-                except Exception as e:
-                    logger.error(
-                        "failed_to_save_bot_response",
-                        session_id=session_id,
-                        error=str(e)
-                    )
-        
+            if self.session_manager:
+                await self.session_manager.save_bot_response_safe(
+                    session_id=session_id,
+                    message_text=part,
+                )
         # Отправляем отдельное сообщение из /start с кнопкой "Получить приз"
         username = message.from_user.username or message.from_user.first_name
         welcome_text = get_welcome_message(username)
@@ -1137,19 +954,11 @@ class PrizeFlowHandler:
         )
         
         # Сохранение приветственного сообщения
-        if self.session_manager and session_id:
-            try:
-                await self.session_manager.save_bot_message(
-                    session_id=session_id,
-                    message_text=welcome_text
-                )
-            except Exception as e:
-                logger.error(
-                    "failed_to_save_bot_response",
-                    session_id=session_id,
-                    error=str(e)
-                )
-        
+        if self.session_manager:
+            await self.session_manager.save_bot_response_safe(
+                session_id=session_id,
+                message_text=welcome_text,
+            )
         # Сбрасываем FSM состояние
         await state.clear()
         
@@ -1238,19 +1047,11 @@ class PrizeFlowHandler:
         )
         
         # Сохраняем объединённое сообщение
-        if self.session_manager and session_id:
-            try:
-                await self.session_manager.save_bot_message(
-                    session_id=session_id,
-                    message_text=combined_message
-                )
-            except Exception as e:
-                logger.error(
-                    "failed_to_save_bot_response",
-                    session_id=session_id,
-                    error=str(e)
-                )
-        
+        if self.session_manager:
+            await self.session_manager.save_bot_response_safe(
+                session_id=session_id,
+                message_text=combined_message,
+            )
         # Устанавливаем состояние ожидания данных доставки
         await state.set_state(PrizeFlowStates.waiting_for_delivery_data)
         
@@ -1361,300 +1162,163 @@ class PrizeFlowHandler:
         )
 
 
-    async def handle_back_to_main_menu_callback(
+    async def _send_welcome_and_clear(
         self,
         callback: CallbackQuery,
         state: FSMContext,
-        session_id: Optional[int] = None
+        session_id: Optional[int],
+        log_prefix: str,
     ) -> None:
         """
-        Обрабатывает нажатие на кнопку "Назад" когда пользователь не найден в списке победителей.
-        
-        Возвращает пользователя в главное меню.
-        
+        Удаляет inline-клавиатуру, показывает приветствие с главным меню и
+        сбрасывает FSM состояние. Используется обработчиками "Назад"
+        в нескольких сценариях, где результат — возврат в главное меню.
+
         Args:
             callback: Callback от inline кнопки
             state: FSM контекст
             session_id: ID сессии из middleware (опционально)
+            log_prefix: Префикс для лог-событий (например "back_to_main_menu")
         """
         telegram_id = callback.from_user.id
         username = callback.from_user.username or callback.from_user.first_name
-        
+
         logger.info(
-            "back_to_main_menu_callback",
+            f"{log_prefix}_callback",
             telegram_id=telegram_id,
-            session_id=session_id
+            session_id=session_id,
         )
-        
-        # Удаляем inline-клавиатуру из сообщения
+
         await callback.message.edit_reply_markup(reply_markup=None)
-        
-        # Отправляем приветственное сообщение с главным меню
+
         welcome_text = get_welcome_message(username)
         await callback.message.answer(
             text=welcome_text,
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=get_main_menu_keyboard(),
         )
-        
-        # Сохраняем ответ бота
-        if self.session_manager and session_id:
+
+        if self.session_manager:
+            await self.session_manager.save_bot_response_safe(
+                session_id=session_id,
+                message_text=welcome_text,
+            )
+
+        await callback.answer()
+        await state.clear()
+
+        logger.info(
+            f"{log_prefix}_completed",
+            telegram_id=telegram_id,
+        )
+
+    async def _send_help_and_clear(
+        self,
+        callback: CallbackQuery,
+        state: FSMContext,
+        session_id: Optional[int],
+        log_prefix: str,
+    ) -> None:
+        """
+        Удаляет inline-клавиатуру, отправляет сообщение о проверке,
+        выставляет флаг ``help_needed`` для активной сессии пользователя
+        и сбрасывает FSM состояние.
+
+        Используется обработчиками "Нужна помощь" в нескольких сценариях.
+        """
+        telegram_id = callback.from_user.id
+
+        logger.info(
+            f"{log_prefix}_callback",
+            telegram_id=telegram_id,
+            session_id=session_id,
+        )
+
+        await callback.message.edit_reply_markup(reply_markup=None)
+
+        help_message = "Всё проверю и вернусь. Пожалуйста, подождите."
+        await callback.message.answer(text=help_message)
+
+        if self.session_manager:
+            await self.session_manager.save_bot_response_safe(
+                session_id=session_id,
+                message_text=help_message,
+            )
+
             try:
-                await self.session_manager.save_bot_message(
-                    session_id=session_id,
-                    message_text=welcome_text
-                )
+                session = await self.session_manager.repository.get_user_active_session(telegram_id)
+
+                if session:
+                    session.set_help_needed(True)
+
+                    async with self.session_manager.repository._get_session_context() as db_session:
+                        db_session.add(session)
+                        await db_session.flush()
+
+                    logger.info(
+                        f"Set help_needed flag for session {session.id}",
+                        session_id=session.id,
+                        telegram_id=telegram_id,
+                    )
+                else:
+                    logger.warning(
+                        "no_active_session_found_for_help_needed",
+                        telegram_id=telegram_id,
+                    )
             except Exception as e:
                 logger.error(
-                    "failed_to_save_bot_response",
-                    session_id=session_id,
-                    error=str(e)
+                    "failed_to_set_help_needed_flag",
+                    telegram_id=telegram_id,
+                    error=str(e),
                 )
-        
-        # Закрываем callback
+
         await callback.answer()
-        
-        # Сбрасываем FSM состояние
         await state.clear()
-        
+
         logger.info(
-            "back_to_main_menu_completed",
-            telegram_id=telegram_id
+            f"{log_prefix}_completed",
+            telegram_id=telegram_id,
+        )
+
+    async def handle_back_to_main_menu_callback(
+        self,
+        callback: CallbackQuery,
+        state: FSMContext,
+        session_id: Optional[int] = None,
+    ) -> None:
+        """Обрабатывает кнопку "Назад", когда пользователь не найден в списке победителей."""
+        await self._send_welcome_and_clear(
+            callback, state, session_id, log_prefix="back_to_main_menu",
         )
 
     async def handle_need_help_callback(
         self,
         callback: CallbackQuery,
         state: FSMContext,
-        session_id: Optional[int] = None
+        session_id: Optional[int] = None,
     ) -> None:
-        """
-        Обрабатывает нажатие на кнопку "Нужна помощь" когда пользователь не найден в списке победителей.
-        
-        Отправляет сообщение в чат о том, что всё будет проверено.
-        
-        Args:
-            callback: Callback от inline кнопки
-            state: FSM контекст
-            session_id: ID сессии из middleware (опционально)
-        """
-        telegram_id = callback.from_user.id
-        
-        logger.info(
-            "need_help_callback",
-            telegram_id=telegram_id,
-            session_id=session_id
-        )
-        
-        # Удаляем inline-клавиатуру из сообщения
-        await callback.message.edit_reply_markup(reply_markup=None)
-        
-        # Отправляем сообщение о проверке
-        help_message = "Всё проверю и вернусь. Пожалуйста, подождите."
-        await callback.message.answer(text=help_message)
-        
-        # Сохраняем ответ бота
-        if self.session_manager and session_id:
-            try:
-                await self.session_manager.save_bot_message(
-                    session_id=session_id,
-                    message_text=help_message
-                )
-            except Exception as e:
-                logger.error(
-                    "failed_to_save_bot_response",
-                    session_id=session_id,
-                    error=str(e)
-                )
-        
-        # Устанавливаем флаг help_needed для активной сессии пользователя
-        if self.session_manager:
-            try:
-                # Получаем активную сессию пользователя
-                session = await self.session_manager.repository.get_user_active_session(telegram_id)
-                
-                if session:
-                    # Устанавливаем флаг help_needed
-                    session.set_help_needed(True)
-                    
-                    # Сохраняем изменения в БД через контекстный менеджер
-                    async with self.session_manager.repository._get_session_context() as db_session:
-                        db_session.add(session)
-                        await db_session.flush()
-                    
-                    logger.info(
-                        f"Set help_needed flag for session {session.id}",
-                        session_id=session.id,
-                        telegram_id=telegram_id
-                    )
-                else:
-                    logger.warning(
-                        "no_active_session_found_for_help_needed",
-                        telegram_id=telegram_id
-                    )
-            except Exception as e:
-                logger.error(
-                    "failed_to_set_help_needed_flag",
-                    telegram_id=telegram_id,
-                    error=str(e)
-                )
-                # Не прерываем отправку сообщения если установка флага провалилась
-        
-        # Закрываем callback
-        await callback.answer()
-        
-        # Сбрасываем FSM состояние
-        await state.clear()
-        
-        logger.info(
-            "need_help_completed",
-            telegram_id=telegram_id
+        """Обрабатывает кнопку "Нужна помощь", когда пользователь не найден в списке победителей."""
+        await self._send_help_and_clear(
+            callback, state, session_id, log_prefix="need_help",
         )
 
     async def handle_invalid_code_back_callback(
         self,
         callback: CallbackQuery,
         state: FSMContext,
-        session_id: Optional[int] = None
+        session_id: Optional[int] = None,
     ) -> None:
-        """
-        Обрабатывает нажатие на кнопку "Назад" после неправильного ввода кодового слова.
-        
-        Возвращает пользователя в главное меню и сбрасывает счётчик попыток.
-        
-        Args:
-            callback: Callback от inline кнопки
-            state: FSM контекст
-            session_id: ID сессии из middleware (опционально)
-        """
-        telegram_id = callback.from_user.id
-        username = callback.from_user.username or callback.from_user.first_name
-        
-        logger.info(
-            "invalid_code_back_callback",
-            telegram_id=telegram_id,
-            session_id=session_id
-        )
-        
-        # Удаляем inline-клавиатуру из сообщения
-        await callback.message.edit_reply_markup(reply_markup=None)
-        
-        # Отправляем приветственное сообщение с главным меню
-        welcome_text = get_welcome_message(username)
-        await callback.message.answer(
-            text=welcome_text,
-            reply_markup=get_main_menu_keyboard()
-        )
-        
-        # Сохраняем ответ бота
-        if self.session_manager and session_id:
-            try:
-                await self.session_manager.save_bot_message(
-                    session_id=session_id,
-                    message_text=welcome_text
-                )
-            except Exception as e:
-                logger.error(
-                    "failed_to_save_bot_response",
-                    session_id=session_id,
-                    error=str(e)
-                )
-        
-        # Закрываем callback
-        await callback.answer()
-        
-        # Сбрасываем FSM состояние (включая счётчик попыток)
-        await state.clear()
-        
-        logger.info(
-            "invalid_code_back_completed",
-            telegram_id=telegram_id
+        """Обрабатывает кнопку "Назад" после неправильного ввода кодового слова."""
+        await self._send_welcome_and_clear(
+            callback, state, session_id, log_prefix="invalid_code_back",
         )
 
     async def handle_invalid_code_help_callback(
         self,
         callback: CallbackQuery,
         state: FSMContext,
-        session_id: Optional[int] = None
+        session_id: Optional[int] = None,
     ) -> None:
-        """
-        Обрабатывает нажатие на кнопку "Нужна помощь" после 3-х неправильных попыток ввода кодового слова.
-        
-        Отправляет сообщение о проверке и сбрасывает состояние.
-        
-        Args:
-            callback: Callback от inline кнопки
-            state: FSM контекст
-            session_id: ID сессии из middleware (опционально)
-        """
-        telegram_id = callback.from_user.id
-        
-        logger.info(
-            "invalid_code_help_callback",
-            telegram_id=telegram_id,
-            session_id=session_id
-        )
-        
-        # Удаляем inline-клавиатуру из сообщения
-        await callback.message.edit_reply_markup(reply_markup=None)
-        
-        # Отправляем сообщение о проверке
-        help_message = "Всё проверю и вернусь. Пожалуйста, подождите."
-        await callback.message.answer(text=help_message)
-        
-        # Сохраняем ответ бота
-        if self.session_manager and session_id:
-            try:
-                await self.session_manager.save_bot_message(
-                    session_id=session_id,
-                    message_text=help_message
-                )
-            except Exception as e:
-                logger.error(
-                    "failed_to_save_bot_response",
-                    session_id=session_id,
-                    error=str(e)
-                )
-        
-        # Устанавливаем флаг help_needed для активной сессии пользователя
-        if self.session_manager:
-            try:
-                # Получаем активную сессию пользователя
-                session = await self.session_manager.repository.get_user_active_session(telegram_id)
-                
-                if session:
-                    # Устанавливаем флаг help_needed
-                    session.set_help_needed(True)
-                    
-                    # Сохраняем изменения в БД используя правильный паттерн
-                    async with self.session_manager.repository._get_session_context() as db_session:
-                        db_session.add(session)
-                        await db_session.flush()
-                    
-                    logger.info(
-                        f"Set help_needed flag for session {session.id}",
-                        session_id=session.id,
-                        telegram_id=telegram_id
-                    )
-                else:
-                    logger.warning(
-                        "no_active_session_found_for_help_needed",
-                        telegram_id=telegram_id
-                    )
-            except Exception as e:
-                logger.error(
-                    "failed_to_set_help_needed_flag",
-                    telegram_id=telegram_id,
-                    error=str(e)
-                )
-                # Не прерываем отправку сообщения если установка флага провалилась
-        
-        # Закрываем callback
-        await callback.answer()
-        
-        # Сбрасываем FSM состояние (включая счётчик попыток)
-        await state.clear()
-        
-        logger.info(
-            "invalid_code_help_completed",
-            telegram_id=telegram_id
+        """Обрабатывает кнопку "Нужна помощь" после 3-х неправильных попыток ввода кодового слова."""
+        await self._send_help_and_clear(
+            callback, state, session_id, log_prefix="invalid_code_help",
         )

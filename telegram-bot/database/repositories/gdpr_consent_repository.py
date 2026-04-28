@@ -15,15 +15,11 @@ from sqlalchemy.dialects.postgresql import insert
 
 from database.models.gdpr_consent import GdprConsent
 from database.base_repository import BaseRepository
+from database.repositories.exceptions import DatabaseUnavailableError
 from utils.logging_config import get_logger
 
 
 logger = get_logger(__name__)
-
-
-class DatabaseUnavailableError(Exception):
-    """Исключение при недоступности базы данных"""
-    pass
 
 
 class GdprConsentRepository(BaseRepository):

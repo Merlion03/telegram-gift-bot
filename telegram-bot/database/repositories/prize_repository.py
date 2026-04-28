@@ -19,25 +19,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database.models.prize import Prize
 from database.base_repository import BaseRepository
 from database.connection import get_database
+from database.repositories.exceptions import (
+    DatabaseUnavailableError,
+    PrizeNotFoundError,
+)
 from utils.logging_config import get_logger
 
 
 logger = get_logger(__name__)
-
-
-class DatabaseUnavailableError(Exception):
-    """Исключение при недоступности базы данных"""
-    pass
-
-
-class PrizeNotFoundError(Exception):
-    """Исключение при отсутствии приза в базе данных"""
-    pass
-
-
-class PrizeNotFoundError(Exception):
-    """Исключение при отсутствии приза в базе данных"""
-    pass
 
 
 class PrizeRepository(BaseRepository):

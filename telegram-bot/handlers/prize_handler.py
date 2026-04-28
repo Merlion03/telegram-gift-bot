@@ -78,19 +78,11 @@ class PrizeHandler:
                 await message.answer(PRIZE_NOT_FOUND_RESPONSE)
                 
                 # Сохраняем ответ бота
-                if self.session_manager and session_id:
-                    try:
-                        await self.session_manager.save_bot_message(
-                            session_id=session_id,
-                            message_text=PRIZE_NOT_FOUND_RESPONSE
-                        )
-                    except Exception as e:
-                        logger.error(
-                            "failed_to_save_bot_response",
-                            session_id=session_id,
-                            error=str(e)
-                        )
-                
+                if self.session_manager:
+                    await self.session_manager.save_bot_response_safe(
+                        session_id=session_id,
+                        message_text=PRIZE_NOT_FOUND_RESPONSE,
+                    )
                 logger.info(
                     "prize_not_found_response_sent",
                     telegram_id=telegram_id,
@@ -108,19 +100,11 @@ class PrizeHandler:
             await message.answer(PRIZE_MISSING_PROMO_CODE_SUPPORT)
             
             # Сохраняем ответ бота
-            if self.session_manager and session_id:
-                try:
-                    await self.session_manager.save_bot_message(
-                        session_id=session_id,
-                        message_text=PRIZE_MISSING_PROMO_CODE_SUPPORT
-                    )
-                except Exception as save_error:
-                    logger.error(
-                        "failed_to_save_bot_response",
-                        session_id=session_id,
-                        error=str(save_error)
-                    )
-            
+            if self.session_manager:
+                await self.session_manager.save_bot_response_safe(
+                    session_id=session_id,
+                    message_text=PRIZE_MISSING_PROMO_CODE_SUPPORT,
+                )
             logger.error(
                 "missing_promo_code_error",
                 telegram_id=telegram_id,
@@ -133,19 +117,11 @@ class PrizeHandler:
             await message.answer(PRIZE_CHECK_ERROR)
             
             # Сохраняем ответ бота
-            if self.session_manager and session_id:
-                try:
-                    await self.session_manager.save_bot_message(
-                        session_id=session_id,
-                        message_text=PRIZE_CHECK_ERROR
-                    )
-                except Exception as save_error:
-                    logger.error(
-                        "failed_to_save_bot_response",
-                        session_id=session_id,
-                        error=str(save_error)
-                    )
-            
+            if self.session_manager:
+                await self.session_manager.save_bot_response_safe(
+                    session_id=session_id,
+                    message_text=PRIZE_CHECK_ERROR,
+                )
             logger.error(
                 "prize_check_error",
                 telegram_id=telegram_id,
@@ -201,18 +177,11 @@ class PrizeHandler:
             await message.answer(MISSING_PROMO_CODE_ERROR)
             
             # Сохраняем ответ бота
-            if self.session_manager and session_id:
-                try:
-                    await self.session_manager.save_bot_message(
-                        session_id=session_id,
-                        message_text=MISSING_PROMO_CODE_ERROR
-                    )
-                except Exception as e:
-                    logger.error(
-                        "failed_to_save_bot_response",
-                        session_id=session_id,
-                        error=str(e)
-                    )
+            if self.session_manager:
+                await self.session_manager.save_bot_response_safe(
+                    session_id=session_id,
+                    message_text=MISSING_PROMO_CODE_ERROR,
+                )
             return
         
         # Объединение данных
@@ -245,19 +214,11 @@ class PrizeHandler:
             )
             
             # Сохранение ответа бота
-            if self.session_manager and session_id:
-                try:
-                    await self.session_manager.save_bot_message(
-                        session_id=session_id,
-                        message_text=part
-                    )
-                except Exception as e:
-                    logger.error(
-                        "failed_to_save_bot_response",
-                        session_id=session_id,
-                        error=str(e)
-                    )
-        
+            if self.session_manager:
+                await self.session_manager.save_bot_response_safe(
+                    session_id=session_id,
+                    message_text=part,
+                )
         logger.info(
             "digital_prize_sent",
             telegram_id=telegram_id,
@@ -293,19 +254,11 @@ class PrizeHandler:
         )
         
         # Сохраняем ответ бота
-        if self.session_manager and session_id:
-            try:
-                await self.session_manager.save_bot_message(
-                    session_id=session_id,
-                    message_text=PHYSICAL_PRIZE_CONGRATULATIONS
-                )
-            except Exception as e:
-                logger.error(
-                    "failed_to_save_bot_response",
-                    session_id=session_id,
-                    error=str(e)
-                )
-        
+        if self.session_manager:
+            await self.session_manager.save_bot_response_safe(
+                session_id=session_id,
+                message_text=PHYSICAL_PRIZE_CONGRATULATIONS,
+            )
         logger.info(
             "physical_prize_button_sent",
             telegram_id=message.from_user.id,
