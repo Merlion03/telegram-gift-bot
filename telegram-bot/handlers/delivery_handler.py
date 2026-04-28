@@ -510,15 +510,8 @@ class DeliveryHandler:
         await state.clear()
         
         # Сохраняем ответ бота
-        if self.session_manager and session_id:
-            try:
-                await self.session_manager.save_bot_message(
-                    session_id=session_id,
-                    message_text=error_text
-                )
-            except Exception as e:
-                logger.error(
-                    "failed_to_save_bot_response",
-                    session_id=session_id,
-                    error=str(e)
-                )
+        if self.session_manager:
+            await self.session_manager.save_bot_response_safe(
+                session_id=session_id,
+                message_text=error_text,
+            )

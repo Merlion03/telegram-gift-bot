@@ -9,11 +9,10 @@ SessionManager - сервис управления жизненным цикло
 """
 import structlog
 from typing import Optional
-from typing import Optional
 from datetime import datetime, timezone, timedelta
 
-from database.repository import SupportRepository
-from database.models import SupportSession
+from database.repositories.support_repository import SupportRepository
+from database.models.support import SupportSession
 
 
 logger = structlog.get_logger(__name__)
@@ -350,3 +349,37 @@ class SessionManager:
                 exc_info=True
             )
             raise
+
+    async def save_bot_response_safe(
+        self,
+        session_id: Optional[int],
+        message_text: str,
+    ) -> Optional[int]:
+        """
+        Сохраняет ответ бота, не пробрасывая исключения.
+
+        Используется в обработчиках, где сохранение ответа в журнал поддержки
+        не должно ломать основной поток отправки сообщения пользователю.
+        Если ``session_id`` равен None, ничего не делает.
+
+        Args:
+            session_id: ID сессии (может быть None — тогда сохранение пропускается)
+            message_text: Текст ответа бота
+
+        Returns:
+            ID сохранённого сообщения или None, если сохранение пропущено/упало.
+        """
+        if session_id is None:
+            return None
+        try:
+            return await self.save_bot_message(
+                session_id=session_id,
+                message_text=message_text,
+            )
+        except Exception as e:
+            logger.error(
+                "failed_to_save_bot_response",
+                session_id=session_id,
+                error=str(e),
+            )
+            return None
