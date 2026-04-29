@@ -171,7 +171,7 @@ class TestPrizeFlowHandlerGetPrizeCallback:
         Validates: Requirements 1.1, 1.2
         """
         # Arrange
-        with patch('handlers.prize_flow_handler.remove_inline_keyboard', new_callable=AsyncMock) as mock_remove:
+        with patch('handlers.prize_flow.start.remove_inline_keyboard', new_callable=AsyncMock) as mock_remove:
             mock_remove.return_value = True
             
             # Act
@@ -206,7 +206,7 @@ class TestPrizeFlowHandlerGetPrizeCallback:
         Validates: Requirements 1.3
         """
         # Arrange
-        with patch('handlers.prize_flow_handler.remove_inline_keyboard', new_callable=AsyncMock) as mock_remove:
+        with patch('handlers.prize_flow.start.remove_inline_keyboard', new_callable=AsyncMock) as mock_remove:
             mock_remove.return_value = True
             
             # Act
@@ -237,7 +237,7 @@ class TestPrizeFlowHandlerGetPrizeCallback:
         Validates: Requirements 7.3
         """
         # Arrange
-        with patch('handlers.prize_flow_handler.remove_inline_keyboard', new_callable=AsyncMock) as mock_remove:
+        with patch('handlers.prize_flow.start.remove_inline_keyboard', new_callable=AsyncMock) as mock_remove:
             mock_remove.return_value = True
             
             # Act
@@ -277,7 +277,7 @@ class TestPrizeFlowHandlerConsentCallback:
         # Arrange
         mock_callback.data = "consent_agree"
         
-        with patch('handlers.prize_flow_handler.remove_inline_keyboard', new_callable=AsyncMock) as mock_remove:
+        with patch('handlers.prize_flow.consent.remove_inline_keyboard', new_callable=AsyncMock) as mock_remove:
             mock_remove.return_value = True
             
             # Act
@@ -307,7 +307,7 @@ class TestPrizeFlowHandlerConsentCallback:
         # Arrange
         mock_callback.data = "consent_back"
         
-        with patch('handlers.prize_flow_handler.remove_inline_keyboard', new_callable=AsyncMock) as mock_remove:
+        with patch('handlers.prize_flow.consent.remove_inline_keyboard', new_callable=AsyncMock) as mock_remove:
             mock_remove.return_value = True
             
             # Act
@@ -347,7 +347,7 @@ class TestPrizeFlowHandlerConsentCallback:
             call_order.append('answer')
             return MagicMock()
         
-        with patch('handlers.prize_flow_handler.remove_inline_keyboard', side_effect=track_remove):
+        with patch('handlers.prize_flow.consent.remove_inline_keyboard', side_effect=track_remove):
             mock_callback.message.answer = track_answer
             
             # Act
@@ -645,7 +645,7 @@ class TestErrorHandling:
         Validates: Requirements 1.4, 5.5
         """
         # Arrange
-        with patch('handlers.prize_flow_handler.remove_inline_keyboard', new_callable=AsyncMock) as mock_remove:
+        with patch('handlers.prize_flow.start.remove_inline_keyboard', new_callable=AsyncMock) as mock_remove:
             # Симулируем ошибку
             mock_remove.return_value = False
             
