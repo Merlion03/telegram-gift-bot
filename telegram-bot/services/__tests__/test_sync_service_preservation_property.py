@@ -140,8 +140,8 @@ async def sync_service_with_mocks():
     mock_credentials = Mock()
     mock_gspread_client = Mock(spec=gspread.Client)
     
-    with patch('services.sync_service.Credentials.from_service_account_file', return_value=mock_credentials):
-        with patch('services.sync_service.gspread.authorize', return_value=mock_gspread_client):
+    with patch('services.sync.sheets_io.Credentials.from_service_account_file', return_value=mock_credentials):
+        with patch('services.sync.sheets_io.gspread.authorize', return_value=mock_gspread_client):
             service = SyncService(
                 google_sheets_config=google_sheets_config,
                 sync_config=sync_config,
@@ -199,8 +199,8 @@ async def test_preservation_get_all_sheet_names_returns_correct_list(sheet_names
     mock_spreadsheet.worksheets.return_value = mock_worksheets
     mock_gspread_client.open_by_key.return_value = mock_spreadsheet
     
-    with patch('services.sync_service.Credentials.from_service_account_file', return_value=mock_credentials):
-        with patch('services.sync_service.gspread.authorize', return_value=mock_gspread_client):
+    with patch('services.sync.sheets_io.Credentials.from_service_account_file', return_value=mock_credentials):
+        with patch('services.sync.sheets_io.gspread.authorize', return_value=mock_gspread_client):
             service = SyncService(
                 google_sheets_config=google_sheets_config,
                 sync_config=sync_config,
@@ -270,8 +270,8 @@ async def test_preservation_read_sheet_data_returns_all_rows(sheet_name, sheet_d
     mock_spreadsheet.worksheet.return_value = mock_worksheet
     mock_gspread_client.open_by_key.return_value = mock_spreadsheet
     
-    with patch('services.sync_service.Credentials.from_service_account_file', return_value=mock_credentials):
-        with patch('services.sync_service.gspread.authorize', return_value=mock_gspread_client):
+    with patch('services.sync.sheets_io.Credentials.from_service_account_file', return_value=mock_credentials):
+        with patch('services.sync.sheets_io.gspread.authorize', return_value=mock_gspread_client):
             service = SyncService(
                 google_sheets_config=google_sheets_config,
                 sync_config=sync_config,
@@ -331,8 +331,8 @@ async def test_preservation_convert_sheet_data_to_prizes_correct_transformation(
     mock_credentials = Mock()
     mock_gspread_client = Mock(spec=gspread.Client)
     
-    with patch('services.sync_service.Credentials.from_service_account_file', return_value=mock_credentials):
-        with patch('services.sync_service.gspread.authorize', return_value=mock_gspread_client):
+    with patch('services.sync.sheets_io.Credentials.from_service_account_file', return_value=mock_credentials):
+        with patch('services.sync.sheets_io.gspread.authorize', return_value=mock_gspread_client):
             service = SyncService(
                 google_sheets_config=google_sheets_config,
                 sync_config=sync_config,
@@ -409,8 +409,8 @@ async def test_preservation_batch_upsert_prizes_correct_execution(num_prizes):
     mock_credentials = Mock()
     mock_gspread_client = Mock(spec=gspread.Client)
     
-    with patch('services.sync_service.Credentials.from_service_account_file', return_value=mock_credentials):
-        with patch('services.sync_service.gspread.authorize', return_value=mock_gspread_client):
+    with patch('services.sync.sheets_io.Credentials.from_service_account_file', return_value=mock_credentials):
+        with patch('services.sync.sheets_io.gspread.authorize', return_value=mock_gspread_client):
             service = SyncService(
                 google_sheets_config=google_sheets_config,
                 sync_config=sync_config,
@@ -507,8 +507,8 @@ async def test_preservation_sync_all_sheets_forward_sync_works(sheet_names):
     
     mock_spreadsheet.worksheet.side_effect = mock_worksheet_side_effect
     
-    with patch('services.sync_service.Credentials.from_service_account_file', return_value=mock_credentials):
-        with patch('services.sync_service.gspread.authorize', return_value=mock_gspread_client):
+    with patch('services.sync.sheets_io.Credentials.from_service_account_file', return_value=mock_credentials):
+        with patch('services.sync.sheets_io.gspread.authorize', return_value=mock_gspread_client):
             service = SyncService(
                 google_sheets_config=google_sheets_config,
                 sync_config=sync_config,
@@ -572,8 +572,8 @@ async def test_preservation_baseline_readonly_scopes_used():
         mock_credentials = Mock()
         return mock_credentials
     
-    with patch('services.sync_service.Credentials.from_service_account_file', side_effect=capture_scopes):
-        with patch('services.sync_service.gspread.authorize'):
+    with patch('services.sync.sheets_io.Credentials.from_service_account_file', side_effect=capture_scopes):
+        with patch('services.sync.sheets_io.gspread.authorize'):
             # Act
             service = SyncService(
                 google_sheets_config=google_sheets_config,

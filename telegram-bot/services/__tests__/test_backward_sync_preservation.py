@@ -203,8 +203,8 @@ def create_sync_service():
     
     mock_prize_repository = Mock(spec=PrizeRepository)
     
-    with patch('services.sync_service.Credentials.from_service_account_file'):
-        with patch('services.sync_service.gspread.authorize'):
+    with patch('services.sync.sheets_io.Credentials.from_service_account_file'):
+        with patch('services.sync.sheets_io.gspread.authorize'):
             service = SyncService(
                 google_sheets_config=google_sheets_config,
                 sync_config=sync_config,
