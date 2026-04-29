@@ -181,8 +181,8 @@ async def test_bug_condition_backward_sync_403_error_readonly_scopes(case):
     
     mock_gspread_client = Mock(spec=gspread.Client)
     
-    with patch('services.sync_service.Credentials.from_service_account_file', side_effect=capture_scopes):
-        with patch('services.sync_service.gspread.authorize', return_value=mock_gspread_client):
+    with patch('services.sync.sheets_io.Credentials.from_service_account_file', side_effect=capture_scopes):
+        with patch('services.sync.sheets_io.gspread.authorize', return_value=mock_gspread_client):
             service = SyncService(
                 google_sheets_config=google_sheets_config,
                 sync_config=sync_config,
@@ -330,8 +330,8 @@ async def test_bug_condition_scopes_verification():
         mock_credentials = Mock()
         return mock_credentials
     
-    with patch('services.sync_service.Credentials.from_service_account_file', side_effect=capture_scopes):
-        with patch('services.sync_service.gspread.authorize'):
+    with patch('services.sync.sheets_io.Credentials.from_service_account_file', side_effect=capture_scopes):
+        with patch('services.sync.sheets_io.gspread.authorize'):
             # Act
             service = SyncService(
                 google_sheets_config=google_sheets_config,
